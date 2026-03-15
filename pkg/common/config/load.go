@@ -8,9 +8,9 @@ import (
 	ini "gopkg.in/ini.v1"
 )
 
-func phraseBool(value string) bool {
+func parseBool01(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "1":
+	case "1", "true", "yes", "on":
 		return true
 	default:
 		return false
@@ -35,7 +35,7 @@ func splitCommaList(value string) []string {
 	return out
 }
 
-func phraseDur(value string) (time.Duration, error) {
+func parseDuration(value string) (time.Duration, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return 0, nil
@@ -72,7 +72,7 @@ func Load(path string) (*Config, error) {
 		Addr:      redisSection.Key("addr").String(),
 		Password:  redisSection.Key("password").String(),
 		DB:        redisSection.Key("db").MustInt(0),
-		KeyPrefix: redisSection.Key("Key_prefix").MustString("dankbot"),
+		KeyPrefix: redisSection.Key("key_prefix").MustString("dankbot"),
 	}
 
 	upDownSection := file.Section("updown")
@@ -83,57 +83,107 @@ func Load(path string) (*Config, error) {
 
 	twitchSection := file.Section("twitch")
 	cfg.Twitch = TwitchConfig{
-		ClientID:     twitchSection.Key("client_id").String(),
-		ClientSecret: twitchSection.Key("client_secret").String(),
-		RedirectURI:  twitchSection.Key("redirect_uri").String(),
+		ClientID:           twitchSection.Key("client_id").String(),
+		ClientSecret:       twitchSection.Key("client_secret").String(),
+		RedirectURI:        twitchSection.Key("redirect_uri").String(),
+		ConnectRedirectURI: twitchSection.Key("connect_redirect_uri").String(),
+		SendTransport:      strings.ToLower(strings.TrimSpace(twitchSection.Key("send_transport").MustString("irc"))),
+	}
+
+	twitchEventSubSection := file.Section("twitch_eventsub")
+
+	syncInterval, err := parseDuration(twitchEventSubSection.Key("sync_interval").MustString("5m"))
+	if err != nil {
+		return nil, fmt.Errorf("parse twitch_eventsub.sync_interval: %w", err)
+	}
+
+	dedupeTTL, err := parseDuration(twitchEventSubSection.Key("dedupe_ttl").MustString("24h"))
+	if err != nil {
+		return nil, fmt.Errorf("parse twitch_eventsub.dedupe_ttl: %w", err)
+	}
+
+	cfg.TwitchEventSub = TwitchEventSubConfig{
+		Enabled:      parseBool01(twitchEventSubSection.Key("enabled").String()),
+		Transport:    strings.ToLower(strings.TrimSpace(twitchEventSubSection.Key("transport").MustString("webhook"))),
+		Secret:       twitchEventSubSection.Key("secret").String(),
+		CallbackURL:  twitchEventSubSection.Key("callback_url").String(),
+		WebSocketURL: twitchEventSubSection.Key("websocket_url").String(),
+		SyncInterval: syncInterval,
+		DedupeTTL:    dedupeTTL,
+	}
+
+	openAISection := file.Section("openai")
+	openAITimeout, err := parseDuration(openAISection.Key("timeout").MustString("5s"))
+	if err != nil {
+		return nil, fmt.Errorf("parse openai.timeout: %w", err)
+	}
+
+	cfg.OpenAI = OpenAIConfig{
+		Enabled:           parseBool01(openAISection.Key("enabled").String()),
+		APIKey:            openAISection.Key("api_key").String(),
+		Model:             openAISection.Key("model").MustString("gpt-5-nano"),
+		Timeout:           openAITimeout,
+		KeywordValidation: parseBool01(openAISection.Key("keyword_validation").MustString("1")),
 	}
 
 	spotifySection := file.Section("spotify")
 	cfg.Spotify = SpotifyConfig{
-		Enabled:                 phraseBool(spotifySection.Key("enabled").String()),
-		ClientID:                spotifySection.Key("client_id").String(),
-		ClientSecret:            spotifySection.Key("client_secret").String(),
-		RedirectURI:             spotifySection.Key("redirect_uri").String(),
-		LogSpotifyRequests:      phraseBool(spotifySection.Key("log_spotify_requests").String()),
-		SpotifyLoggingChannelID: spotifySection.Key("spotify_logging_channel_id").String(),
+		Enabled:            parseBool01(spotifySection.Key("enabled").String()),
+		ClientID:           spotifySection.Key("client_id").String(),
+		ClientSecret:       spotifySection.Key("client_secret").String(),
+		RedirectURI:        spotifySection.Key("redirect_uri").String(),
+		LogSpotifyRequests: parseBool01(spotifySection.Key("log_spotify_requests").String()),
 	}
 
 	robloxSection := file.Section("roblox")
 	cfg.Roblox = RobloxConfig{
-		Enabled:      phraseBool(robloxSection.Key("enabled").String()),
+		Enabled:      parseBool01(robloxSection.Key("enabled").String()),
 		Cookie:       robloxSection.Key("cookie").String(),
 		ClientID:     robloxSection.Key("client_id").String(),
 		ClientSecret: robloxSection.Key("client_secret").String(),
 		RedirectURI:  robloxSection.Key("redirect_uri").String(),
 	}
 
-	discordSection := file.Section("discord")
-	cfg.Discord = DiscordConfig{
-		Enabled:           phraseBool(discordSection.Key("enabled").String()),
-		ClientID:          discordSection.Key("client_id").String(),
-		ClientSecret:      discordSection.Key("client_secret").String(),
-		RedirectURI:       discordSection.Key("redirect_uri").String(),
-		BotToken:          discordSection.Key("bot_token").String(),
-		LogsChannelID:     discordSection.Key("logs_channel_id").String(),
-		RolePingChannelID: discordSection.Key("role_ping_channel_id").String(),
-		ModRoleID:         discordSection.Key("mod_role_id").String(),
+	steamSection := file.Section("steam")
+	cfg.Steam = SteamConfig{
+		APIKey: steamSection.Key("api_key").String(),
+		UserID: steamSection.Key("user_id").String(),
 	}
 
-	alertsSection := file.Section("alerts")
-	cfg.Alerts = AlertsConfig{
-		StreamlabsToken:     alertsSection.Key("streamlabs_token").String(),
-		StreamlabsSocket:    alertsSection.Key("streamlabs_socket").String(),
-		StreamElementsToken: alertsSection.Key("streamelements_token").String(),
+	discordSection := file.Section("discord")
+	cfg.Discord = DiscordConfig{
+		Enabled:      parseBool01(discordSection.Key("enabled").String()),
+		ClientID:     discordSection.Key("client_id").String(),
+		ClientSecret: discordSection.Key("client_secret").String(),
+		RedirectURI:  discordSection.Key("redirect_uri").String(),
+		BotToken:     discordSection.Key("bot_token").String(),
+		ModRoleID:    discordSection.Key("mod_role_id").String(),
+	}
+
+	streamlabsSection := file.Section("streamlabs")
+	cfg.Streamlabs = StreamlabsConfig{
+		Enabled:      parseBool01(streamlabsSection.Key("enabled").String()),
+		ClientID:     streamlabsSection.Key("client_id").String(),
+		ClientSecret: streamlabsSection.Key("client_secret").String(),
+		RedirectURI:  streamlabsSection.Key("redirect_uri").String(),
+	}
+
+	streamElementsSection := file.Section("streamelements")
+	cfg.StreamElements = StreamElementsConfig{
+		Enabled:      parseBool01(streamElementsSection.Key("enabled").String()),
+		ClientID:     streamElementsSection.Key("client_id").String(),
+		ClientSecret: streamElementsSection.Key("client_secret").String(),
+		RedirectURI:  streamElementsSection.Key("redirect_uri").String(),
 	}
 
 	workerSection := file.Section("worker")
 
-	leaseTTL, err := phraseDur(workerSection.Key("lease_ttl").String())
+	leaseTTL, err := parseDuration(workerSection.Key("lease_ttl").String())
 	if err != nil {
 		return nil, fmt.Errorf("parse worker.lease_ttl: %w", err)
 	}
 
-	heartbeatInterval, err := phraseDur(workerSection.Key("heartbeat_interval").String())
+	heartbeatInterval, err := parseDuration(workerSection.Key("heartbeat_interval").String())
 	if err != nil {
 		return nil, fmt.Errorf("parse worker.heartbeat_interval: %w", err)
 	}

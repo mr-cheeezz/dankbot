@@ -1,0 +1,341 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type SpamFilter struct {
+	FilterKey      string
+	Title          string
+	Description    string
+	Action         string
+	ThresholdLabel string
+	ThresholdValue int
+	Enabled        bool
+	IsBuiltin      bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type SpamFilterStore struct {
+	client *Client
+}
+
+func NewSpamFilterStore(client *Client) *SpamFilterStore {
+	return &SpamFilterStore{client: client}
+}
+
+func DefaultSpamFilters() []SpamFilter {
+	return []SpamFilter{
+		{
+			FilterKey:      "message-flood",
+			Title:          "message flood",
+			Description:    "Stops viewers from sending too many messages inside a short window.",
+			Action:         "timeout 30s",
+			ThresholdLabel: "messages / 10s",
+			ThresholdValue: 6,
+			Enabled:        true,
+			IsBuiltin:      true,
+		},
+		{
+			FilterKey:      "duplicate-messages",
+			Title:          "duplicate messages",
+			Description:    "Catches the same line being posted repeatedly by the same chatter.",
+			Action:         "delete",
+			ThresholdLabel: "same message count",
+			ThresholdValue: 3,
+			Enabled:        true,
+			IsBuiltin:      true,
+		},
+		{
+			FilterKey:      "message-length",
+			Title:          "message length",
+			Description:    "Blocks huge walls of text before they turn chat into a paragraph dump.",
+			Action:         "delete",
+			ThresholdLabel: "max characters",
+			ThresholdValue: 320,
+			Enabled:        true,
+			IsBuiltin:      true,
+		},
+		{
+			FilterKey:      "links",
+			Title:          "links",
+			Description:    "Removes off-site links unless the chatter is trusted or the filter is relaxed.",
+			Action:         "delete + timeout 30s",
+			ThresholdLabel: "max links / message",
+			ThresholdValue: 1,
+			Enabled:        true,
+			IsBuiltin:      true,
+		},
+		{
+			FilterKey:      "caps",
+			Title:          "caps",
+			Description:    "Catches messages that are mostly uppercase and look like shouting spam.",
+			Action:         "delete",
+			ThresholdLabel: "caps percentage",
+			ThresholdValue: 75,
+			Enabled:        false,
+			IsBuiltin:      true,
+		},
+		{
+			FilterKey:      "repeated-characters",
+			Title:          "repeated characters",
+			Description:    "Stops stretched-out spam like looooooool or !!!!!!!!!! from flooding chat.",
+			Action:         "delete",
+			ThresholdLabel: "same char run",
+			ThresholdValue: 12,
+			Enabled:        false,
+			IsBuiltin:      true,
+		},
+	}
+}
+
+func (s *SpamFilterStore) EnsureDefaults(ctx context.Context) error {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, filter := range DefaultSpamFilters() {
+		filter.FilterKey = normalizeSpamFilterKey(filter.FilterKey)
+		if filter.FilterKey == "" {
+			continue
+		}
+
+		_, err := db.ExecContext(
+			ctx,
+			`
+INSERT INTO spam_filters (
+	filter_key,
+	title,
+	description,
+	action,
+	threshold_label,
+	threshold_value,
+	enabled,
+	is_builtin,
+	created_at,
+	updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+ON CONFLICT (filter_key) DO NOTHING
+`,
+			filter.FilterKey,
+			strings.TrimSpace(filter.Title),
+			strings.TrimSpace(filter.Description),
+			strings.TrimSpace(filter.Action),
+			strings.TrimSpace(filter.ThresholdLabel),
+			filter.ThresholdValue,
+			filter.Enabled,
+			filter.IsBuiltin,
+		)
+		if err != nil {
+			return fmt.Errorf("ensure spam filter %q: %w", filter.FilterKey, err)
+		}
+	}
+
+	return nil
+}
+
+func (s *SpamFilterStore) List(ctx context.Context) ([]SpamFilter, error) {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(
+		ctx,
+		`
+SELECT
+	filter_key,
+	title,
+	description,
+	action,
+	threshold_label,
+	threshold_value,
+	enabled,
+	is_builtin,
+	created_at,
+	updated_at
+FROM spam_filters
+ORDER BY is_builtin DESC, title ASC, filter_key ASC
+`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list spam filters: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]SpamFilter, 0)
+	for rows.Next() {
+		var item SpamFilter
+		if err := rows.Scan(
+			&item.FilterKey,
+			&item.Title,
+			&item.Description,
+			&item.Action,
+			&item.ThresholdLabel,
+			&item.ThresholdValue,
+			&item.Enabled,
+			&item.IsBuiltin,
+			&item.CreatedAt,
+			&item.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan spam filter: %w", err)
+		}
+
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate spam filters: %w", err)
+	}
+
+	return items, nil
+}
+
+func (s *SpamFilterStore) Get(ctx context.Context, filterKey string) (*SpamFilter, error) {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	filterKey = normalizeSpamFilterKey(filterKey)
+	if filterKey == "" {
+		return nil, nil
+	}
+
+	var item SpamFilter
+	err = db.QueryRowContext(
+		ctx,
+		`
+SELECT
+	filter_key,
+	title,
+	description,
+	action,
+	threshold_label,
+	threshold_value,
+	enabled,
+	is_builtin,
+	created_at,
+	updated_at
+FROM spam_filters
+WHERE filter_key = $1
+`,
+		filterKey,
+	).Scan(
+		&item.FilterKey,
+		&item.Title,
+		&item.Description,
+		&item.Action,
+		&item.ThresholdLabel,
+		&item.ThresholdValue,
+		&item.Enabled,
+		&item.IsBuiltin,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get spam filter %q: %w", filterKey, err)
+	}
+
+	return &item, nil
+}
+
+func (s *SpamFilterStore) Update(ctx context.Context, filter SpamFilter) (*SpamFilter, error) {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	filter.FilterKey = normalizeSpamFilterKey(filter.FilterKey)
+	filter.Title = strings.TrimSpace(filter.Title)
+	filter.Description = strings.TrimSpace(filter.Description)
+	filter.Action = strings.TrimSpace(filter.Action)
+	filter.ThresholdLabel = strings.TrimSpace(filter.ThresholdLabel)
+	if filter.FilterKey == "" {
+		return nil, fmt.Errorf("filter key is required")
+	}
+	if filter.Title == "" {
+		return nil, fmt.Errorf("filter title is required")
+	}
+	if filter.Description == "" {
+		return nil, fmt.Errorf("filter description is required")
+	}
+	if filter.Action == "" {
+		filter.Action = "delete"
+	}
+	if filter.ThresholdLabel == "" {
+		return nil, fmt.Errorf("threshold label is required")
+	}
+	if filter.ThresholdValue < 1 {
+		filter.ThresholdValue = 1
+	}
+
+	row := db.QueryRowContext(
+		ctx,
+		`
+UPDATE spam_filters
+SET
+	title = $2,
+	description = $3,
+	action = $4,
+	threshold_label = $5,
+	threshold_value = $6,
+	enabled = $7,
+	updated_at = NOW()
+WHERE filter_key = $1
+RETURNING
+	filter_key,
+	title,
+	description,
+	action,
+	threshold_label,
+	threshold_value,
+	enabled,
+	is_builtin,
+	created_at,
+	updated_at
+`,
+		filter.FilterKey,
+		filter.Title,
+		filter.Description,
+		filter.Action,
+		filter.ThresholdLabel,
+		filter.ThresholdValue,
+		filter.Enabled,
+	)
+
+	var updated SpamFilter
+	if err := row.Scan(
+		&updated.FilterKey,
+		&updated.Title,
+		&updated.Description,
+		&updated.Action,
+		&updated.ThresholdLabel,
+		&updated.ThresholdValue,
+		&updated.Enabled,
+		&updated.IsBuiltin,
+		&updated.CreatedAt,
+		&updated.UpdatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("spam filter %q does not exist", filter.FilterKey)
+		}
+		return nil, fmt.Errorf("update spam filter %q: %w", filter.FilterKey, err)
+	}
+
+	return &updated, nil
+}
+
+func normalizeSpamFilterKey(filterKey string) string {
+	return strings.TrimSpace(strings.ToLower(filterKey))
+}
