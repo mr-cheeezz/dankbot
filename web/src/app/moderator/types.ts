@@ -1,0 +1,398 @@
+export type ViewKey =
+  | "dashboard"
+  | "commands"
+  | "keywords"
+  | "modes"
+  | "timers"
+  | "modules"
+  | "discord"
+  | "alerts"
+  | "spamFilters"
+  | "blockedTerms"
+  | "massModeration"
+  | "channelPoints"
+  | "giveaways"
+  | "integrations"
+  | "settings";
+
+export type NavSection = {
+  title: string;
+  items: Array<{
+    key: ViewKey;
+    label: string;
+  }>;
+};
+
+export type AuditEntry = {
+  id: string;
+  actor: string;
+  actorAvatarURL: string;
+  command: string;
+  detail: string;
+  ago: string;
+};
+
+export type CommandEntry = {
+  id: string;
+  name: string;
+  kind: "custom" | "default";
+  defaultEnabled: boolean;
+  platform: "twitch" | "discord";
+  aliases: string[];
+  group: string;
+  state: string;
+  description: string;
+  example: string;
+  responsePreview: string;
+  responseType: "reply" | "say" | "action";
+  enabled: boolean;
+  enabledWhenOffline: boolean;
+  enabledWhenOnline: boolean;
+  protected: boolean;
+  configurable: boolean;
+};
+
+export type KeywordEntry = {
+  id: string;
+  trigger: string;
+  kind: "custom" | "default";
+  aiDetectionEnabled: boolean;
+  behaviorType: "reply" | "smart-response" | "mode-hook" | "intent";
+  matchMode: "substring" | "word" | "intent" | "exact";
+  description: string;
+  example: string;
+  responsePreview: string;
+  enabled: boolean;
+  protected: boolean;
+  configurable: boolean;
+  cooldownsDisabled: boolean;
+  globalCooldownSeconds: number;
+  userCooldownSeconds: number;
+  responseType: "say" | "reply";
+  target: "message" | "sender";
+  phraseGroups: string[][];
+  enabledWhenOffline: boolean;
+  enabledWhenOnline: boolean;
+  enabledForResubMessages: boolean;
+  excludeVips: boolean;
+  excludeModsBroadcaster: boolean;
+  minimumBits: number;
+  gameFilters: string[];
+  streamTitleFilters: string[];
+  expiresAfterDays: number;
+  managedBy: "keywords" | "modes";
+  linkedModeKey: string;
+};
+
+export type DefaultKeywordSetting = {
+  keywordName: string;
+  enabled: boolean;
+  aiDetectionEnabled: boolean;
+};
+
+export type ModeEntry = {
+  id: string;
+  key: string;
+  title: string;
+  description: string;
+  keywordName: string;
+  keywordDescription: string;
+  keywordResponse: string;
+  coordinatedTwitchTitle: string;
+  timerEnabled: boolean;
+  timerMessage: string;
+  timerIntervalSeconds: number;
+  builtin: boolean;
+};
+
+export type TimerEntry = {
+  id: string;
+  name: string;
+  source: "default" | "custom";
+  description: string;
+  enabled: boolean;
+  enabledWhenOffline: boolean;
+  enabledWhenOnline: boolean;
+  intervalOfflineMinutes: number;
+  intervalOnlineMinutes: number;
+  minimumLines: number;
+  commandNames: string[];
+  messages: string[];
+  gameFilters: string[];
+  titleKeywords: string[];
+  protected: boolean;
+};
+
+export type GiveawayEntry = {
+  id: string;
+  name: string;
+  type: "raffle" | "1v1" | "vip-pick";
+  status: "draft" | "ready" | "live" | "completed";
+  entryMethod: "active-users" | "keyword";
+  description: string;
+  enabled: boolean;
+  chatAnnouncementsEnabled: boolean;
+  entryTrigger: string;
+  entryWindowSeconds: number;
+  inactivityTimeoutSeconds: number;
+  subscriberLuckMultiplier: number;
+  winnerCount: number;
+  allowVips: boolean;
+  allowSubscribers: boolean;
+  allowModsBroadcaster: boolean;
+  requiredModeKey: string;
+  chatPrompt: string;
+  winnerMessage: string;
+  entrantCount: number;
+  protected: boolean;
+};
+
+export type ChannelPointRewardEntry = {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  enabled: boolean;
+  requireLive: boolean;
+  cooldownSeconds: number;
+  responseTemplate: string;
+  protected: boolean;
+};
+
+export type ModuleSettingEntry = {
+  id: string;
+  label: string;
+  value: string;
+  type: "text" | "textarea" | "number" | "select" | "boolean";
+  helperText?: string;
+  options?: string[];
+};
+
+export type ModuleEntry = {
+  id: string;
+  name: string;
+  state: string;
+  detail: string;
+  enabled: boolean;
+  commands: string[];
+  settings: ModuleSettingEntry[];
+};
+
+export type FollowersOnlyModuleSettings = {
+  enabled: boolean;
+  autoDisableAfterMinutes: number;
+};
+
+export type GameModuleSettings = {
+  enabled: boolean;
+  aiDetectionEnabled: boolean;
+  keywordResponse: string;
+};
+
+export type DiscordBotChannelOption = {
+  id: string;
+  name: string;
+};
+
+export type DiscordBotRoleOption = {
+  id: string;
+  name: string;
+  mentionable: boolean;
+};
+
+export type DiscordBotPingRole = {
+  alias: string;
+  roleID: string;
+  roleName: string;
+  enabled: boolean;
+};
+
+export type DiscordBotSettings = {
+  guildID: string;
+  defaultChannelID: string;
+  pingRoles: DiscordBotPingRole[];
+  channels: DiscordBotChannelOption[];
+  roles: DiscordBotRoleOption[];
+  commandName: string;
+};
+
+export type BlockedTermEntry = {
+  id: string;
+  pattern: string;
+  isRegex: boolean;
+  action:
+    | "delete"
+    | "warn"
+    | "delete + warn"
+    | "timeout"
+    | "delete + timeout"
+    | "ban"
+    | "delete + ban";
+  timeoutSeconds: number;
+  reason: string;
+  enabled: boolean;
+};
+
+export type MassModerationActionResult = {
+  username: string;
+  displayName: string;
+  action: "warn" | "timeout" | "ban" | "unban";
+  success: boolean;
+  error?: string;
+};
+
+export type SpamFilterEntry = {
+  id: string;
+  name: string;
+  description: string;
+  action: string;
+  thresholdLabel: string;
+  thresholdValue: number;
+  enabled: boolean;
+  lengthSettings?: {
+    enabledWhenOffline: boolean;
+    enabledWhenOnline: boolean;
+    enabledForResubMessages: boolean;
+    warningEnabled: boolean;
+    warningDurationSeconds: number;
+    announcementEnabled: boolean;
+    announcementCooldownSeconds: number;
+    ignoredEmoteSources: {
+      platform: boolean;
+      betterTTV: boolean;
+      frankerFaceZ: boolean;
+      sevenTV: boolean;
+    };
+    baseTimeoutSeconds: number;
+    maxTimeoutSeconds: number;
+    exemptVips: boolean;
+    exemptSubscribers: boolean;
+    exemptModsBroadcaster: boolean;
+    exemptUsernames: string[];
+    repeatOffendersEnabled: boolean;
+    repeatMultiplier: number;
+    repeatCooldownSeconds: number;
+  };
+  linkSettings?: {
+    exemptVips: boolean;
+    exemptSubscribers: boolean;
+    exemptModsBroadcaster: boolean;
+    exemptUsernames: string[];
+    allowDiscordInvites: boolean;
+    enabledWhenOffline: boolean;
+    enabledWhenOnline: boolean;
+    warningEnabled: boolean;
+    warningDurationSeconds: number;
+    allowedLinks: string[];
+    blockedLinks: string[];
+    repeatOffendersEnabled: boolean;
+    repeatMultiplier: number;
+    repeatCooldownSeconds: number;
+  };
+};
+
+export type AlertEntry = {
+  id: string;
+  provider: "twitch" | "streamlabs" | "streamelements";
+  section: string;
+  label: string;
+  source: string;
+  behavior: string;
+  status: string;
+  enabled: boolean;
+  template: string;
+  scope: string;
+  note?: string;
+  minimumLabel?: string;
+  minimumValue?: number;
+  minimumUnit?: string;
+  minimumPrefix?: string;
+};
+
+export type IntegrationAction = {
+  kind: "navigate" | "unlink";
+  label: string;
+  href?: string;
+  target?: string;
+};
+
+export type IntegrationEntry = {
+  id: string;
+  name: string;
+  status: string;
+  detail: string;
+  actions: IntegrationAction[];
+};
+
+export type BotModeOption = {
+  key: string;
+  title: string;
+};
+
+export type DashboardSummary = {
+  channelName: string;
+  channelAvatarURL: string;
+  botRunning: boolean;
+  killswitchEnabled: boolean;
+  integrations: IntegrationEntry[];
+};
+
+export type DashboardRoleEntry = {
+  userId: string;
+  login: string;
+  displayName: string;
+  roleName: "editor";
+  assignedByLogin: string;
+};
+
+export type TwitchUserSearchEntry = {
+  userId: string;
+  login: string;
+  displayName: string;
+  avatarURL: string;
+};
+
+export type DashboardSpotifyTrack = {
+  id: string;
+  name: string;
+  artists: string[];
+  albumName: string;
+  albumArtURL: string;
+  trackURL: string;
+  albumURL: string;
+  artistURL: string;
+  uri: string;
+  durationMS: number;
+};
+
+export type DashboardSpotifyState = {
+  linked: boolean;
+  isPlaying: boolean;
+  progressMS: number;
+  deviceName: string;
+  current: DashboardSpotifyTrack | null;
+  queue: DashboardSpotifyTrack[];
+};
+
+export type PublicHomeSettings = {
+  showNowPlaying: boolean;
+  showNowPlayingAlbumArt: boolean;
+  showNowPlayingProgress: boolean;
+  showNowPlayingLinks: boolean;
+  promoLinks: Array<{
+    label: string;
+    href: string;
+  }>;
+  robloxLinkCommandTarget:
+    | "dankbot"
+    | "nightbot"
+    | "fossabot"
+    | "pajbot"
+    | "custom";
+  robloxLinkCommandTemplate: string;
+};
+
+export type PlaceholderItem = {
+  title: string;
+  detail: string;
+};

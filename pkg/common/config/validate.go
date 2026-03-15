@@ -8,38 +8,43 @@ import (
 func (c *Config) Validate() error {
 	var problems []string
 
-	if strings.TrimSpace(c.Main.BotID) == "" {
-		problems = append(problems, "main.bot_id is required")
-	}
-	if strings.TrimSpace(c.Main.StreamerID) == "" {
-		problems = append(problems, "main.streamer_id is required")
-	}
-	if strings.TrimSpace(c.Main.AdminID) == "" {
-		problems = append(problems, "main.admin_id is required")
-	}
-	if strings.TrimSpace(c.Main.DB) == "" {
-		problems = append(problems, "main.db is required")
-	}
-
-	if strings.TrimSpace(c.Web.PublicURL) == "" {
-		problems = append(problems, "web.public_url is required")
-	}
-	if strings.TrimSpace(c.Web.BindAddr) == "" {
-		problems = append(problems, "web.bind_addr is required")
-	}
-
-	if strings.TrimSpace(c.Redis.Addr) == "" {
-		problems = append(problems, "redis.addr is required")
-	}
 	if c.Redis.DB < 0 {
 		problems = append(problems, "redis.db cannot be negative")
 	}
 
-	if strings.TrimSpace(c.Twitch.ClientID) == "" {
-		problems = append(problems, "twitch.client_id is required")
+	if c.TwitchEventSub.Enabled {
+		transport := strings.TrimSpace(c.TwitchEventSub.Transport)
+		if transport == "" {
+			transport = "webhook"
+		}
+		if transport != "webhook" && transport != "websocket" {
+			problems = append(problems, "twitch_eventsub.transport must be either webhook or websocket")
+		}
+		if transport == "webhook" && strings.TrimSpace(c.TwitchEventSub.Secret) == "" {
+			problems = append(problems, "twitch_eventsub.secret is required when twitch_eventsub.enabled = 1 and transport = webhook")
+		}
+		if c.TwitchEventSub.SyncInterval <= 0 {
+			problems = append(problems, "twitch_eventsub.sync_interval must be greater than 0")
+		}
+		if c.TwitchEventSub.DedupeTTL <= 0 {
+			problems = append(problems, "twitch_eventsub.dedupe_ttl must be greater than 0")
+		}
 	}
-	if strings.TrimSpace(c.Twitch.ClientSecret) == "" {
-		problems = append(problems, "twitch.client_secret is required")
+
+	if c.OpenAI.Enabled {
+		if strings.TrimSpace(c.OpenAI.APIKey) == "" {
+			problems = append(problems, "openai.api_key is required when openai.enabled = 1")
+		}
+		if strings.TrimSpace(c.OpenAI.Model) == "" {
+			problems = append(problems, "openai.model is required when openai.enabled = 1")
+		}
+		if c.OpenAI.Timeout <= 0 {
+			problems = append(problems, "openai.timeout must be greater than 0")
+		}
+	}
+
+	if transport := strings.TrimSpace(c.Twitch.SendTransport); transport != "" && transport != "irc" && transport != "helix" {
+		problems = append(problems, "twitch.send_transport must be either irc or helix")
 	}
 
 	if c.Spotify.Enabled {
@@ -60,6 +65,15 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	steamAPIKey := strings.TrimSpace(c.Steam.APIKey)
+	steamUserID := strings.TrimSpace(c.Steam.UserID)
+	if steamAPIKey != "" && steamUserID == "" {
+		problems = append(problems, "steam.user_id is required when steam.api_key is set")
+	}
+	if steamUserID != "" && steamAPIKey == "" {
+		problems = append(problems, "steam.api_key is required when steam.user_id is set")
+	}
+
 	if c.Discord.Enabled {
 		if strings.TrimSpace(c.Discord.ClientID) == "" {
 			problems = append(problems, "discord.client_id is required when discord.enabled = 1")
@@ -69,16 +83,25 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if strings.TrimSpace(c.Worker.InstanceID) == "" {
-		problems = append(problems, "worker.instance_id is required")
+	if c.Streamlabs.Enabled {
+		if strings.TrimSpace(c.Streamlabs.ClientID) == "" {
+			problems = append(problems, "streamlabs.client_id is required when streamlabs.enabled = 1")
+		}
+		if strings.TrimSpace(c.Streamlabs.ClientSecret) == "" {
+			problems = append(problems, "streamlabs.client_secret is required when streamlabs.enabled = 1")
+		}
 	}
-	if c.Worker.LeaseTTL <= 0 {
-		problems = append(problems, "worker.lease_ttl must be greater than 0")
+
+	if c.StreamElements.Enabled {
+		if strings.TrimSpace(c.StreamElements.ClientID) == "" {
+			problems = append(problems, "streamelements.client_id is required when streamelements.enabled = 1")
+		}
+		if strings.TrimSpace(c.StreamElements.ClientSecret) == "" {
+			problems = append(problems, "streamelements.client_secret is required when streamelements.enabled = 1")
+		}
 	}
-	if c.Worker.HeartbeatInterval <= 0 {
-		problems = append(problems, "worker.heartbeat_interval must be greater than 0")
-	}
-	if c.Worker.HeartbeatInterval >= c.Worker.LeaseTTL {
+
+	if c.Worker.HeartbeatInterval > 0 && c.Worker.LeaseTTL > 0 && c.Worker.HeartbeatInterval >= c.Worker.LeaseTTL {
 		problems = append(problems, "worker.heartbeat_interval must be less than worker.lease_ttl")
 	}
 

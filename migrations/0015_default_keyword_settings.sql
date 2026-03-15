@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS default_keyword_settings (
+	keyword_name TEXT PRIMARY KEY,
+	enabled BOOLEAN NOT NULL DEFAULT TRUE,
+	ai_detection_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+	updated_by TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

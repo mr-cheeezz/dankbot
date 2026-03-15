@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Dankbot mascot mark</title>
+  <desc id="desc">Pixel-style mascot mark inspired by the dank character.</desc>
+  <rect width="96" height="96" rx="18" fill="#0b0d10"/>
+  <g shape-rendering="crispEdges">
+    <rect x="22" y="12" width="40" height="8" fill="#9dbd3f"/>
+    <rect x="18" y="20" width="44" height="8" fill="#d8df8a"/>
+    <rect x="14" y="28" width="52" height="8" fill="#f2f0b6"/>
+    <rect x="12" y="36" width="52" height="8" fill="#ebe5a7"/>
+    <rect x="16" y="44" width="44" height="8" fill="#efe7b3"/>
+    <rect x="20" y="52" width="40" height="8" fill="#eadfab"/>
+    <rect x="24" y="60" width="36" height="8" fill="#e5d99f"/>
+    <rect x="20" y="68" width="40" height="8" fill="#d0b483"/>
+    <rect x="18" y="76" width="44" height="6" fill="#b58d68"/>
+
+    <rect x="16" y="20" width="4" height="12" fill="#4c6a20"/>
+    <rect x="64" y="28" width="4" height="8" fill="#7a8740"/>
+    <rect x="12" y="36" width="4" height="10" fill="#89a13c"/>
+
+    <rect x="28" y="44" width="10" height="10" fill="#171717"/>
+    <rect x="32" y="48" width="6" height="6" fill="#ffffff"/>
+    <rect x="50" y="44" width="10" height="10" fill="#171717"/>
+    <rect x="54" y="48" width="6" height="6" fill="#ffffff"/>
+
+    <rect x="30" y="64" width="24" height="4" fill="#3b2a26"/>
+    <rect x="34" y="68" width="16" height="2" fill="#8f6d57"/>
+
+    <rect x="10" y="34" width="2" height="14" fill="#273108"/>
+    <rect x="12" y="28" width="2" height="54" fill="#42531d"/>
+    <rect x="14" y="26" width="2" height="56" fill="#161616"/>
+    <rect x="62" y="18" width="2" height="62" fill="#161616"/>
+    <rect x="64" y="28" width="2" height="50" fill="#42531d"/>
+    <rect x="66" y="30" width="2" height="16" fill="#6e7c34"/>
+  </g>
+</svg>
