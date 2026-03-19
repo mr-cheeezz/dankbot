@@ -34,9 +34,21 @@ type discordBotSettingsResponse struct {
 	GuildID          string                       `json:"guild_id"`
 	DefaultChannelID string                       `json:"default_channel_id"`
 	PingRoles        []discordBotPingRoleResponse `json:"ping_roles"`
+	GamePing         discordBotGamePingResponse   `json:"game_ping"`
 	Channels         []discordBotChannelResponse  `json:"channels"`
 	Roles            []discordBotRoleResponse     `json:"roles"`
 	CommandName      string                       `json:"command_name"`
+	GamePingCommand  string                       `json:"game_ping_command_name"`
+}
+
+type discordBotGamePingResponse struct {
+	Enabled          bool   `json:"enabled"`
+	ChannelID        string `json:"channel_id"`
+	RoleID           string `json:"role_id"`
+	RoleName         string `json:"role_name"`
+	MessageTemplate  string `json:"message_template"`
+	IncludeWatchLink bool   `json:"include_watch_link"`
+	IncludeJoinLink  bool   `json:"include_join_link"`
 }
 
 func (h handler) discordBot(w http.ResponseWriter, r *http.Request) {
@@ -124,10 +136,37 @@ func (h handler) updateDiscordBot(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	nextGamePing := postgres.DiscordGamePingSettings{
+		Enabled:          request.GamePing.Enabled,
+		ChannelID:        strings.TrimSpace(request.GamePing.ChannelID),
+		RoleID:           strings.TrimSpace(request.GamePing.RoleID),
+		MessageTemplate:  request.GamePing.MessageTemplate,
+		IncludeWatchLink: request.GamePing.IncludeWatchLink,
+		IncludeJoinLink:  request.GamePing.IncludeJoinLink,
+	}
+	if nextGamePing.ChannelID == "" {
+		nextGamePing.ChannelID = defaultChannelID
+	}
+	if nextGamePing.ChannelID != "" {
+		if _, ok := validChannels[nextGamePing.ChannelID]; !ok {
+			http.Error(w, "selected game ping channel is not available in the connected guild", http.StatusBadRequest)
+			return
+		}
+	}
+	if nextGamePing.RoleID != "" {
+		roleName, ok := validRoles[nextGamePing.RoleID]
+		if !ok {
+			http.Error(w, "selected game ping role is not available in the connected guild", http.StatusBadRequest)
+			return
+		}
+		nextGamePing.RoleName = roleName
+	}
+
 	updated, err := h.appState.DiscordBotSettings.Update(r.Context(), postgres.DiscordBotSettings{
 		GuildID:          settings.GuildID,
 		DefaultChannelID: defaultChannelID,
 		PingRoles:        nextPingRoles,
+		GamePing:         nextGamePing,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -243,9 +282,10 @@ func discordBotSettingsToResponse(
 	roles []discordBotRoleResponse,
 ) discordBotSettingsResponse {
 	response := discordBotSettingsResponse{
-		Channels:    channels,
-		Roles:       roles,
-		CommandName: "!dping",
+		Channels:        channels,
+		Roles:           roles,
+		CommandName:     "!dping",
+		GamePingCommand: "!gameping",
 	}
 
 	if settings != nil {
@@ -259,6 +299,15 @@ func discordBotSettingsToResponse(
 				RoleName: item.RoleName,
 				Enabled:  item.Enabled,
 			})
+		}
+		response.GamePing = discordBotGamePingResponse{
+			Enabled:          settings.GamePing.Enabled,
+			ChannelID:        settings.GamePing.ChannelID,
+			RoleID:           settings.GamePing.RoleID,
+			RoleName:         settings.GamePing.RoleName,
+			MessageTemplate:  settings.GamePing.MessageTemplate,
+			IncludeWatchLink: settings.GamePing.IncludeWatchLink,
+			IncludeJoinLink:  settings.GamePing.IncludeJoinLink,
 		}
 	}
 

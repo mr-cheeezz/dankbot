@@ -85,6 +85,24 @@ func (c *Client) SendMessage(channelID, content string) error {
 	return nil
 }
 
+func (c *Client) SendEmbed(channelID, content string, embed *discordgo.MessageEmbed) error {
+	channelID = strings.TrimSpace(channelID)
+	content = strings.TrimSpace(content)
+	if channelID == "" || (content == "" && embed == nil) {
+		return nil
+	}
+
+	_, err := c.session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content: content,
+		Embed:   embed,
+	})
+	if err != nil {
+		return fmt.Errorf("send discord embed: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) Errors() <-chan error {
 	return c.errs
 }

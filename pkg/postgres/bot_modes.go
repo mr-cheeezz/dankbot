@@ -9,20 +9,22 @@ import (
 )
 
 type BotMode struct {
-	ModeKey                string
-	Title                  string
-	Description            string
-	KeywordName            string
-	KeywordDescription     string
-	KeywordResponse        string
-	CoordinatedTwitchTitle string
-	IsBuiltin              bool
-	TimerEnabled           bool
-	TimerMessage           string
-	TimerIntervalSeconds   int
-	LastTimerSentAt        time.Time
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	ModeKey                       string
+	Title                         string
+	Description                   string
+	KeywordName                   string
+	KeywordDescription            string
+	KeywordResponse               string
+	CoordinatedTwitchTitle        string
+	CoordinatedTwitchCategoryID   string
+	CoordinatedTwitchCategoryName string
+	IsBuiltin                     bool
+	TimerEnabled                  bool
+	TimerMessage                  string
+	TimerIntervalSeconds          int
+	LastTimerSentAt               time.Time
+	CreatedAt                     time.Time
+	UpdatedAt                     time.Time
 }
 
 type BotModeStore struct {
@@ -46,6 +48,8 @@ func (s *BotModeStore) Save(ctx context.Context, mode BotMode) error {
 	mode.KeywordDescription = strings.TrimSpace(mode.KeywordDescription)
 	mode.KeywordResponse = strings.TrimSpace(mode.KeywordResponse)
 	mode.CoordinatedTwitchTitle = strings.TrimSpace(mode.CoordinatedTwitchTitle)
+	mode.CoordinatedTwitchCategoryID = strings.TrimSpace(mode.CoordinatedTwitchCategoryID)
+	mode.CoordinatedTwitchCategoryName = strings.TrimSpace(mode.CoordinatedTwitchCategoryName)
 
 	if mode.ModeKey == "" {
 		return fmt.Errorf("mode key is required")
@@ -65,6 +69,8 @@ INSERT INTO bot_modes (
 	keyword_description,
 	keyword_response,
 	coordinated_twitch_title,
+	coordinated_twitch_category_id,
+	coordinated_twitch_category_name,
 	is_builtin,
 	timer_enabled,
 	timer_message,
@@ -72,7 +78,7 @@ INSERT INTO bot_modes (
 	created_at,
 	updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
 ON CONFLICT (mode_key) DO UPDATE SET
 	title = EXCLUDED.title,
 	description = EXCLUDED.description,
@@ -80,6 +86,8 @@ ON CONFLICT (mode_key) DO UPDATE SET
 	keyword_description = EXCLUDED.keyword_description,
 	keyword_response = EXCLUDED.keyword_response,
 	coordinated_twitch_title = EXCLUDED.coordinated_twitch_title,
+	coordinated_twitch_category_id = EXCLUDED.coordinated_twitch_category_id,
+	coordinated_twitch_category_name = EXCLUDED.coordinated_twitch_category_name,
 	is_builtin = EXCLUDED.is_builtin,
 	timer_enabled = EXCLUDED.timer_enabled,
 	timer_message = EXCLUDED.timer_message,
@@ -93,6 +101,8 @@ ON CONFLICT (mode_key) DO UPDATE SET
 		mode.KeywordDescription,
 		mode.KeywordResponse,
 		mode.CoordinatedTwitchTitle,
+		mode.CoordinatedTwitchCategoryID,
+		mode.CoordinatedTwitchCategoryName,
 		mode.IsBuiltin,
 		mode.TimerEnabled,
 		mode.TimerMessage,
@@ -129,6 +139,8 @@ SELECT
 	keyword_description,
 	keyword_response,
 	coordinated_twitch_title,
+	coordinated_twitch_category_id,
+	coordinated_twitch_category_name,
 	is_builtin,
 	timer_enabled,
 	timer_message,
@@ -148,6 +160,8 @@ WHERE mode_key = $1
 		&mode.KeywordDescription,
 		&mode.KeywordResponse,
 		&mode.CoordinatedTwitchTitle,
+		&mode.CoordinatedTwitchCategoryID,
+		&mode.CoordinatedTwitchCategoryName,
 		&mode.IsBuiltin,
 		&mode.TimerEnabled,
 		&mode.TimerMessage,
@@ -187,6 +201,8 @@ SELECT
 	keyword_description,
 	keyword_response,
 	coordinated_twitch_title,
+	coordinated_twitch_category_id,
+	coordinated_twitch_category_name,
 	is_builtin,
 	timer_enabled,
 	timer_message,
@@ -215,6 +231,8 @@ ORDER BY is_builtin DESC, title ASC, mode_key ASC
 			&mode.KeywordDescription,
 			&mode.KeywordResponse,
 			&mode.CoordinatedTwitchTitle,
+			&mode.CoordinatedTwitchCategoryID,
+			&mode.CoordinatedTwitchCategoryName,
 			&mode.IsBuiltin,
 			&mode.TimerEnabled,
 			&mode.TimerMessage,
@@ -277,6 +295,8 @@ func (s *BotModeStore) EnsureDefaults(ctx context.Context, defaults []BotMode) e
 		mode.KeywordDescription = strings.TrimSpace(mode.KeywordDescription)
 		mode.KeywordResponse = strings.TrimSpace(mode.KeywordResponse)
 		mode.CoordinatedTwitchTitle = strings.TrimSpace(mode.CoordinatedTwitchTitle)
+		mode.CoordinatedTwitchCategoryID = strings.TrimSpace(mode.CoordinatedTwitchCategoryID)
+		mode.CoordinatedTwitchCategoryName = strings.TrimSpace(mode.CoordinatedTwitchCategoryName)
 		if mode.ModeKey == "" || mode.Title == "" {
 			continue
 		}
@@ -292,6 +312,8 @@ INSERT INTO bot_modes (
 	keyword_description,
 	keyword_response,
 	coordinated_twitch_title,
+	coordinated_twitch_category_id,
+	coordinated_twitch_category_name,
 	is_builtin,
 	timer_enabled,
 	timer_message,
@@ -299,7 +321,7 @@ INSERT INTO bot_modes (
 	created_at,
 	updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
 ON CONFLICT (mode_key) DO NOTHING
 `,
 			mode.ModeKey,
@@ -309,6 +331,8 @@ ON CONFLICT (mode_key) DO NOTHING
 			mode.KeywordDescription,
 			mode.KeywordResponse,
 			mode.CoordinatedTwitchTitle,
+			mode.CoordinatedTwitchCategoryID,
+			mode.CoordinatedTwitchCategoryName,
 			mode.IsBuiltin,
 			mode.TimerEnabled,
 			mode.TimerMessage,

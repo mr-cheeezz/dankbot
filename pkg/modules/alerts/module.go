@@ -165,11 +165,10 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 		}
 		return fmt.Sprintf("Thank you %s for cheering %d bits!", displayName(event.UserName, event.UserLogin), event.Bits), nil
 	case "channel.channel_points_custom_reward_redemption.add":
-		var event eventsub.ChannelPointRedemptionEvent
-		if err := json.Unmarshal(raw, &event); err != nil {
-			return "", fmt.Errorf("decode redemption event: %w", err)
-		}
-		return fmt.Sprintf("%s redeemed %s!", displayName(event.UserName, event.UserLogin), strings.TrimSpace(event.Reward.Title)), nil
+		// Do not emit global chat alerts for every redemption.
+		// Redemptions are still persisted through EventSub activity, and
+		// targeted per-reward actions can be added separately.
+		return "", nil
 	case "channel.poll.begin":
 		var event eventsub.PollEvent
 		if err := json.Unmarshal(raw, &event); err != nil {

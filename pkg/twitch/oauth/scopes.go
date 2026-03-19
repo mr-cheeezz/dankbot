@@ -8,9 +8,7 @@ var (
 		"moderator:manage:automod_settings",
 		"moderator:read:banned_users",
 		"moderator:manage:banned_users",
-		"moderator:read:blocked_terms",
 		"moderator:read:chat_messages",
-		"moderator:manage:blocked_terms",
 		"moderator:manage:chat_messages",
 		"moderator:read:chat_settings",
 		"moderator:manage:chat_settings",
@@ -34,7 +32,9 @@ var (
 	)
 
 	SiteLoginScopes = uniqueScopes(
-		"openid",
+	// Site login should not request email or profile information.
+	// We only need a user access token so we can read the login + user id
+	// from the /validate response during callback.
 	)
 
 	StreamerScopes = uniqueScopes(
@@ -51,6 +51,9 @@ var (
 		"channel:read:redemptions",
 		"channel:read:subscriptions",
 		"bits:read",
+		"moderator:read:moderators",
+		"moderator:read:vips",
+		"moderator:read:followers",
 	)
 
 	BotScopes = uniqueScopes(
@@ -62,13 +65,8 @@ var (
 		}, ModeratorBotScopes...)...,
 	)
 
-	SiteLoginClaims = &Claims{
-		UserInfo: map[string]any{
-			"picture":            nil,
-			"preferred_username": nil,
-			"updated_at":         nil,
-		},
-	}
+	// SiteLoginClaims intentionally omitted to keep the Twitch consent screen minimal.
+	SiteLoginClaims = (*Claims)(nil)
 )
 
 func uniqueScopes(scopes ...string) []string {

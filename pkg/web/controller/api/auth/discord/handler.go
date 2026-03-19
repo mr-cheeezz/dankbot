@@ -4,6 +4,7 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 
 	discordoauth "github.com/mr-cheeezz/dankbot/pkg/discord/oauth"
@@ -181,8 +182,8 @@ var joinedPage = template.Must(template.New("joined").Parse(`<!doctype html>
         </div>
       </div>
       <nav class="top-links" aria-label="Discord join navigation">
-        <a class="top-link" href="/dashboard">Dashboard</a>
-        <a class="top-link" href="/dashboard/discord">Discord Bot</a>
+        <a class="top-link" href="/d">Dashboard</a>
+        <a class="top-link" href="/d/discord">Discord Bot</a>
         <a class="top-link" href="/">Home</a>
       </nav>
     </header>
@@ -194,8 +195,8 @@ var joinedPage = template.Must(template.New("joined").Parse(`<!doctype html>
         {{if .UserName}}<p>{{.UserName}}, the bot install completed and the server is ready for Discord-side commands once the bot runtime is online.</p>{{else}}<p>The bot install completed and the server is ready for Discord-side commands once the bot runtime is online.</p>{{end}}
         {{if .GuildID}}<p class="meta">Guild ID: <code>{{.GuildID}}</code></p>{{end}}
         <div class="actions">
-          <a class="button button-primary" href="/dashboard/discord">Open Discord Bot</a>
-          <a class="button button-secondary" href="/dashboard/integrations">Back to integrations</a>
+          <a class="button button-primary" href="/d/discord">Open Discord Bot</a>
+          <a class="button button-secondary" href="/d/integrations">Back to integrations</a>
         </div>
       </section>
     </main>
@@ -249,17 +250,17 @@ func (h handler) joined(w http.ResponseWriter, r *http.Request) {
 	if authError := strings.TrimSpace(query.Get("error")); authError != "" {
 		description := strings.TrimSpace(query.Get("error_description"))
 		if description != "" {
-			writeErrorPage(w, authError+": "+description, http.StatusBadRequest)
+			redirectJoinedResult(w, r, "error", "Discord connection failed", authError+": "+description)
 			return
 		}
-		writeErrorPage(w, authError, http.StatusBadRequest)
+		redirectJoinedResult(w, r, "error", "Discord connection failed", authError)
 		return
 	}
 
 	stateKey := strings.TrimSpace(query.Get("state"))
 	code := strings.TrimSpace(query.Get("code"))
 	if stateKey == "" || code == "" {
-		writeErrorPage(w, "missing discord oauth state or code", http.StatusBadRequest)
+		redirectJoinedResult(w, r, "error", "Discord connection failed", "missing discord oauth state or code")
 		return
 	}
 
@@ -272,10 +273,10 @@ func (h handler) joined(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if err == discordoauth.ErrStateNotFound {
-			writeErrorPage(w, "this discord join link has expired or was already used", http.StatusBadRequest)
+			redirectJoinedResult(w, r, "error", "Discord connection failed", "this discord join link has expired or was already used")
 			return
 		}
-		writeErrorPage(w, err.Error(), http.StatusBadRequest)
+		redirectJoinedResult(w, r, "error", "Discord connection failed", err.Error())
 		return
 	}
 
@@ -297,19 +298,16 @@ func (h handler) joined(w http.ResponseWriter, r *http.Request) {
 			Permissions:       result.Permissions,
 		})
 		if saveErr != nil {
-			writeErrorPage(w, saveErr.Error(), http.StatusInternalServerError)
+			redirectJoinedResult(w, r, "error", "Discord connection failed", saveErr.Error())
 			return
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = joinedPage.Execute(w, struct {
-		UserName string
-		GuildID  string
-	}{
-		UserName: userName,
-		GuildID:  result.GuildID,
-	})
+	message := "The Discord bot install completed and the server is ready for Discord-side commands."
+	if userName != "" {
+		message = userName + ", the Discord bot install completed and the server is ready for Discord-side commands."
+	}
+	redirectJoinedResult(w, r, "success", "Discord bot joined", message)
 }
 
 func writeError(w http.ResponseWriter, statusCode int, message string) {
@@ -324,7 +322,25 @@ func writeMethodNotAllowed(w http.ResponseWriter, allowedMethod string) {
 func writeErrorPage(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(statusCode)
-	_, _ = w.Write([]byte("<!doctype html><html><body style=\"margin:0;min-height:100vh;font-family:system-ui;background:#232323;color:#f4f7ff;display:grid;place-items:center;padding:24px;\"><main style=\"width:min(640px,calc(100vw - 48px));padding:32px;border-radius:22px;background:rgba(24,24,24,0.96);border:1px solid rgba(255,255,255,0.08);box-shadow:0 20px 55px rgba(0,0,0,0.28)\"><p style=\"margin:0 0 10px;color:#ff9aa2;font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase\">Discord OAuth error</p><h1 style=\"margin:0 0 12px;font-size:clamp(28px,5vw,40px);line-height:1.05\">Discord join failed</h1><p style=\"margin:0;color:#c8d0ea;line-height:1.6\">" + template.HTMLEscapeString(message) + "</p><div style=\"display:flex;gap:12px;flex-wrap:wrap;margin-top:24px\"><a href=\"/dashboard/integrations\" style=\"display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:12px;text-decoration:none;font-weight:700;background:#4a89ff;color:#fff\">Back to integrations</a><a href=\"/dashboard\" style=\"display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:12px;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.03);color:#e7ecfb\">Open dashboard</a></div></main></body></html>"))
+	_, _ = w.Write([]byte("<!doctype html><html><body style=\"margin:0;min-height:100vh;font-family:system-ui;background:#232323;color:#f4f7ff;display:grid;place-items:center;padding:24px;\"><main style=\"width:min(640px,calc(100vw - 48px));padding:32px;border-radius:22px;background:rgba(24,24,24,0.96);border:1px solid rgba(255,255,255,0.08);box-shadow:0 20px 55px rgba(0,0,0,0.28)\"><p style=\"margin:0 0 10px;color:#ff9aa2;font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase\">Discord OAuth error</p><h1 style=\"margin:0 0 12px;font-size:clamp(28px,5vw,40px);line-height:1.05\">Discord join failed</h1><p style=\"margin:0;color:#c8d0ea;line-height:1.6\">" + template.HTMLEscapeString(message) + "</p><div style=\"display:flex;gap:12px;flex-wrap:wrap;margin-top:24px\"><a href=\"/d/integrations\" style=\"display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:12px;text-decoration:none;font-weight:700;background:#4a89ff;color:#fff\">Back to integrations</a><a href=\"/d\" style=\"display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:12px;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.03);color:#e7ecfb\">Open dashboard</a></div></main></body></html>"))
+}
+
+func redirectJoinedResult(w http.ResponseWriter, r *http.Request, status, title, message string) {
+	params := url.Values{}
+	params.Set("oauth_status", strings.TrimSpace(status))
+	if trimmed := strings.TrimSpace(title); trimmed != "" {
+		params.Set("oauth_title", trimmed)
+	}
+	if trimmed := strings.TrimSpace(message); trimmed != "" {
+		params.Set("oauth_message", trimmed)
+	}
+
+	target := "/d/integrations"
+	if encoded := params.Encode(); encoded != "" {
+		target += "?" + encoded
+	}
+
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 func (h handler) requireIntegrationAccess(w http.ResponseWriter, r *http.Request) bool {

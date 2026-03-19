@@ -2,15 +2,12 @@ import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LocalActivityRoundedIcon from "@mui/icons-material/LocalActivityRounded";
-import PollRoundedIcon from "@mui/icons-material/PollRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import StarsRoundedIcon from "@mui/icons-material/StarsRounded";
 import {
   Box,
   Button,
   Card,
   CardContent,
-  Checkbox,
   Chip,
   InputAdornment,
   Paper,
@@ -62,23 +59,8 @@ export function ChannelPointsPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ChannelPointRewardDraft>(defaultDraft);
-  const [pendingDelete, setPendingDelete] = useState<ChannelPointRewardEntry | null>(null);
-  const [pollSettings, setPollSettings] = useState({
-    enabled: true,
-    showPointBreakdown: true,
-    mentionExtraVoting: true,
-    minimumCalloutPoints: 1000,
-    completionTemplate: "Channel points spent: {option_breakdown}",
-  });
-  const [predictionSettings, setPredictionSettings] = useState({
-    enabled: true,
-    showLockSummary: true,
-    showOutcomeSummary: true,
-    largeSpendThreshold: 50000,
-    mentionTopPredictors: true,
-    lockTemplate: "{option_most} has the most points ({points_most}).",
-    resultTemplate: "{total_points} go to {top_users}.",
-  });
+  const [pendingDelete, setPendingDelete] =
+    useState<ChannelPointRewardEntry | null>(null);
 
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -106,8 +88,12 @@ export function ChannelPointsPage() {
     });
   }, [channelPointRewards, normalizedSearch]);
 
-  const enabledCount = channelPointRewards.filter((entry) => entry.enabled).length;
-  const liveOnlyCount = channelPointRewards.filter((entry) => entry.requireLive).length;
+  const enabledCount = channelPointRewards.filter(
+    (entry) => entry.enabled,
+  ).length;
+  const liveOnlyCount = channelPointRewards.filter(
+    (entry) => entry.requireLive,
+  ).length;
   const averageCost =
     channelPointRewards.length === 0
       ? 0
@@ -183,9 +169,13 @@ export function ChannelPointsPage() {
         >
           <Box>
             <Typography variant="h5">Channel Points</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 760 }}>
-              Create new redemptions here, and let the broadcaster handle the existing streamer
-              reward management from a dedicated tab.
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.5, maxWidth: 760 }}
+            >
+              Create new redemptions here, and let the broadcaster handle the
+              existing streamer reward management from a dedicated tab.
             </Typography>
           </Box>
           <Stack direction="row" spacing={1.25}>
@@ -213,8 +203,14 @@ export function ChannelPointsPage() {
           }}
         >
           <StatCard label="Enabled rewards" value={enabledCount.toString()} />
-          <StatCard label="Live-only rewards" value={liveOnlyCount.toString()} />
-          <StatCard label="Average cost" value={`${averageCost.toLocaleString()} pts`} />
+          <StatCard
+            label="Live-only rewards"
+            value={liveOnlyCount.toString()}
+          />
+          <StatCard
+            label="Average cost"
+            value={`${averageCost.toLocaleString()} pts`}
+          />
         </Box>
 
         <Tabs
@@ -263,13 +259,21 @@ export function ChannelPointsPage() {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchRoundedIcon fontSize="small" sx={{ color: "text.secondary" }} />
+                    <SearchRoundedIcon
+                      fontSize="small"
+                      sx={{ color: "text.secondary" }}
+                    />
                   </InputAdornment>
                 ),
               }}
             />
-            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-              {visibleRewards.length} {visibleRewards.length === 1 ? "reward" : "rewards"}
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ whiteSpace: "nowrap" }}
+            >
+              {visibleRewards.length}{" "}
+              {visibleRewards.length === 1 ? "reward" : "rewards"}
             </Typography>
           </Stack>
         </Box>
@@ -279,7 +283,9 @@ export function ChannelPointsPage() {
             <Card>
               <CardContent sx={{ p: 2.5 }}>
                 <Typography sx={{ fontSize: "1rem", fontWeight: 700 }}>
-                  {tab === "streamer" ? "No streamer rewards yet" : "No stored rewards yet"}
+                  {tab === "streamer"
+                    ? "No streamer rewards yet"
+                    : "No stored rewards yet"}
                 </Typography>
                 <Typography color="text.secondary" sx={{ mt: 0.55 }}>
                   {tab === "streamer"
@@ -314,8 +320,16 @@ export function ChannelPointsPage() {
                         height: "100%",
                       }}
                     >
-                      <Stack direction="row" justifyContent="space-between" spacing={1.5}>
-                        <Stack direction="row" spacing={1.2} sx={{ minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        justifyContent="space-between"
+                        spacing={1.5}
+                      >
+                        <Stack
+                          direction="row"
+                          spacing={1.2}
+                          sx={{ minWidth: 0 }}
+                        >
                           <Box
                             sx={{
                               width: 42,
@@ -347,7 +361,9 @@ export function ChannelPointsPage() {
                           <Switch
                             checked={entry.enabled}
                             onChange={() => toggleChannelPointReward(entry.id)}
-                            inputProps={{ "aria-label": `${entry.name} enabled` }}
+                            inputProps={{
+                              "aria-label": `${entry.name} enabled`,
+                            }}
                           />
                         ) : (
                           <Chip
@@ -358,7 +374,12 @@ export function ChannelPointsPage() {
                         )}
                       </Stack>
 
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        flexWrap="wrap"
+                        useFlexGap
+                      >
                         <Chip
                           size="small"
                           variant="outlined"
@@ -367,13 +388,23 @@ export function ChannelPointsPage() {
                         <Chip
                           size="small"
                           variant="outlined"
-                          label={entry.requireLive ? "Live only" : "Offline allowed"}
+                          label={
+                            entry.requireLive ? "Live only" : "Offline allowed"
+                          }
                         />
                         {entry.protected ? (
-                          <Chip size="small" color="default" label="Core reward" />
+                          <Chip
+                            size="small"
+                            color="default"
+                            label="Core reward"
+                          />
                         ) : null}
                         {tab === "create" ? (
-                          <Chip size="small" variant="outlined" label="Owner edits saved rewards" />
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label="Owner edits saved rewards"
+                          />
                         ) : null}
                       </Stack>
 
@@ -397,7 +428,10 @@ export function ChannelPointsPage() {
                         >
                           Response template
                         </Typography>
-                        <Typography color="text.secondary" sx={{ mt: 0.8, lineHeight: 1.7 }}>
+                        <Typography
+                          color="text.secondary"
+                          sx={{ mt: 0.8, lineHeight: 1.7 }}
+                        >
                           {entry.responseTemplate}
                         </Typography>
                       </Box>
@@ -409,8 +443,14 @@ export function ChannelPointsPage() {
                         spacing={1.25}
                         sx={{ mt: "auto" }}
                       >
-                        <Typography color="text.secondary" sx={{ fontSize: "0.85rem" }}>
-                          Cooldown: {entry.cooldownSeconds === 0 ? "none" : `${entry.cooldownSeconds}s`}
+                        <Typography
+                          color="text.secondary"
+                          sx={{ fontSize: "0.85rem" }}
+                        >
+                          Cooldown:{" "}
+                          {entry.cooldownSeconds === 0
+                            ? "none"
+                            : `${entry.cooldownSeconds}s`}
                         </Typography>
                         {tab === "streamer" && canManageStreamerRewards ? (
                           <Stack direction="row" spacing={1}>
@@ -426,7 +466,9 @@ export function ChannelPointsPage() {
                               variant="outlined"
                               color="error"
                               size="small"
-                              startIcon={<DeleteOutlineRoundedIcon fontSize="small" />}
+                              startIcon={
+                                <DeleteOutlineRoundedIcon fontSize="small" />
+                              }
                               onClick={() => setPendingDelete(entry)}
                               disabled={entry.protected}
                             >
@@ -443,194 +485,6 @@ export function ChannelPointsPage() {
           )}
         </Box>
       </Paper>
-
-      {tab === "streamer" && canManageStreamerRewards ? (
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" },
-            gap: 2,
-          }}
-        >
-          <Card>
-            <CardContent sx={{ p: 2.5 }}>
-              <Stack direction="row" spacing={1.2} alignItems="center">
-                <PollRoundedIcon sx={{ color: "primary.main" }} />
-                <Box>
-                  <Typography variant="h6">Poll point behavior</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-                    Tune how extra-vote channel point totals get surfaced in poll alerts.
-                  </Typography>
-                </Box>
-              </Stack>
-
-              <Stack spacing={1.35} sx={{ mt: 2.25 }}>
-                <CheckboxRow
-                  label="Enable poll point add-ons"
-                  checked={pollSettings.enabled}
-                  onChange={(checked) =>
-                    setPollSettings((current) => ({ ...current, enabled: checked }))
-                  }
-                />
-                <CheckboxRow
-                  label="Show per-option point breakdown when a poll ends"
-                  checked={pollSettings.showPointBreakdown}
-                  onChange={(checked) =>
-                    setPollSettings((current) => ({ ...current, showPointBreakdown: checked }))
-                  }
-                />
-                <CheckboxRow
-                  label="Mention when extra voting with channel points was enabled"
-                  checked={pollSettings.mentionExtraVoting}
-                  onChange={(checked) =>
-                    setPollSettings((current) => ({ ...current, mentionExtraVoting: checked }))
-                  }
-                />
-              </Stack>
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "220px minmax(0, 1fr)" },
-                  gap: 2,
-                  mt: 2.25,
-                }}
-              >
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Minimum callout points"
-                  value={pollSettings.minimumCalloutPoints}
-                  onChange={(event) =>
-                    setPollSettings((current) => ({
-                      ...current,
-                      minimumCalloutPoints: Number(event.target.value) || 0,
-                    }))
-                  }
-                  inputProps={{ min: 0, step: 100 }}
-                />
-                <TextField
-                  fullWidth
-                  label="Completion template"
-                  value={pollSettings.completionTemplate}
-                  onChange={(event) =>
-                    setPollSettings((current) => ({
-                      ...current,
-                      completionTemplate: event.target.value,
-                    }))
-                  }
-                  multiline
-                  minRows={3}
-                />
-              </Box>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent sx={{ p: 2.5 }}>
-              <Stack direction="row" spacing={1.2} alignItems="center">
-                <StarsRoundedIcon sx={{ color: "primary.main" }} />
-                <Box>
-                  <Typography variant="h6">Prediction point behavior</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-                    Decide when big prediction spends get called out and how point winners are
-                    summarized back into chat.
-                  </Typography>
-                </Box>
-              </Stack>
-
-              <Stack spacing={1.35} sx={{ mt: 2.25 }}>
-                <CheckboxRow
-                  label="Enable prediction point add-ons"
-                  checked={predictionSettings.enabled}
-                  onChange={(checked) =>
-                    setPredictionSettings((current) => ({ ...current, enabled: checked }))
-                  }
-                />
-                <CheckboxRow
-                  label="Show locked-outcome summary"
-                  checked={predictionSettings.showLockSummary}
-                  onChange={(checked) =>
-                    setPredictionSettings((current) => ({ ...current, showLockSummary: checked }))
-                  }
-                />
-                <CheckboxRow
-                  label="Show outcome winner summary"
-                  checked={predictionSettings.showOutcomeSummary}
-                  onChange={(checked) =>
-                    setPredictionSettings((current) => ({
-                      ...current,
-                      showOutcomeSummary: checked,
-                    }))
-                  }
-                />
-                <CheckboxRow
-                  label="Mention top predictors on locks and results"
-                  checked={predictionSettings.mentionTopPredictors}
-                  onChange={(checked) =>
-                    setPredictionSettings((current) => ({
-                      ...current,
-                      mentionTopPredictors: checked,
-                    }))
-                  }
-                />
-              </Stack>
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "220px minmax(0, 1fr)" },
-                  gap: 2,
-                  mt: 2.25,
-                }}
-              >
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Large spend threshold"
-                  value={predictionSettings.largeSpendThreshold}
-                  onChange={(event) =>
-                    setPredictionSettings((current) => ({
-                      ...current,
-                      largeSpendThreshold: Number(event.target.value) || 0,
-                    }))
-                  }
-                  inputProps={{ min: 0, step: 1000 }}
-                  helperText="Only surface prediction progress callouts above this spend."
-                />
-                <Stack spacing={2}>
-                  <TextField
-                    fullWidth
-                    label="Lock template"
-                    value={predictionSettings.lockTemplate}
-                    onChange={(event) =>
-                      setPredictionSettings((current) => ({
-                        ...current,
-                        lockTemplate: event.target.value,
-                      }))
-                    }
-                    multiline
-                    minRows={2}
-                  />
-                  <TextField
-                    fullWidth
-                    label="Result template"
-                    value={predictionSettings.resultTemplate}
-                    onChange={(event) =>
-                      setPredictionSettings((current) => ({
-                        ...current,
-                        resultTemplate: event.target.value,
-                      }))
-                    }
-                    multiline
-                    minRows={2}
-                  />
-                </Stack>
-              </Box>
-            </CardContent>
-          </Card>
-        </Box>
-      ) : null}
 
       <ChannelPointRewardDialog
         open={editorOpen}
@@ -683,25 +537,10 @@ function StatCard({ label, value }: { label: string; value: string }) {
       >
         {label}
       </Typography>
-      <Typography sx={{ fontSize: "1.45rem", fontWeight: 800, mt: 0.65 }}>{value}</Typography>
+      <Typography sx={{ fontSize: "1.45rem", fontWeight: 800, mt: 0.65 }}>
+        {value}
+      </Typography>
     </Box>
-  );
-}
-
-function CheckboxRow({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <Stack direction="row" spacing={1.1} alignItems="center">
-      <Checkbox checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <Typography>{label}</Typography>
-    </Stack>
   );
 }
 

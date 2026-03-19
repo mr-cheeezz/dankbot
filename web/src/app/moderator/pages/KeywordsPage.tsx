@@ -114,7 +114,7 @@ export function KeywordsPage() {
 
   const openEditDialog = (entry: KeywordEntry) => {
     if (entry.managedBy === "modes" && entry.linkedModeKey !== "") {
-      navigate(`/dashboard/modes?mode=${encodeURIComponent(entry.linkedModeKey)}`);
+      navigate(`/d/modes?mode=${encodeURIComponent(entry.linkedModeKey)}`);
       return;
     }
 

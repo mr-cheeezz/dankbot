@@ -46,6 +46,10 @@ const defaultDraft: CommandEditorDraft = {
   configurable: true,
 };
 
+function normalizeCommandToken(value: string): string {
+  return value.trim().replace(/^[!./?]+/, "").trim();
+}
+
 export function CommandsPage() {
   const { commands, toggleCommand, updateCommand, createCommand, deleteCommand } = useModerator();
   const [tab, setTab] = useState<CommandTab>("default");
@@ -111,7 +115,7 @@ export function CommandsPage() {
   };
 
   const saveDraft = () => {
-    const nextName = draft.name.trim();
+    const nextName = normalizeCommandToken(draft.name);
     const nextResponse = draft.responsePreview.trim();
     if (nextName === "" || nextResponse === "") {
       return;
@@ -119,11 +123,17 @@ export function CommandsPage() {
 
     const payload = {
       ...draft,
-      name: nextName.startsWith("!") ? nextName : `!${nextName}`,
+      name: nextName,
       group: draft.group.trim() || "custom",
       state: draft.state.trim() || (draft.enabled ? "enabled" : "disabled"),
-      aliases: draft.aliases.map((alias) => alias.trim()).filter((alias) => alias !== ""),
-      description: draft.description.trim(),
+      aliases: Array.from(
+        new Set(
+          draft.aliases
+            .map((alias) => normalizeCommandToken(alias))
+            .filter((alias) => alias !== ""),
+        ),
+      ),
+      description: draft.kind === "custom" ? "" : draft.description.trim(),
       example: draft.example.trim(),
       responsePreview: nextResponse,
     };
@@ -329,7 +339,7 @@ export function CommandsPage() {
                       </Stack>
                     </Stack>
 
-                    {entry.description.trim() !== "" ? (
+                    {entry.kind !== "custom" && entry.description.trim() !== "" ? (
                       <Typography color="text.secondary" sx={{ mt: 1, fontSize: "0.92rem" }}>
                         {entry.description}
                       </Typography>

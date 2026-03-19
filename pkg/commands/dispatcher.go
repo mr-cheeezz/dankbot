@@ -9,9 +9,17 @@ type Dispatcher struct {
 
 func NewDispatcher(prefix string) *Dispatcher {
 	return &Dispatcher{
-		prefix:   prefix,
+		prefix:   normalizePrefix(prefix),
 		registry: NewRegistry(),
 	}
+}
+
+func (d *Dispatcher) SetPrefix(prefix string) {
+	d.prefix = normalizePrefix(prefix)
+}
+
+func (d *Dispatcher) Prefix() string {
+	return d.prefix
 }
 
 func (d *Dispatcher) Register(name string, handler Handler) {
@@ -61,6 +69,7 @@ func (d *Dispatcher) Dispatch(ctx Context) (Result, bool, error) {
 		return Result{}, false, nil
 	}
 
+	ctx.CommandPrefix = d.prefix
 	ctx.Command = commandName
 	if len(parts) > argsOffset {
 		ctx.Args = append([]string(nil), parts[argsOffset:]...)
@@ -68,4 +77,13 @@ func (d *Dispatcher) Dispatch(ctx Context) (Result, bool, error) {
 
 	result, err := handler(ctx)
 	return result, true, err
+}
+
+func normalizePrefix(prefix string) string {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return "!"
+	}
+
+	return prefix
 }

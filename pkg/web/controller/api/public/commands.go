@@ -15,6 +15,7 @@ import (
 	modesmodule "github.com/mr-cheeezz/dankbot/pkg/modules/modes"
 	spotifymodule "github.com/mr-cheeezz/dankbot/pkg/modules/now-playing"
 	quotesmodule "github.com/mr-cheeezz/dankbot/pkg/modules/quotes"
+	tabsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/tabs"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 )
 
@@ -65,6 +66,15 @@ func (h handler) buildCommandGroups(ctx context.Context, audience string) []comm
 		return nil
 	}
 
+	commandPrefix := "!"
+	if h.appState != nil && h.appState.PublicHomeSettings != nil {
+		if err := h.appState.PublicHomeSettings.EnsureDefault(ctx); err == nil {
+			if settings, err := h.appState.PublicHomeSettings.Get(ctx); err == nil && settings != nil {
+				commandPrefix = normalizePublicCommandPrefix(settings.CommandPrefix)
+			}
+		}
+	}
+
 	defaultSettings := map[string]postgres.DefaultCommandSetting{}
 	if h.appState != nil && h.appState.Postgres != nil {
 		store := postgres.NewDefaultCommandSettingStore(h.appState.Postgres)
@@ -79,7 +89,7 @@ func (h handler) buildCommandGroups(ctx context.Context, audience string) []comm
 	}
 
 	grouped := make(map[string][]publicCommandResponse)
-	for _, doc := range publicCommandDocs(definitions, defaultSettings) {
+	for _, doc := range publicCommandDocs(definitions, defaultSettings, commandPrefix) {
 		if doc.Audience != audience {
 			continue
 		}
@@ -114,7 +124,11 @@ func (h handler) buildCommandGroups(ctx context.Context, audience string) []comm
 	return items
 }
 
-func publicCommandDocs(definitions []commands.Definition, defaultSettings map[string]postgres.DefaultCommandSetting) []publicCommandDoc {
+func publicCommandDocs(
+	definitions []commands.Definition,
+	defaultSettings map[string]postgres.DefaultCommandSetting,
+	commandPrefix string,
+) []publicCommandDoc {
 	byName := make(map[string]commands.Definition, len(definitions))
 	for _, definition := range definitions {
 		name := strings.TrimSpace(strings.ToLower(definition.Name))
@@ -135,10 +149,10 @@ func publicCommandDocs(definitions []commands.Definition, defaultSettings map[st
 		items = append(items, publicCommandDoc{
 			Audience:    audience,
 			Module:      strings.TrimSpace(definition.Module),
-			Name:        "!" + strings.TrimSpace(definition.Name),
+			Name:        applyPublicCommandPrefix(strings.TrimSpace(definition.Name), commandPrefix),
 			Description: strings.TrimSpace(definition.Description),
-			Usage:       strings.TrimSpace(definition.Usage),
-			Example:     strings.TrimSpace(definition.Example),
+			Usage:       applyPublicCommandPrefix(strings.TrimSpace(definition.Usage), commandPrefix),
+			Example:     applyPublicCommandPrefix(strings.TrimSpace(definition.Example), commandPrefix),
 		})
 	}
 
@@ -151,10 +165,10 @@ func publicCommandDocs(definitions []commands.Definition, defaultSettings map[st
 		items = append(items, publicCommandDoc{
 			Audience:    audience,
 			Module:      strings.TrimSpace(definition.Module),
-			Name:        strings.TrimSpace(name),
+			Name:        applyPublicCommandPrefix(strings.TrimSpace(name), commandPrefix),
 			Description: strings.TrimSpace(description),
-			Usage:       strings.TrimSpace(usage),
-			Example:     strings.TrimSpace(example),
+			Usage:       applyPublicCommandPrefix(strings.TrimSpace(usage), commandPrefix),
+			Example:     applyPublicCommandPrefix(strings.TrimSpace(example), commandPrefix),
 		})
 	}
 
@@ -187,9 +201,11 @@ func publicCommandDocs(definitions []commands.Definition, defaultSettings map[st
 		"!song last",
 	)
 
-	for _, name := range []string{"mode", "modes", "killswitch", "ks", "add quote", "create quote", "del quote", "rm quote", "edit quote"} {
+	for _, name := range []string{"mode", "modes", "killswitch", "ks", "add quote", "create quote", "del quote", "rm quote", "edit quote", "tab add", "tab set", "tab paid", "tab give"} {
 		appendDefinition(name, "moderator")
 	}
+
+	appendDefinition("tab", "regular")
 
 	appendCustom(
 		"song",
@@ -238,9 +254,10 @@ func publicCommandDefinitions() []commands.Definition {
 
 	runner.Register(defaultcommandsmodule.New(time.Now().UTC(), "dev", nil))
 	runner.Register(spotifymodule.New(nil, nil, nil, nil))
-	runner.Register(gamemodule.New("", "", "", nil, nil, nil))
+	runner.Register(gamemodule.New("", "", "", nil, nil, nil, nil))
 	runner.Register(quotesmodule.New(nil, nil))
 	runner.Register(modesmodule.New(nil, nil, nil, nil))
+	runner.Register(tabsmodule.New(nil, nil))
 
 	definitions := dispatcher.Definitions()
 	sort.SliceStable(definitions, func(i, j int) bool {
@@ -279,4 +296,27 @@ func publicCommandGroupLabel(moduleName string) string {
 		}
 		return strings.Join(parts, " ")
 	}
+}
+
+func applyPublicCommandPrefix(value, prefix string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	prefix = normalizePublicCommandPrefix(prefix)
+	if strings.HasPrefix(value, "!") {
+		return prefix + strings.TrimPrefix(value, "!")
+	}
+
+	return prefix + value
+}
+
+func normalizePublicCommandPrefix(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "!"
+	}
+
+	return raw
 }

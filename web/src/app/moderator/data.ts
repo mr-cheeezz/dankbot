@@ -92,7 +92,7 @@ export const initialAuditEntries: AuditEntry[] = [
 export const initialCommandEntries: CommandEntry[] = [
   {
     id: "ping",
-    name: "!ping",
+    name: "ping",
     kind: "default",
     defaultEnabled: true,
     platform: "twitch",
@@ -111,50 +111,12 @@ export const initialCommandEntries: CommandEntry[] = [
     configurable: false,
   },
   {
-    id: "game",
-    name: "!game",
-    kind: "default",
-    defaultEnabled: true,
-    platform: "twitch",
-    aliases: [],
-    group: "game",
-    state: "enabled",
-    description: "Twitch game lookup with Roblox experience name cleanup.",
-    example: "!gamesplayed month",
-    responsePreview: "{streamer} is currently playing {game}.",
-    responseType: "reply",
-    enabled: true,
-    enabledWhenOffline: true,
-    enabledWhenOnline: true,
-    protected: false,
-    configurable: true,
-  },
-  {
-    id: "quote",
-    name: "!quote",
-    kind: "default",
-    defaultEnabled: true,
-    platform: "twitch",
-    aliases: [],
-    group: "quotes",
-    state: "editable",
-    description: "Random or indexed quote lookup with website-managed storage.",
-    example: "!quote 12",
-    responsePreview: "quote #{num}: {message}",
-    responseType: "reply",
-    enabled: true,
-    enabledWhenOffline: true,
-    enabledWhenOnline: true,
-    protected: false,
-    configurable: true,
-  },
-  {
     id: "mode",
-    name: "!mode",
+    name: "mode",
     kind: "default",
     defaultEnabled: true,
     platform: "twitch",
-    aliases: ["!modes", "!currentmode"],
+    aliases: ["modes", "currentmode"],
     group: "modes",
     state: "mod only",
     description:
@@ -240,41 +202,6 @@ export const initialKeywordEntries: KeywordEntry[] = [
     managedBy: "modes",
     linkedModeKey: "join",
   },
-  {
-    id: "kw-song-help",
-    trigger: "what song is this",
-    kind: "default",
-    aiDetectionEnabled: true,
-    behaviorType: "smart-response",
-    matchMode: "intent",
-    description:
-      "Guides viewers toward song commands without needing several duplicate keyword triggers.",
-    example: "what song is this",
-    responsePreview: "points viewers at !song, !song next, and !song last",
-    enabled: true,
-    protected: false,
-    configurable: true,
-    cooldownsDisabled: false,
-    globalCooldownSeconds: 8,
-    userCooldownSeconds: 25,
-    responseType: "reply",
-    target: "message",
-    phraseGroups: [
-      ["what", "song"],
-      ["song", "name"],
-    ],
-    enabledWhenOffline: true,
-    enabledWhenOnline: true,
-    enabledForResubMessages: false,
-    excludeVips: false,
-    excludeModsBroadcaster: false,
-    minimumBits: 0,
-    gameFilters: [],
-    streamTitleFilters: [],
-    expiresAfterDays: 0,
-    managedBy: "keywords",
-    linkedModeKey: "",
-  },
 ];
 
 export const initialModeEntries: ModeEntry[] = [
@@ -290,6 +217,8 @@ export const initialModeEntries: ModeEntry[] = [
     keywordResponse:
       "@{target}, {streamer} is currently taking join requests. Use the active join keyword shown in chat once to get in.",
     coordinatedTwitchTitle: "",
+    coordinatedTwitchCategoryID: "",
+    coordinatedTwitchCategoryName: "",
     timerEnabled: true,
     timerMessage: "Type !join to play!",
     timerIntervalSeconds: 240,
@@ -307,6 +236,8 @@ export const initialModeEntries: ModeEntry[] = [
     keywordResponse:
       "@{target}, {streamer} is currently using link mode. Use the posted link or the website join panel to get in.",
     coordinatedTwitchTitle: "",
+    coordinatedTwitchCategoryID: "",
+    coordinatedTwitchCategoryName: "",
     timerEnabled: true,
     timerMessage: "Type !link to join!",
     timerIntervalSeconds: 240,
@@ -324,6 +255,8 @@ export const initialModeEntries: ModeEntry[] = [
     keywordResponse:
       "@{target}, type 1v1 in the chat ONCE to have a chance to 1v1 {streamer}.",
     coordinatedTwitchTitle: "",
+    coordinatedTwitchCategoryID: "",
+    coordinatedTwitchCategoryName: "",
     timerEnabled: true,
     timerMessage: "Type 1v1 for a chance to 1v1 {streamer}!",
     timerIntervalSeconds: 180,
@@ -341,6 +274,8 @@ export const initialModeEntries: ModeEntry[] = [
     keywordResponse:
       "@{target}, {streamer} is currently using reddit mode. Use the active reddit command or website prompt for the link.",
     coordinatedTwitchTitle: "",
+    coordinatedTwitchCategoryID: "",
+    coordinatedTwitchCategoryName: "",
     timerEnabled: true,
     timerMessage: "Type !reddit for a link to the subreddit!",
     timerIntervalSeconds: 180,
@@ -348,248 +283,30 @@ export const initialModeEntries: ModeEntry[] = [
   },
 ];
 
-export const initialTimerEntries: TimerEntry[] = [
-  {
-    id: "timer-social",
-    name: "Social Timer",
-    source: "default",
-    description:
-      "Default social rotation timer for promo messages, website reminders, and existing social commands.",
-    enabled: true,
-    enabledWhenOffline: false,
-    enabledWhenOnline: true,
-    intervalOfflineMinutes: 90,
-    intervalOnlineMinutes: 20,
-    minimumLines: 12,
-    commandNames: ["!discord", "!commands"],
-    messages: [
-      "Commands, socials, and stream links all live on the website.",
-      "Join the Discord if you want updates, extras, and stream notifications.",
-      "Follow the socials and keep up with whatever {streamer} is doing next.",
-    ],
-    gameFilters: [],
-    titleKeywords: [],
-    protected: true,
-  },
-];
+export const initialTimerEntries: TimerEntry[] = [];
 
 export const initialGiveawayEntries: GiveawayEntry[] = [
   {
     id: "giveaway-1v1-picker",
     name: "1v1 Picker",
     type: "1v1",
-    status: "ready",
     entryMethod: "keyword",
     description:
-      "Picks one viewer from the people who typed 1v1 recently, so the streamer can run quick challenge rounds without manual scrolling.",
+      "Built-in 1v1 picker for viewers typing 1v1 in chat. Entrants should come from the bot runtime instead of being hand-managed here.",
     enabled: true,
     chatAnnouncementsEnabled: true,
     entryTrigger: "1v1",
     entryWindowSeconds: 60,
-    inactivityTimeoutSeconds: 0,
-    subscriberLuckMultiplier: 1,
     winnerCount: 1,
-    allowVips: true,
-    allowSubscribers: true,
-    allowModsBroadcaster: false,
-    requiredModeKey: "1v1",
     chatPrompt: "Type 1v1 once in chat for a chance to get picked.",
     winnerMessage: "{winner} got picked for the next 1v1.",
-    entrantCount: 14,
     protected: true,
-  },
-  {
-    id: "giveaway-chat-raffle",
-    name: "Chat Raffle",
-    type: "raffle",
-    status: "live",
-    entryMethod: "keyword",
-    description:
-      "General-purpose raffle for viewer picks, code drops, or quick mod-run giveaways during the stream.",
-    enabled: true,
-    chatAnnouncementsEnabled: true,
-    entryTrigger: "!joinraffle",
-    entryWindowSeconds: 180,
-    inactivityTimeoutSeconds: 90,
-    subscriberLuckMultiplier: 1,
-    winnerCount: 1,
-    allowVips: true,
-    allowSubscribers: true,
-    allowModsBroadcaster: false,
-    requiredModeKey: "",
-    chatPrompt: "Type !joinraffle once to enter the current giveaway.",
-    winnerMessage: "{winner} won the raffle.",
-    entrantCount: 37,
-    protected: false,
-  },
-  {
-    id: "giveaway-vip-draw",
-    name: "VIP Viewer Draw",
-    type: "vip-pick",
-    status: "draft",
-    entryMethod: "active-users",
-    description:
-      "Keeps a separate draft flow for VIP-only or trusted-viewer picks without touching the main raffle setup.",
-    enabled: false,
-    chatAnnouncementsEnabled: false,
-    entryTrigger: "!vipdraw",
-    entryWindowSeconds: 120,
-    inactivityTimeoutSeconds: 120,
-    subscriberLuckMultiplier: 2,
-    winnerCount: 2,
-    allowVips: true,
-    allowSubscribers: false,
-    allowModsBroadcaster: false,
-    requiredModeKey: "",
-    chatPrompt: "VIPs can type !vipdraw to enter this round.",
-    winnerMessage: "{winner} got picked from the VIP draw.",
-    entrantCount: 0,
-    protected: false,
   },
 ];
 
 export const initialChannelPointRewardEntries: ChannelPointRewardEntry[] = [];
 
-export const initialModuleEntries: ModuleEntry[] = [
-  {
-    id: "auto-followers-only",
-    name: "auto followers-only",
-    state: "automation",
-    detail:
-      "Watches Twitch followers-only mode and turns it back off after a set amount of time.",
-    enabled: false,
-    commands: [],
-    settings: [
-      {
-        id: "auto-disable-minutes",
-        label: "Auto-disable after",
-        value: "30",
-        type: "number",
-        helperText:
-          "How many minutes followers-only can stay enabled before DankBot turns it back off.",
-      },
-    ],
-  },
-  {
-    id: "default-commands",
-    name: "default commands",
-    state: "core",
-    detail: "Ping, uptime, and the website-managed defaults layer.",
-    enabled: true,
-    commands: ["!ping", "!uptime"],
-    settings: [
-      {
-        id: "uptime-template",
-        label: "Uptime response",
-        value: "{streamer} has been live for {uptime}.",
-        type: "textarea",
-        helperText: "Viewer-facing uptime copy.",
-      },
-      {
-        id: "docs-visibility",
-        label: "Docs visibility",
-        value: "public",
-        type: "select",
-        options: ["public", "mods only"],
-        helperText: "Controls whether docs stay visible on the website.",
-      },
-    ],
-  },
-  {
-    id: "now-playing",
-    name: "now-playing",
-    state: "live",
-    detail:
-      "Spotify queue control, playback display, and auto song announcements.",
-    enabled: true,
-    commands: ["!song", "!song next", "!song last", "!song add", "!song skip"],
-    settings: [
-      {
-        id: "announce-template",
-        label: "Announcement template",
-        value: "{streamer} is now listening to {title} by {artist} PogU",
-        type: "textarea",
-        helperText: "Message used when a new track starts.",
-      },
-      {
-        id: "announcement-mode",
-        label: "Announce when",
-        value: "live only",
-        type: "select",
-        options: ["live only", "always"],
-        helperText: "Matches the stream-live safety rules.",
-      },
-      {
-        id: "title-cleanup",
-        label: "Track title cleanup",
-        value: "enabled",
-        type: "select",
-        options: ["enabled", "disabled"],
-        helperText: "Removes feat/remastered/video clutter from titles.",
-      },
-    ],
-  },
-  {
-    id: "game",
-    name: "game",
-    state: "live",
-    detail:
-      "Twitch game tracking plus Roblox experience resolution and playtime.",
-    enabled: true,
-    commands: ["!game", "!setgame", "!gamesplayed", "!playtime"],
-    settings: [
-      {
-        id: "roblox-title-cleanup",
-        label: "Roblox title cleanup",
-        value: "enabled",
-        type: "select",
-        options: ["enabled", "disabled"],
-        helperText: "Strips UPDATE/NEW promo text from experience names.",
-      },
-      {
-        id: "offline-game-copy",
-        label: "Offline response",
-        value: "{streamer} is currently offline.",
-        type: "textarea",
-        helperText: "Returned when !game is used while the stream is offline.",
-      },
-      {
-        id: "viewer-question-enabled",
-        label: "Viewer question keyword enabled",
-        value: "true",
-        type: "boolean",
-        helperText:
-          "Hardcoded trigger examples: what game is this, what game are you playing, what are you playing.",
-      },
-      {
-        id: "viewer-question-ai-detection",
-        label: "Use AI intent detection",
-        value: "true",
-        type: "boolean",
-        helperText:
-          "Helps avoid false positives when people mention a game without actually asking what the streamer is playing.",
-      },
-      {
-        id: "viewer-question-response",
-        label: "Viewer question response",
-        value:
-          "@{target}, use !game to see what {streamer} is currently playing.",
-        type: "textarea",
-        helperText:
-          "This response is used for hardcoded ask patterns. Supports @{target}, {target}, and {streamer}.",
-      },
-      {
-        id: "tracking-source",
-        label: "Tracking source",
-        value: "twitch + roblox",
-        type: "select",
-        options: ["twitch only", "twitch + roblox"],
-        helperText:
-          "Whether Roblox presence should override the Twitch category name.",
-      },
-    ],
-  },
-];
+export const initialModuleEntries: ModuleEntry[] = [];
 
 export const initialSpamFilterEntries: SpamFilterEntry[] = [
   {
@@ -597,10 +314,31 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
     name: "message flood",
     description:
       "Stops viewers from sending too many messages inside a short window.",
-    action: "timeout 30s",
+    action: "timeout",
     thresholdLabel: "messages / 10s",
     thresholdValue: 6,
     enabled: true,
+    messageFloodSettings: {
+      matchAnyMessageTooSimilar: false,
+      minimumCharacters: 0,
+      minimumMessagesCount: 5,
+      messageMemorySeconds: 4,
+      maximumSimilarityPercent: 80,
+      enabledWhenOffline: true,
+      enabledWhenOnline: true,
+      enabledForResubMessages: true,
+      warningEnabled: false,
+      warningDurationSeconds: 15,
+      announcementEnabled: false,
+      announcementCooldownSeconds: 5,
+      baseTimeoutSeconds: 15,
+      maxTimeoutSeconds: 300,
+      impactedRoles: [],
+      excludedRoles: [],
+      repeatOffendersEnabled: true,
+      repeatMultiplier: 2,
+      repeatCooldownSeconds: 600,
+    },
   },
   {
     id: "duplicate-messages",
@@ -661,6 +399,11 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
       exemptModsBroadcaster: true,
       exemptUsernames: ["mr_cheeezz", "basementhelper"],
       allowDiscordInvites: false,
+      clipsFilteringEnabled: false,
+      blockClipsFromOtherChannels: false,
+      blockUsersLinkingOwnClips: false,
+      allowedClipChannels: [],
+      blockedClipChannels: [],
       enabledWhenOffline: true,
       enabledWhenOnline: true,
       warningEnabled: true,
@@ -677,10 +420,38 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
     name: "caps",
     description:
       "Catches messages that are mostly uppercase and look like shouting spam.",
-    action: "warn",
+    action: "timeout",
     thresholdLabel: "caps percentage",
-    thresholdValue: 75,
+    thresholdValue: 90,
     enabled: false,
+    capsSettings: {
+      minimumCharacters: 75,
+      maxCapsPercent: 90,
+      enabledWhenOffline: true,
+      enabledWhenOnline: true,
+      enabledForResubMessages: true,
+      warningEnabled: true,
+      warningDurationSeconds: 30,
+      announcementEnabled: true,
+      announcementCooldownSeconds: 30,
+      ignoredEmoteSources: {
+        platform: false,
+        betterTTV: false,
+        frankerFaceZ: false,
+        sevenTV: false,
+      },
+      baseTimeoutSeconds: 600,
+      maxTimeoutSeconds: 3600,
+      impactedRoles: [],
+      excludedRoles: [],
+      exemptVips: false,
+      exemptSubscribers: false,
+      exemptModsBroadcaster: false,
+      exemptUsernames: [],
+      repeatOffendersEnabled: false,
+      repeatMultiplier: 1.5,
+      repeatCooldownSeconds: 600,
+    },
   },
   {
     id: "emote-spam",
@@ -1061,30 +832,6 @@ export const initialAlertEntries: AlertEntry[] = [
     minimumPrefix: "$",
   },
   {
-    id: "streamlabs-merch",
-    provider: "streamlabs",
-    section: "Merch Alerts",
-    label: "Enabled",
-    source: "streamlabs merch alerts",
-    behavior: "announces Streamlabs merch purchases in chat",
-    status: "prepared",
-    enabled: false,
-    template: "{user} just grabbed merch from the shop!",
-    scope: "streamlabs merch",
-  },
-  {
-    id: "streamlabs-membership",
-    provider: "streamlabs",
-    section: "Membership Alerts",
-    label: "Enabled",
-    source: "streamlabs membership alerts",
-    behavior: "surfaces Streamlabs supporter and loyalty events",
-    status: "prepared",
-    enabled: false,
-    template: "{user} just joined the supporter squad!",
-    scope: "streamlabs membership",
-  },
-  {
     id: "streamelements-tips",
     provider: "streamelements",
     section: "Tip Alerts",
@@ -1098,30 +845,6 @@ export const initialAlertEntries: AlertEntry[] = [
     minimumLabel: "Minimum tip",
     minimumValue: 1,
     minimumPrefix: "$",
-  },
-  {
-    id: "streamelements-merch",
-    provider: "streamelements",
-    section: "Merch Alerts",
-    label: "Enabled",
-    source: "streamelements merch alerts",
-    behavior: "announces merch events from StreamElements activities",
-    status: "prepared",
-    enabled: false,
-    template: "{user} just picked up merch from the store!",
-    scope: "streamelements merch",
-  },
-  {
-    id: "streamelements-loyalty",
-    provider: "streamelements",
-    section: "Loyalty Alerts",
-    label: "Enabled",
-    source: "streamelements loyalty alerts",
-    behavior: "supports channel loyalty or custom event alerts",
-    status: "prepared",
-    enabled: false,
-    template: "{user} just triggered a loyalty event!",
-    scope: "streamelements loyalty",
   },
 ];
 
@@ -1225,21 +948,21 @@ export const settingsItems: PlaceholderItem[] = [
 ];
 
 const dashboardPaths: Record<ViewKey, string> = {
-  dashboard: "/dashboard",
-  commands: "/dashboard/commands",
-  keywords: "/dashboard/keywords",
-  modes: "/dashboard/modes",
-  timers: "/dashboard/timers",
-  modules: "/dashboard/modules",
-  discord: "/dashboard/discord",
-  alerts: "/dashboard/alerts",
-  spamFilters: "/dashboard/spam-filters",
-  blockedTerms: "/dashboard/blocked-terms",
-  massModeration: "/dashboard/mass-moderation",
-  channelPoints: "/dashboard/channel-points",
-  giveaways: "/dashboard/giveaways",
-  integrations: "/dashboard/integrations",
-  settings: "/dashboard/settings",
+  dashboard: "/d",
+  commands: "/d/commands",
+  keywords: "/d/keywords",
+  modes: "/d/modes",
+  timers: "/d/timers",
+  modules: "/d/modules",
+  discord: "/d/discord",
+  alerts: "/d/alerts",
+  spamFilters: "/d/spam-filters",
+  blockedTerms: "/d/blocked-terms",
+  massModeration: "/d/mass-moderation",
+  channelPoints: "/d/channel-points",
+  giveaways: "/d/giveaways",
+  integrations: "/d/integrations",
+  settings: "/d/settings",
 };
 
 export function pathForView(view: ViewKey): string {
@@ -1247,7 +970,10 @@ export function pathForView(view: ViewKey): string {
 }
 
 export function viewFromPathname(pathname: string): ViewKey {
-  const normalizedPath = pathname.replace(/\/+$/, "") || "/dashboard";
+  const rawPath = pathname.replace(/\/+$/, "") || "/d";
+  const normalizedPath = rawPath.startsWith("/dashboard")
+    ? rawPath.replace(/^\/dashboard(?=\/|$)/, "/d") || "/d"
+    : rawPath;
 
   if (normalizedPath === dashboardPaths.dashboard) {
     return "dashboard";

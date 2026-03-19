@@ -13,9 +13,13 @@ import (
 const builtInGameKeywordName = "what game is this"
 
 type gameModuleResponse struct {
-	Enabled            bool   `json:"enabled"`
-	AIDetectionEnabled bool   `json:"ai_detection_enabled"`
-	KeywordResponse    string `json:"keyword_response"`
+	Enabled                 bool   `json:"enabled"`
+	AIDetectionEnabled      bool   `json:"ai_detection_enabled"`
+	KeywordResponse         string `json:"keyword_response"`
+	PlaytimeTemplate        string `json:"playtime_template"`
+	GamesPlayedTemplate     string `json:"gamesplayed_template"`
+	GamesPlayedItemTemplate string `json:"gamesplayed_item_template"`
+	GamesPlayedLimit        int    `json:"gamesplayed_limit"`
 }
 
 func (h handler) gameModule(w http.ResponseWriter, r *http.Request) {
@@ -125,8 +129,12 @@ func (h handler) updateGameModule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updatedSettings, err := h.appState.GameModule.Update(r.Context(), postgres.GameModuleSettings{
-		KeywordResponse: strings.TrimSpace(request.KeywordResponse),
-		UpdatedBy:       strings.TrimSpace(userSession.Login),
+		KeywordResponse:         strings.TrimSpace(request.KeywordResponse),
+		PlaytimeTemplate:        strings.TrimSpace(request.PlaytimeTemplate),
+		GamesPlayedTemplate:     strings.TrimSpace(request.GamesPlayedTemplate),
+		GamesPlayedItemTemplate: strings.TrimSpace(request.GamesPlayedItemTemplate),
+		GamesPlayedLimit:        request.GamesPlayedLimit,
+		UpdatedBy:               strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -157,8 +165,12 @@ func gameModuleToResponse(
 	keywordSetting postgres.DefaultKeywordSetting,
 ) gameModuleResponse {
 	return gameModuleResponse{
-		Enabled:            keywordSetting.Enabled,
-		AIDetectionEnabled: keywordSetting.AIDetectionEnabled,
-		KeywordResponse:    settings.KeywordResponse,
+		Enabled:                 keywordSetting.Enabled,
+		AIDetectionEnabled:      keywordSetting.AIDetectionEnabled,
+		KeywordResponse:         settings.KeywordResponse,
+		PlaytimeTemplate:        settings.PlaytimeTemplate,
+		GamesPlayedTemplate:     settings.GamesPlayedTemplate,
+		GamesPlayedItemTemplate: settings.GamesPlayedItemTemplate,
+		GamesPlayedLimit:        settings.GamesPlayedLimit,
 	}
 }

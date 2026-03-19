@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthProvider } from "./auth/AuthContext";
 import { RequireModerator } from "./auth/RequireModerator";
@@ -13,7 +13,13 @@ import { ChannelPointsPage } from "./moderator/pages/ChannelPointsPage";
 import { CommandsPage } from "./moderator/pages/CommandsPage";
 import { DashboardOverviewPage } from "./moderator/pages/DashboardOverviewPage";
 import { DashboardNotFoundPage } from "./moderator/pages/DashboardNotFoundPage";
-import { DiscordPage } from "./moderator/pages/DiscordPage";
+import {
+  DiscordCommandsPage,
+  DiscordGamePingsPage,
+  DiscordModerationPage,
+  DiscordPage,
+  DiscordRolePingsPage,
+} from "./moderator/pages/DiscordPage";
 import { GiveawayDashboardPage } from "./moderator/pages/GiveawayDashboardPage";
 import { GiveawaysPage } from "./moderator/pages/GiveawaysPage";
 import { IntegrationsPage } from "./moderator/pages/IntegrationsPage";
@@ -39,11 +45,19 @@ function ModeratorApp() {
   );
 }
 
+function LegacyDashboardRedirect() {
+  const location = useLocation();
+  const targetPath = location.pathname.replace(/^\/dashboard(?=\/|$)/, "/d") || "/d";
+  const next = `${targetPath}${location.search}${location.hash}`;
+  return <Navigate to={next} replace />;
+}
+
 export function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/dashboard/*" element={<LegacyDashboardRedirect />} />
           <Route element={<PublicLayout />}>
             <Route path="/" element={<PublicHomePage />} />
             <Route path="/commands" element={<PublicCommandsPage />} />
@@ -59,7 +73,7 @@ export function App() {
           </Route>
 
           <Route
-            path="/dashboard"
+            path="/d"
             element={
               <RequireModerator>
                 <ModeratorApp />
@@ -85,6 +99,38 @@ export function App() {
               element={
                 <RequireDashboardView view="discord">
                   <DiscordPage />
+                </RequireDashboardView>
+              }
+            />
+            <Route
+              path="discord/commands"
+              element={
+                <RequireDashboardView view="discord">
+                  <DiscordCommandsPage />
+                </RequireDashboardView>
+              }
+            />
+            <Route
+              path="discord/moderation"
+              element={
+                <RequireDashboardView view="discord">
+                  <DiscordModerationPage />
+                </RequireDashboardView>
+              }
+            />
+            <Route
+              path="discord/role-pings"
+              element={
+                <RequireDashboardView view="discord">
+                  <DiscordRolePingsPage />
+                </RequireDashboardView>
+              }
+            />
+            <Route
+              path="discord/game-pings"
+              element={
+                <RequireDashboardView view="discord">
+                  <DiscordGamePingsPage />
                 </RequireDashboardView>
               }
             />

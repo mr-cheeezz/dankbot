@@ -13,6 +13,7 @@ import (
 type Module struct {
 	store      *postgres.QuoteStore
 	auditStore *postgres.AuditLogStore
+	settings   *postgres.QuoteModuleSettingsStore
 	allowedIDs map[string]struct{}
 }
 
@@ -34,6 +35,10 @@ func New(store *postgres.QuoteStore, auditStore *postgres.AuditLogStore, allowed
 
 func (m *Module) Name() string {
 	return "quotes"
+}
+
+func (m *Module) SetSettingsStore(store *postgres.QuoteModuleSettingsStore) {
+	m.settings = store
 }
 
 func (m *Module) RegisterCommands() map[string]modules.CommandDefinition {
@@ -78,11 +83,19 @@ func (m *Module) RegisterCommands() map[string]modules.CommandDefinition {
 }
 
 func (m *Module) Start(ctx context.Context) error {
-	_ = ctx
+	if m.settings != nil {
+		if err := m.settings.EnsureDefault(ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (m *Module) quote(ctx modules.CommandContext) (string, error) {
+	enabled, err := m.moduleEnabled(context.Background())
+	if err != nil || !enabled {
+		return "", err
+	}
 	if m.store == nil {
 		return "", fmt.Errorf("quote store is not configured")
 	}
@@ -101,7 +114,7 @@ func (m *Module) quote(ctx modules.CommandContext) (string, error) {
 
 	id, err := parseQuoteID(ctx.Args[0])
 	if err != nil {
-		return "usage: !quote [num]", nil
+		return "usage: " + commandPrefix(ctx) + "quote [num]", nil
 	}
 
 	quote, err := m.store.Get(context.Background(), id)
@@ -116,6 +129,10 @@ func (m *Module) quote(ctx modules.CommandContext) (string, error) {
 }
 
 func (m *Module) addQuote(ctx modules.CommandContext) (string, error) {
+	enabled, err := m.moduleEnabled(context.Background())
+	if err != nil || !enabled {
+		return "", err
+	}
 	if !m.canManageQuotes(ctx) {
 		return "", nil
 	}
@@ -123,19 +140,23 @@ func (m *Module) addQuote(ctx modules.CommandContext) (string, error) {
 		return "", fmt.Errorf("quote store is not configured")
 	}
 	if len(ctx.Args) == 0 {
-		return "usage: !" + ctx.Command + " <message>", nil
+		return "usage: " + commandPrefix(ctx) + ctx.Command + " <message>", nil
 	}
 
 	quote, err := m.store.Create(context.Background(), strings.Join(ctx.Args, " "), quoteActor(ctx))
 	if err != nil {
 		return "", err
 	}
-	m.logAction(ctx, "!"+ctx.Command, fmt.Sprintf("added quote #%d", quote.ID))
+	m.logAction(ctx, commandPrefix(ctx)+ctx.Command, fmt.Sprintf("added quote #%d", quote.ID))
 
 	return fmt.Sprintf("added quote #%d.", quote.ID), nil
 }
 
 func (m *Module) deleteQuote(ctx modules.CommandContext) (string, error) {
+	enabled, err := m.moduleEnabled(context.Background())
+	if err != nil || !enabled {
+		return "", err
+	}
 	if !m.canManageQuotes(ctx) {
 		return "", nil
 	}
@@ -143,12 +164,12 @@ func (m *Module) deleteQuote(ctx modules.CommandContext) (string, error) {
 		return "", fmt.Errorf("quote store is not configured")
 	}
 	if len(ctx.Args) == 0 {
-		return "usage: !" + ctx.Command + " <num>", nil
+		return "usage: " + commandPrefix(ctx) + ctx.Command + " <num>", nil
 	}
 
 	id, err := parseQuoteID(ctx.Args[0])
 	if err != nil {
-		return "usage: !" + ctx.Command + " <num>", nil
+		return "usage: " + commandPrefix(ctx) + ctx.Command + " <num>", nil
 	}
 
 	deleted, err := m.store.Delete(context.Background(), id)
@@ -158,12 +179,16 @@ func (m *Module) deleteQuote(ctx modules.CommandContext) (string, error) {
 	if !deleted {
 		return fmt.Sprintf("quote #%d does not exist.", id), nil
 	}
-	m.logAction(ctx, "!"+ctx.Command, fmt.Sprintf("deleted quote #%d", id))
+	m.logAction(ctx, commandPrefix(ctx)+ctx.Command, fmt.Sprintf("deleted quote #%d", id))
 
 	return fmt.Sprintf("deleted quote #%d.", id), nil
 }
 
 func (m *Module) editQuote(ctx modules.CommandContext) (string, error) {
+	enabled, err := m.moduleEnabled(context.Background())
+	if err != nil || !enabled {
+		return "", err
+	}
 	if !m.canManageQuotes(ctx) {
 		return "", nil
 	}
@@ -171,12 +196,12 @@ func (m *Module) editQuote(ctx modules.CommandContext) (string, error) {
 		return "", fmt.Errorf("quote store is not configured")
 	}
 	if len(ctx.Args) < 2 {
-		return "usage: !edit quote <num> <new message>", nil
+		return "usage: " + commandPrefix(ctx) + "edit quote <num> <new message>", nil
 	}
 
 	id, err := parseQuoteID(ctx.Args[0])
 	if err != nil {
-		return "usage: !edit quote <num> <new message>", nil
+		return "usage: " + commandPrefix(ctx) + "edit quote <num> <new message>", nil
 	}
 
 	quote, err := m.store.Update(context.Background(), id, strings.Join(ctx.Args[1:], " "), quoteActor(ctx))
@@ -186,7 +211,7 @@ func (m *Module) editQuote(ctx modules.CommandContext) (string, error) {
 	if quote == nil {
 		return fmt.Sprintf("quote #%d does not exist.", id), nil
 	}
-	m.logAction(ctx, "!"+ctx.Command, fmt.Sprintf("edited quote #%d", quote.ID))
+	m.logAction(ctx, commandPrefix(ctx)+ctx.Command, fmt.Sprintf("edited quote #%d", quote.ID))
 
 	return fmt.Sprintf("edited quote #%d.", quote.ID), nil
 }
@@ -200,6 +225,22 @@ func (m *Module) canManageQuotes(ctx modules.CommandContext) bool {
 	return ok
 }
 
+func (m *Module) moduleEnabled(ctx context.Context) (bool, error) {
+	if m.settings == nil {
+		return true, nil
+	}
+
+	settings, err := m.settings.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	if settings == nil {
+		return true, nil
+	}
+
+	return settings.Enabled, nil
+}
+
 func formatQuote(quote postgres.Quote) string {
 	return fmt.Sprintf("quote #%d: %s", quote.ID, strings.TrimSpace(quote.Message))
 }
@@ -211,6 +252,15 @@ func parseQuoteID(raw string) (int64, error) {
 	}
 
 	return id, nil
+}
+
+func commandPrefix(ctx modules.CommandContext) string {
+	prefix := strings.TrimSpace(ctx.CommandPrefix)
+	if prefix == "" {
+		return "!"
+	}
+
+	return prefix
 }
 
 func quoteActor(ctx modules.CommandContext) string {

@@ -1,8 +1,9 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import type { ViewKey } from "../moderator/types";
 import { canAccessDashboardView } from "./dashboardPermissions";
 import { useAuth } from "./AuthContext";
+import { ForbiddenPage } from "../errors/ForbiddenPage";
 
 export function RequireDashboardView({
   view,
@@ -19,7 +20,7 @@ export function RequireDashboardView({
   }
 
   if (!canAccessDashboardView(session, view)) {
-    return <Navigate to="/403" replace state={{ from: location.pathname }} />;
+    return <ForbiddenPage fromPath={location.pathname} />;
   }
 
   return children;

@@ -737,6 +737,619 @@ function LengthFilterEditor({
   );
 }
 
+function CapsFilterEditor({
+  selectedSpamFilter,
+  toggleSpamFilter,
+  updateSpamFilter,
+  updateSpamFilterLocal,
+  impactedRoleInput,
+  setImpactedRoleInput,
+  excludedRoleInput,
+  setExcludedRoleInput,
+  exemptUserInput,
+  setExemptUserInput,
+}: {
+  selectedSpamFilter: SpamFilterEntry;
+  toggleSpamFilter: (id: string) => Promise<void>;
+  updateSpamFilter: (
+    id: string,
+    next: Partial<SpamFilterEntry>,
+  ) => Promise<void>;
+  updateSpamFilterLocal: (id: string, next: Partial<SpamFilterEntry>) => void;
+  impactedRoleInput: string;
+  setImpactedRoleInput: (value: string) => void;
+  excludedRoleInput: string;
+  setExcludedRoleInput: (value: string) => void;
+  exemptUserInput: string;
+  setExemptUserInput: (value: string) => void;
+}) {
+  if (selectedSpamFilter.capsSettings == null) {
+    return null;
+  }
+  const settings = selectedSpamFilter.capsSettings;
+
+  const updateCapsSettings = (
+    next: Partial<NonNullable<SpamFilterEntry["capsSettings"]>>,
+  ) => {
+    updateSpamFilterLocal(selectedSpamFilter.id, {
+      capsSettings: {
+        ...settings,
+        ...next,
+      },
+    });
+  };
+
+  const addUnique = (key: "impactedRoles" | "excludedRoles" | "exemptUsernames", value: string) => {
+    const next = value.trim().toLowerCase();
+    if (next === "" || settings[key].includes(next)) {
+      return;
+    }
+    updateCapsSettings({ [key]: [...settings[key], next] });
+  };
+
+  const removeValue = (key: "impactedRoles" | "excludedRoles" | "exemptUsernames", value: string) => {
+    updateCapsSettings({
+      [key]: settings[key].filter((entry) => entry !== value),
+    });
+  };
+
+  return (
+    <Stack spacing={2.5} sx={{ p: 2.5 }}>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        justifyContent="space-between"
+        spacing={2}
+        alignItems={{ xs: "flex-start", md: "center" }}
+      >
+        <Box>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <WarningAmberRoundedIcon fontSize="small" color="primary" />
+            <Typography sx={{ fontSize: "0.78rem", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "text.secondary" }}>
+              Caps filter
+            </Typography>
+          </Stack>
+          <Typography variant="h5" sx={{ mt: 1 }}>
+            {formatLabel(selectedSpamFilter.name)}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Chip
+            size="small"
+            label={selectedSpamFilter.enabled ? "enabled" : "disabled"}
+            color={selectedSpamFilter.enabled ? "success" : "default"}
+          />
+          <Switch
+            checked={selectedSpamFilter.enabled}
+            onChange={() => {
+              void toggleSpamFilter(selectedSpamFilter.id);
+            }}
+          />
+        </Stack>
+      </Stack>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1.05fr) minmax(0,0.95fr)" }, gap: 3 }}>
+        <Stack spacing={2.5}>
+          <TextField
+            fullWidth
+            label="Name"
+            value={selectedSpamFilter.name}
+            onChange={(event) => updateSpamFilterLocal(selectedSpamFilter.id, { name: event.target.value })}
+            helperText="Used for organizing your filters."
+          />
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Reason"
+            value={selectedSpamFilter.description}
+            onChange={(event) => updateSpamFilterLocal(selectedSpamFilter.id, { description: event.target.value })}
+          />
+
+          <Box>
+            <SectionTitle label="Settings" />
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
+              <TextField
+                type="number"
+                label="Minimum characters"
+                value={settings.minimumCharacters}
+                inputProps={{ min: 1 }}
+                onChange={(event) =>
+                  updateCapsSettings({ minimumCharacters: Math.max(1, Number(event.target.value) || 1) })
+                }
+              />
+              <TextField
+                type="number"
+                label="Max threshold %"
+                value={settings.maxCapsPercent}
+                inputProps={{ min: 1, max: 100 }}
+                onChange={(event) => {
+                  const nextPercent = Math.max(1, Math.min(100, Number(event.target.value) || 1));
+                  updateCapsSettings({ maxCapsPercent: nextPercent });
+                  void updateSpamFilter(selectedSpamFilter.id, {
+                    thresholdValue: nextPercent,
+                    thresholdLabel: "caps percentage",
+                  });
+                }}
+              />
+            </Box>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Action" />
+            <Stack spacing={2}>
+              <FormControl fullWidth>
+                <InputLabel id="caps-filter-action-label">Action</InputLabel>
+                <Select
+                  labelId="caps-filter-action-label"
+                  label="Action"
+                  value={selectedSpamFilter.action}
+                  onChange={(event) => {
+                    void updateSpamFilter(selectedSpamFilter.id, { action: event.target.value });
+                  }}
+                >
+                  {Array.from(new Set([...commonActions, selectedSpamFilter.action])).map((action) => (
+                    <MenuItem key={action} value={action}>
+                      {formatLabel(action)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
+                <TextField
+                  type="number"
+                  label="Base timeout"
+                  value={settings.baseTimeoutSeconds}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => updateCapsSettings({ baseTimeoutSeconds: Math.max(1, Number(event.target.value) || 1) })}
+                />
+                <TextField
+                  type="number"
+                  label="Max timeout"
+                  value={settings.maxTimeoutSeconds}
+                  inputProps={{ min: settings.baseTimeoutSeconds }}
+                  onChange={(event) => updateCapsSettings({ maxTimeoutSeconds: Math.max(settings.baseTimeoutSeconds, Number(event.target.value) || settings.baseTimeoutSeconds) })}
+                />
+              </Box>
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Roles" />
+            <Stack spacing={2}>
+              <ListFieldEditor
+                title="Impacted roles"
+                helperText="Any role in this list can be targeted by the caps filter."
+                placeholder="role name"
+                values={settings.impactedRoles}
+                inputValue={impactedRoleInput}
+                onInputChange={setImpactedRoleInput}
+                onAdd={() => {
+                  addUnique("impactedRoles", impactedRoleInput);
+                  setImpactedRoleInput("");
+                }}
+                onRemove={(value) => removeValue("impactedRoles", value)}
+                useLinkIcon={false}
+              />
+              <ListFieldEditor
+                title="Excluded roles"
+                helperText="These roles will not be targeted by the caps filter."
+                placeholder="role name"
+                values={settings.excludedRoles}
+                inputValue={excludedRoleInput}
+                onInputChange={setExcludedRoleInput}
+                onAdd={() => {
+                  addUnique("excludedRoles", excludedRoleInput);
+                  setExcludedRoleInput("");
+                }}
+                onRemove={(value) => removeValue("excludedRoles", value)}
+                useLinkIcon={false}
+              />
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Exemptions" />
+            <Stack spacing={1.2}>
+              <FormControlLabel control={<Checkbox checked={settings.exemptVips} onChange={(event) => updateCapsSettings({ exemptVips: event.target.checked })} />} label="VIP exempt" />
+              <FormControlLabel control={<Checkbox checked={settings.exemptSubscribers} onChange={(event) => updateCapsSettings({ exemptSubscribers: event.target.checked })} />} label="Subscriber exempt" />
+              <FormControlLabel control={<Checkbox checked={settings.exemptModsBroadcaster} onChange={(event) => updateCapsSettings({ exemptModsBroadcaster: event.target.checked })} />} label="Mods and broadcaster exempt" />
+            </Stack>
+            <Box sx={{ mt: 2 }}>
+              <ListFieldEditor
+                title="Exempt usernames"
+                helperText="These usernames will bypass the caps filter."
+                placeholder="trustedviewer"
+                values={settings.exemptUsernames}
+                inputValue={exemptUserInput}
+                onInputChange={setExemptUserInput}
+                onAdd={() => {
+                  addUnique("exemptUsernames", exemptUserInput);
+                  setExemptUserInput("");
+                }}
+                onRemove={(value) => removeValue("exemptUsernames", value)}
+                useLinkIcon={false}
+              />
+            </Box>
+          </Box>
+        </Stack>
+
+        <Stack spacing={2.5}>
+          <Box>
+            <SectionTitle label="Conditions" />
+            <Stack spacing={1.2}>
+              <FormControlLabel control={<Checkbox checked={selectedSpamFilter.enabled} onChange={() => void toggleSpamFilter(selectedSpamFilter.id)} />} label="Enabled" />
+              <FormControlLabel control={<Checkbox checked={settings.enabledWhenOffline} onChange={(event) => updateCapsSettings({ enabledWhenOffline: event.target.checked })} />} label="Enabled when stream offline" />
+              <FormControlLabel control={<Checkbox checked={settings.enabledWhenOnline} onChange={(event) => updateCapsSettings({ enabledWhenOnline: event.target.checked })} />} label="Enabled when stream online" />
+              <FormControlLabel control={<Checkbox checked={settings.enabledForResubMessages} onChange={(event) => updateCapsSettings({ enabledForResubMessages: event.target.checked })} />} label="Enabled for resub messages" />
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Warning" />
+            <Stack spacing={2}>
+              <FormControlLabel control={<Checkbox checked={settings.warningEnabled} onChange={(event) => updateCapsSettings({ warningEnabled: event.target.checked })} />} label="Enable warnings" />
+              <TextField
+                type="number"
+                label="Duration"
+                value={settings.warningDurationSeconds}
+                inputProps={{ min: 1 }}
+                onChange={(event) => updateCapsSettings({ warningDurationSeconds: Math.max(1, Number(event.target.value) || 1) })}
+                helperText="How long the warning timeout should be."
+              />
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Announcements" />
+            <Stack spacing={2}>
+              <FormControlLabel control={<Checkbox checked={settings.announcementEnabled} onChange={(event) => updateCapsSettings({ announcementEnabled: event.target.checked })} />} label="Enable announcement messages" />
+              <TextField
+                type="number"
+                label="Cooldown"
+                value={settings.announcementCooldownSeconds}
+                inputProps={{ min: 1 }}
+                onChange={(event) => updateCapsSettings({ announcementCooldownSeconds: Math.max(1, Number(event.target.value) || 1) })}
+              />
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Ignored Emotes" />
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }, gap: 1 }}>
+              <FormControlLabel control={<Checkbox checked={settings.ignoredEmoteSources.platform} onChange={(event) => updateCapsSettings({ ignoredEmoteSources: { ...settings.ignoredEmoteSources, platform: event.target.checked } })} />} label="Platform" />
+              <FormControlLabel control={<Checkbox checked={settings.ignoredEmoteSources.betterTTV} onChange={(event) => updateCapsSettings({ ignoredEmoteSources: { ...settings.ignoredEmoteSources, betterTTV: event.target.checked } })} />} label="BetterTTV" />
+              <FormControlLabel control={<Checkbox checked={settings.ignoredEmoteSources.frankerFaceZ} onChange={(event) => updateCapsSettings({ ignoredEmoteSources: { ...settings.ignoredEmoteSources, frankerFaceZ: event.target.checked } })} />} label="FrankerFaceZ" />
+              <FormControlLabel control={<Checkbox checked={settings.ignoredEmoteSources.sevenTV} onChange={(event) => updateCapsSettings({ ignoredEmoteSources: { ...settings.ignoredEmoteSources, sevenTV: event.target.checked } })} />} label="7tv" />
+            </Box>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Repeat Offenders" />
+            <Stack spacing={2}>
+              <FormControlLabel
+                control={<Checkbox checked={settings.repeatOffendersEnabled} onChange={(event) => updateCapsSettings({ repeatOffendersEnabled: event.target.checked })} />}
+                label="Enable repeat offender detection"
+              />
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
+                <TextField
+                  type="number"
+                  label="Multiplier"
+                  value={settings.repeatMultiplier}
+                  inputProps={{ min: 1, step: 0.1 }}
+                  onChange={(event) => updateCapsSettings({ repeatMultiplier: Math.max(1, Number(event.target.value) || 1) })}
+                />
+                <TextField
+                  type="number"
+                  label="Cooldown seconds"
+                  value={settings.repeatCooldownSeconds}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => updateCapsSettings({ repeatCooldownSeconds: Math.max(1, Number(event.target.value) || 1) })}
+                />
+              </Box>
+            </Stack>
+          </Box>
+        </Stack>
+      </Box>
+    </Stack>
+  );
+}
+
+function MessageFloodFilterEditor({
+  selectedSpamFilter,
+  toggleSpamFilter,
+  updateSpamFilter,
+  updateSpamFilterLocal,
+  impactedRoleInput,
+  setImpactedRoleInput,
+  excludedRoleInput,
+  setExcludedRoleInput,
+}: {
+  selectedSpamFilter: SpamFilterEntry;
+  toggleSpamFilter: (id: string) => Promise<void>;
+  updateSpamFilter: (
+    id: string,
+    next: Partial<SpamFilterEntry>,
+  ) => Promise<void>;
+  updateSpamFilterLocal: (id: string, next: Partial<SpamFilterEntry>) => void;
+  impactedRoleInput: string;
+  setImpactedRoleInput: (value: string) => void;
+  excludedRoleInput: string;
+  setExcludedRoleInput: (value: string) => void;
+}) {
+  if (selectedSpamFilter.messageFloodSettings == null) {
+    return null;
+  }
+  const settings = selectedSpamFilter.messageFloodSettings;
+
+  const updateSettings = (
+    next: Partial<NonNullable<SpamFilterEntry["messageFloodSettings"]>>,
+  ) => {
+    updateSpamFilterLocal(selectedSpamFilter.id, {
+      messageFloodSettings: {
+        ...settings,
+        ...next,
+      },
+    });
+  };
+
+  const addRole = (key: "impactedRoles" | "excludedRoles", value: string) => {
+    const next = value.trim().toLowerCase();
+    if (next === "" || settings[key].includes(next)) {
+      return;
+    }
+    updateSettings({ [key]: [...settings[key], next] });
+  };
+
+  const removeRole = (key: "impactedRoles" | "excludedRoles", value: string) => {
+    updateSettings({ [key]: settings[key].filter((entry) => entry !== value) });
+  };
+
+  return (
+    <Stack spacing={2.5} sx={{ p: 2.5 }}>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        justifyContent="space-between"
+        spacing={2}
+        alignItems={{ xs: "flex-start", md: "center" }}
+      >
+        <Box>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <WarningAmberRoundedIcon fontSize="small" color="primary" />
+            <Typography sx={{ fontSize: "0.78rem", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "text.secondary" }}>
+              Message flood
+            </Typography>
+          </Stack>
+          <Typography variant="h5" sx={{ mt: 1 }}>
+            {formatLabel(selectedSpamFilter.name)}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Chip
+            size="small"
+            label={selectedSpamFilter.enabled ? "enabled" : "disabled"}
+            color={selectedSpamFilter.enabled ? "success" : "default"}
+          />
+          <Switch
+            checked={selectedSpamFilter.enabled}
+            onChange={() => {
+              void toggleSpamFilter(selectedSpamFilter.id);
+            }}
+          />
+        </Stack>
+      </Stack>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1.05fr) minmax(0,0.95fr)" }, gap: 3 }}>
+        <Stack spacing={2.5}>
+          <TextField
+            fullWidth
+            label="Name"
+            value={selectedSpamFilter.name}
+            onChange={(event) => updateSpamFilterLocal(selectedSpamFilter.id, { name: event.target.value })}
+            helperText="Used for organizing your filters."
+          />
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Reason"
+            value={selectedSpamFilter.description}
+            onChange={(event) => updateSpamFilterLocal(selectedSpamFilter.id, { description: event.target.value })}
+          />
+
+          <Box>
+            <SectionTitle label="Settings" />
+            <Stack spacing={2}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={settings.matchAnyMessageTooSimilar}
+                    onChange={(event) => updateSettings({ matchAnyMessageTooSimilar: event.target.checked })}
+                  />
+                }
+                label="Match on ANY message being too similar"
+              />
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
+                <TextField
+                  type="number"
+                  label="Minimum characters"
+                  value={settings.minimumCharacters}
+                  inputProps={{ min: 0 }}
+                  onChange={(event) => updateSettings({ minimumCharacters: Math.max(0, Number(event.target.value) || 0) })}
+                />
+                <TextField
+                  type="number"
+                  label="Minimum messages count"
+                  value={settings.minimumMessagesCount}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => updateSettings({ minimumMessagesCount: Math.max(1, Number(event.target.value) || 1) })}
+                />
+                <TextField
+                  type="number"
+                  label="Message memory (seconds)"
+                  value={settings.messageMemorySeconds}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => updateSettings({ messageMemorySeconds: Math.max(1, Number(event.target.value) || 1) })}
+                />
+                <TextField
+                  type="number"
+                  label="Maximum similarity threshold %"
+                  value={settings.maximumSimilarityPercent}
+                  inputProps={{ min: 1, max: 100 }}
+                  onChange={(event) => {
+                    const nextPercent = Math.max(1, Math.min(100, Number(event.target.value) || 1));
+                    updateSettings({ maximumSimilarityPercent: nextPercent });
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      thresholdValue: nextPercent,
+                      thresholdLabel: "similarity %",
+                    });
+                  }}
+                />
+              </Box>
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Action" />
+            <Stack spacing={2}>
+              <FormControl fullWidth>
+                <InputLabel id="flood-filter-action-label">Action</InputLabel>
+                <Select
+                  labelId="flood-filter-action-label"
+                  label="Action"
+                  value={selectedSpamFilter.action}
+                  onChange={(event) => {
+                    void updateSpamFilter(selectedSpamFilter.id, { action: event.target.value });
+                  }}
+                >
+                  {Array.from(new Set([...commonActions, selectedSpamFilter.action])).map((action) => (
+                    <MenuItem key={action} value={action}>
+                      {formatLabel(action)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
+                <TextField
+                  type="number"
+                  label="Base timeout"
+                  value={settings.baseTimeoutSeconds}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => updateSettings({ baseTimeoutSeconds: Math.max(1, Number(event.target.value) || 1) })}
+                />
+                <TextField
+                  type="number"
+                  label="Max timeout"
+                  value={settings.maxTimeoutSeconds}
+                  inputProps={{ min: settings.baseTimeoutSeconds }}
+                  onChange={(event) => updateSettings({ maxTimeoutSeconds: Math.max(settings.baseTimeoutSeconds, Number(event.target.value) || settings.baseTimeoutSeconds) })}
+                />
+              </Box>
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Roles" />
+            <Stack spacing={2}>
+              <ListFieldEditor
+                title="Impacted roles"
+                helperText="If a user has any of these roles, they will always be vulnerable to this filter."
+                placeholder="select a role"
+                values={settings.impactedRoles}
+                inputValue={impactedRoleInput}
+                onInputChange={setImpactedRoleInput}
+                onAdd={() => {
+                  addRole("impactedRoles", impactedRoleInput);
+                  setImpactedRoleInput("");
+                }}
+                onRemove={(value) => removeRole("impactedRoles", value)}
+                useLinkIcon={false}
+              />
+              <ListFieldEditor
+                title="Excluded roles"
+                helperText="They will not be vulnerable to the filter, even if they have an impacted role."
+                placeholder="select a role"
+                values={settings.excludedRoles}
+                inputValue={excludedRoleInput}
+                onInputChange={setExcludedRoleInput}
+                onAdd={() => {
+                  addRole("excludedRoles", excludedRoleInput);
+                  setExcludedRoleInput("");
+                }}
+                onRemove={(value) => removeRole("excludedRoles", value)}
+                useLinkIcon={false}
+              />
+            </Stack>
+          </Box>
+        </Stack>
+
+        <Stack spacing={2.5}>
+          <Box>
+            <SectionTitle label="Conditions" />
+            <Stack spacing={1.2}>
+              <FormControlLabel control={<Checkbox checked={selectedSpamFilter.enabled} onChange={() => void toggleSpamFilter(selectedSpamFilter.id)} />} label="Enabled" />
+              <FormControlLabel control={<Checkbox checked={settings.enabledWhenOffline} onChange={(event) => updateSettings({ enabledWhenOffline: event.target.checked })} />} label="Enabled when stream offline" />
+              <FormControlLabel control={<Checkbox checked={settings.enabledWhenOnline} onChange={(event) => updateSettings({ enabledWhenOnline: event.target.checked })} />} label="Enabled when stream online" />
+              <FormControlLabel control={<Checkbox checked={settings.enabledForResubMessages} onChange={(event) => updateSettings({ enabledForResubMessages: event.target.checked })} />} label="Enabled for resub messages" />
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Warning" />
+            <Stack spacing={2}>
+              <FormControlLabel control={<Checkbox checked={settings.warningEnabled} onChange={(event) => updateSettings({ warningEnabled: event.target.checked })} />} label="Enable warnings" />
+              <TextField
+                type="number"
+                label="Duration"
+                value={settings.warningDurationSeconds}
+                inputProps={{ min: 1 }}
+                onChange={(event) => updateSettings({ warningDurationSeconds: Math.max(1, Number(event.target.value) || 1) })}
+              />
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Announcements" />
+            <Stack spacing={2}>
+              <FormControlLabel control={<Checkbox checked={settings.announcementEnabled} onChange={(event) => updateSettings({ announcementEnabled: event.target.checked })} />} label="Enable announcement messages" />
+              <TextField
+                type="number"
+                label="Cooldown"
+                value={settings.announcementCooldownSeconds}
+                inputProps={{ min: 1 }}
+                onChange={(event) => updateSettings({ announcementCooldownSeconds: Math.max(1, Number(event.target.value) || 1) })}
+              />
+            </Stack>
+          </Box>
+
+          <Box>
+            <SectionTitle label="Repeat Offenders" />
+            <Stack spacing={2}>
+              <FormControlLabel control={<Checkbox checked={settings.repeatOffendersEnabled} onChange={(event) => updateSettings({ repeatOffendersEnabled: event.target.checked })} />} label="Enable repeat offender detection" />
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
+                <TextField
+                  type="number"
+                  label="Multiplier"
+                  value={settings.repeatMultiplier}
+                  inputProps={{ min: 1, step: 0.1 }}
+                  onChange={(event) => updateSettings({ repeatMultiplier: Math.max(1, Number(event.target.value) || 1) })}
+                />
+                <TextField
+                  type="number"
+                  label="Cooldown"
+                  value={settings.repeatCooldownSeconds}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => updateSettings({ repeatCooldownSeconds: Math.max(1, Number(event.target.value) || 1) })}
+                />
+              </Box>
+            </Stack>
+          </Box>
+        </Stack>
+      </Box>
+    </Stack>
+  );
+}
+
 function GenericSpamFilterEditor({
   selectedSpamFilter,
   toggleSpamFilter,
@@ -883,8 +1496,15 @@ export function SpamFiltersPage() {
   } = useModerator();
   const [allowedLinkInput, setAllowedLinkInput] = useState("");
   const [blockedLinkInput, setBlockedLinkInput] = useState("");
+  const [allowedClipChannelInput, setAllowedClipChannelInput] = useState("");
+  const [blockedClipChannelInput, setBlockedClipChannelInput] = useState("");
   const [exemptUserInput, setExemptUserInput] = useState("");
   const [lengthExemptUserInput, setLengthExemptUserInput] = useState("");
+  const [capsImpactedRoleInput, setCapsImpactedRoleInput] = useState("");
+  const [capsExcludedRoleInput, setCapsExcludedRoleInput] = useState("");
+  const [capsExemptUserInput, setCapsExemptUserInput] = useState("");
+  const [floodImpactedRoleInput, setFloodImpactedRoleInput] = useState("");
+  const [floodExcludedRoleInput, setFloodExcludedRoleInput] = useState("");
 
   const enabledCount = filteredSpamFilters.filter(
     (entry) => entry.enabled,
@@ -895,6 +1515,12 @@ export function SpamFiltersPage() {
   const isLengthFilter =
     selectedSpamFilter?.id === "message-length" &&
     selectedSpamFilter.lengthSettings != null;
+  const isCapsFilter =
+    selectedSpamFilter?.id === "caps" &&
+    selectedSpamFilter.capsSettings != null;
+  const isMessageFloodFilter =
+    selectedSpamFilter?.id === "message-flood" &&
+    selectedSpamFilter.messageFloodSettings != null;
 
   const updateLinkSettings = (
     next: Partial<NonNullable<SpamFilterEntry["linkSettings"]>>,
@@ -912,7 +1538,12 @@ export function SpamFiltersPage() {
   };
 
   const addListValue = (
-    key: "allowedLinks" | "blockedLinks" | "exemptUsernames",
+    key:
+      | "allowedLinks"
+      | "blockedLinks"
+      | "exemptUsernames"
+      | "allowedClipChannels"
+      | "blockedClipChannels",
     rawValue: string,
   ) => {
     if (selectedSpamFilter == null || selectedSpamFilter.linkSettings == null) {
@@ -935,7 +1566,12 @@ export function SpamFiltersPage() {
   };
 
   const removeListValue = (
-    key: "allowedLinks" | "blockedLinks" | "exemptUsernames",
+    key:
+      | "allowedLinks"
+      | "blockedLinks"
+      | "exemptUsernames"
+      | "allowedClipChannels"
+      | "blockedClipChannels",
     value: string,
   ) => {
     if (selectedSpamFilter == null || selectedSpamFilter.linkSettings == null) {
@@ -1138,6 +1774,31 @@ export function SpamFiltersPage() {
                   moderation action.
                 </Typography>
               </Box>
+            ) : isMessageFloodFilter &&
+              selectedSpamFilter.messageFloodSettings != null ? (
+              <MessageFloodFilterEditor
+                selectedSpamFilter={selectedSpamFilter}
+                toggleSpamFilter={toggleSpamFilter}
+                updateSpamFilter={updateSpamFilter}
+                updateSpamFilterLocal={updateSpamFilterLocal}
+                impactedRoleInput={floodImpactedRoleInput}
+                setImpactedRoleInput={setFloodImpactedRoleInput}
+                excludedRoleInput={floodExcludedRoleInput}
+                setExcludedRoleInput={setFloodExcludedRoleInput}
+              />
+            ) : isCapsFilter && selectedSpamFilter.capsSettings != null ? (
+              <CapsFilterEditor
+                selectedSpamFilter={selectedSpamFilter}
+                toggleSpamFilter={toggleSpamFilter}
+                updateSpamFilter={updateSpamFilter}
+                updateSpamFilterLocal={updateSpamFilterLocal}
+                impactedRoleInput={capsImpactedRoleInput}
+                setImpactedRoleInput={setCapsImpactedRoleInput}
+                excludedRoleInput={capsExcludedRoleInput}
+                setExcludedRoleInput={setCapsExcludedRoleInput}
+                exemptUserInput={capsExemptUserInput}
+                setExemptUserInput={setCapsExemptUserInput}
+              />
             ) : isLinkFilter && selectedSpamFilter.linkSettings != null ? (
               <Stack spacing={2.5} sx={{ p: 2.5 }}>
                 <Stack
@@ -1206,6 +1867,110 @@ export function SpamFiltersPage() {
                   }}
                 >
                   <Stack spacing={2.5}>
+                    <Box>
+                      <SectionTitle label="Clips" />
+                      <Stack spacing={1.2}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={
+                                selectedSpamFilter.linkSettings
+                                  .clipsFilteringEnabled
+                              }
+                              onChange={(event) =>
+                                updateLinkSettings({
+                                  clipsFilteringEnabled: event.target.checked,
+                                })
+                              }
+                            />
+                          }
+                          label="Enable clips filtering"
+                        />
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={
+                                selectedSpamFilter.linkSettings
+                                  .blockClipsFromOtherChannels
+                              }
+                              onChange={(event) =>
+                                updateLinkSettings({
+                                  blockClipsFromOtherChannels:
+                                    event.target.checked,
+                                })
+                              }
+                            />
+                          }
+                          label="Block clips from other channels"
+                        />
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={
+                                selectedSpamFilter.linkSettings
+                                  .blockUsersLinkingOwnClips
+                              }
+                              onChange={(event) =>
+                                updateLinkSettings({
+                                  blockUsersLinkingOwnClips:
+                                    event.target.checked,
+                                })
+                              }
+                            />
+                          }
+                          label="Block users linking clips from their own channels"
+                        />
+                      </Stack>
+
+                      <Box sx={{ mt: 2 }}>
+                        <ListFieldEditor
+                          title="Allowed clip channels"
+                          helperText="These channels are able to have clips linked, even if you block clips from other channels."
+                          placeholder="tibb12"
+                          values={
+                            selectedSpamFilter.linkSettings.allowedClipChannels
+                          }
+                          inputValue={allowedClipChannelInput}
+                          onInputChange={setAllowedClipChannelInput}
+                          onAdd={() => {
+                            addListValue(
+                              "allowedClipChannels",
+                              allowedClipChannelInput,
+                            );
+                            setAllowedClipChannelInput("");
+                          }}
+                          onRemove={(value) =>
+                            removeListValue("allowedClipChannels", value)
+                          }
+                          useLinkIcon={false}
+                        />
+                      </Box>
+
+                      <Box sx={{ mt: 2 }}>
+                        <ListFieldEditor
+                          title="Blocked clip channels"
+                          helperText="These channels are never able to have clips linked, even if allowed elsewhere."
+                          placeholder="junklaxr"
+                          values={
+                            selectedSpamFilter.linkSettings.blockedClipChannels
+                          }
+                          inputValue={blockedClipChannelInput}
+                          onInputChange={setBlockedClipChannelInput}
+                          onAdd={() => {
+                            addListValue(
+                              "blockedClipChannels",
+                              blockedClipChannelInput,
+                            );
+                            setBlockedClipChannelInput("");
+                          }}
+                          onRemove={(value) =>
+                            removeListValue("blockedClipChannels", value)
+                          }
+                          useLinkIcon={false}
+                        />
+                      </Box>
+                    </Box>
+
                     <Box>
                       <SectionTitle label="Links" />
                       <Stack spacing={1.2}>

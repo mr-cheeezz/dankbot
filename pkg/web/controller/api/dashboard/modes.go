@@ -13,18 +13,20 @@ import (
 )
 
 type modeResponse struct {
-	ID                     string `json:"id"`
-	Key                    string `json:"key"`
-	Title                  string `json:"title"`
-	Description            string `json:"description"`
-	KeywordName            string `json:"keyword_name"`
-	KeywordDescription     string `json:"keyword_description"`
-	KeywordResponse        string `json:"keyword_response"`
-	CoordinatedTwitchTitle string `json:"coordinated_twitch_title"`
-	TimerEnabled           bool   `json:"timer_enabled"`
-	TimerMessage           string `json:"timer_message"`
-	TimerIntervalSeconds   int    `json:"timer_interval_seconds"`
-	Builtin                bool   `json:"builtin"`
+	ID                            string `json:"id"`
+	Key                           string `json:"key"`
+	Title                         string `json:"title"`
+	Description                   string `json:"description"`
+	KeywordName                   string `json:"keyword_name"`
+	KeywordDescription            string `json:"keyword_description"`
+	KeywordResponse               string `json:"keyword_response"`
+	CoordinatedTwitchTitle        string `json:"coordinated_twitch_title"`
+	CoordinatedTwitchCategoryID   string `json:"coordinated_twitch_category_id"`
+	CoordinatedTwitchCategoryName string `json:"coordinated_twitch_category_name"`
+	TimerEnabled                  bool   `json:"timer_enabled"`
+	TimerMessage                  string `json:"timer_message"`
+	TimerIntervalSeconds          int    `json:"timer_interval_seconds"`
+	Builtin                       bool   `json:"builtin"`
 }
 
 type modesListResponse struct {
@@ -32,17 +34,19 @@ type modesListResponse struct {
 }
 
 type saveModeRequest struct {
-	Key                    string `json:"key"`
-	Title                  string `json:"title"`
-	Description            string `json:"description"`
-	KeywordName            string `json:"keyword_name"`
-	KeywordDescription     string `json:"keyword_description"`
-	KeywordResponse        string `json:"keyword_response"`
-	CoordinatedTwitchTitle string `json:"coordinated_twitch_title"`
-	TimerEnabled           bool   `json:"timer_enabled"`
-	TimerMessage           string `json:"timer_message"`
-	TimerIntervalSeconds   int    `json:"timer_interval_seconds"`
-	OriginalKey            string `json:"original_key"`
+	Key                           string `json:"key"`
+	Title                         string `json:"title"`
+	Description                   string `json:"description"`
+	KeywordName                   string `json:"keyword_name"`
+	KeywordDescription            string `json:"keyword_description"`
+	KeywordResponse               string `json:"keyword_response"`
+	CoordinatedTwitchTitle        string `json:"coordinated_twitch_title"`
+	CoordinatedTwitchCategoryID   string `json:"coordinated_twitch_category_id"`
+	CoordinatedTwitchCategoryName string `json:"coordinated_twitch_category_name"`
+	TimerEnabled                  bool   `json:"timer_enabled"`
+	TimerMessage                  string `json:"timer_message"`
+	TimerIntervalSeconds          int    `json:"timer_interval_seconds"`
+	OriginalKey                   string `json:"original_key"`
 }
 
 func (h handler) modes(w http.ResponseWriter, r *http.Request) {
@@ -303,18 +307,20 @@ func (h handler) decodeModeSaveRequest(r *http.Request) (*postgres.BotModeStore,
 
 func modeToResponse(item postgres.BotMode) modeResponse {
 	return modeResponse{
-		ID:                     item.ModeKey,
-		Key:                    item.ModeKey,
-		Title:                  item.Title,
-		Description:            item.Description,
-		KeywordName:            item.KeywordName,
-		KeywordDescription:     item.KeywordDescription,
-		KeywordResponse:        item.KeywordResponse,
-		CoordinatedTwitchTitle: item.CoordinatedTwitchTitle,
-		TimerEnabled:           item.TimerEnabled,
-		TimerMessage:           item.TimerMessage,
-		TimerIntervalSeconds:   item.TimerIntervalSeconds,
-		Builtin:                item.IsBuiltin,
+		ID:                            item.ModeKey,
+		Key:                           item.ModeKey,
+		Title:                         item.Title,
+		Description:                   item.Description,
+		KeywordName:                   item.KeywordName,
+		KeywordDescription:            item.KeywordDescription,
+		KeywordResponse:               item.KeywordResponse,
+		CoordinatedTwitchTitle:        item.CoordinatedTwitchTitle,
+		CoordinatedTwitchCategoryID:   item.CoordinatedTwitchCategoryID,
+		CoordinatedTwitchCategoryName: item.CoordinatedTwitchCategoryName,
+		TimerEnabled:                  item.TimerEnabled,
+		TimerMessage:                  item.TimerMessage,
+		TimerIntervalSeconds:          item.TimerIntervalSeconds,
+		Builtin:                       item.IsBuiltin,
 	}
 }
 
@@ -324,18 +330,26 @@ func modeFromRequest(request saveModeRequest) postgres.BotMode {
 		timerIntervalSeconds = 180
 	}
 
+	coordinatedCategoryID := strings.TrimSpace(request.CoordinatedTwitchCategoryID)
+	coordinatedCategoryName := strings.TrimSpace(request.CoordinatedTwitchCategoryName)
+	if coordinatedCategoryID == "" {
+		coordinatedCategoryName = ""
+	}
+
 	return postgres.BotMode{
-		ModeKey:                normalizeModeKey(request.Key),
-		Title:                  strings.TrimSpace(request.Title),
-		Description:            strings.TrimSpace(request.Description),
-		KeywordName:            strings.TrimSpace(request.KeywordName),
-		KeywordDescription:     strings.TrimSpace(request.KeywordDescription),
-		KeywordResponse:        strings.TrimSpace(request.KeywordResponse),
-		CoordinatedTwitchTitle: strings.TrimSpace(request.CoordinatedTwitchTitle),
-		IsBuiltin:              false,
-		TimerEnabled:           request.TimerEnabled,
-		TimerMessage:           strings.TrimSpace(request.TimerMessage),
-		TimerIntervalSeconds:   timerIntervalSeconds,
+		ModeKey:                       normalizeModeKey(request.Key),
+		Title:                         strings.TrimSpace(request.Title),
+		Description:                   strings.TrimSpace(request.Description),
+		KeywordName:                   strings.TrimSpace(request.KeywordName),
+		KeywordDescription:            strings.TrimSpace(request.KeywordDescription),
+		KeywordResponse:               strings.TrimSpace(request.KeywordResponse),
+		CoordinatedTwitchTitle:        strings.TrimSpace(request.CoordinatedTwitchTitle),
+		CoordinatedTwitchCategoryID:   coordinatedCategoryID,
+		CoordinatedTwitchCategoryName: coordinatedCategoryName,
+		IsBuiltin:                     false,
+		TimerEnabled:                  request.TimerEnabled,
+		TimerMessage:                  strings.TrimSpace(request.TimerMessage),
+		TimerIntervalSeconds:          timerIntervalSeconds,
 	}
 }
 

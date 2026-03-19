@@ -25,6 +25,8 @@ type UserSession struct {
 	DisplayName        string    `json:"display_name"`
 	AvatarURL          string    `json:"avatar_url"`
 	IsModerator        bool      `json:"is_moderator"`
+	IsVIP              bool      `json:"is_vip"`
+	IsLeadModerator    bool      `json:"is_lead_moderator"`
 	IsBroadcaster      bool      `json:"is_broadcaster"`
 	IsBotAccount       bool      `json:"is_bot_account"`
 	IsEditor           bool      `json:"is_editor"`

@@ -20,6 +20,7 @@ type PublicHomeSettings struct {
 	ShowNowPlayingAlbumArt    bool
 	ShowNowPlayingProgress    bool
 	ShowNowPlayingLinks       bool
+	CommandPrefix             string
 	PromoLinks                []PromoLink
 	RobloxLinkCommandTarget   string
 	RobloxLinkCommandTemplate string
@@ -42,6 +43,7 @@ func DefaultPublicHomeSettings() PublicHomeSettings {
 		ShowNowPlayingAlbumArt:    true,
 		ShowNowPlayingProgress:    true,
 		ShowNowPlayingLinks:       true,
+		CommandPrefix:             "!",
 		PromoLinks:                []PromoLink{},
 		RobloxLinkCommandTarget:   "dankbot",
 		RobloxLinkCommandTemplate: "",
@@ -65,6 +67,7 @@ INSERT INTO public_home_settings (
 	show_now_playing_album_art,
 	show_now_playing_progress,
 	show_now_playing_links,
+	command_prefix,
 	promo_links_json,
 	roblox_link_command_target,
 	roblox_link_command_template,
@@ -72,13 +75,14 @@ INSERT INTO public_home_settings (
 	created_at,
 	updated_at
 )
-VALUES (1, $1, $2, $3, $4, $5, $6, $7, '', NOW(), NOW())
+VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, '', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
 		defaults.ShowNowPlaying,
 		defaults.ShowNowPlayingAlbumArt,
 		defaults.ShowNowPlayingProgress,
 		defaults.ShowNowPlayingLinks,
+		normalizeCommandPrefix(defaults.CommandPrefix),
 		promoLinksJSON,
 		defaults.RobloxLinkCommandTarget,
 		defaults.RobloxLinkCommandTemplate,
@@ -108,6 +112,7 @@ SELECT
 	show_now_playing_album_art,
 	show_now_playing_progress,
 	show_now_playing_links,
+	command_prefix,
 	promo_links_json,
 	roblox_link_command_target,
 	roblox_link_command_template,
@@ -122,6 +127,7 @@ WHERE id = 1
 		&settings.ShowNowPlayingAlbumArt,
 		&settings.ShowNowPlayingProgress,
 		&settings.ShowNowPlayingLinks,
+		&settings.CommandPrefix,
 		&promoLinksJSON,
 		&settings.RobloxLinkCommandTarget,
 		&settings.RobloxLinkCommandTemplate,
@@ -135,6 +141,7 @@ WHERE id = 1
 		}
 		return nil, fmt.Errorf("get public home settings: %w", err)
 	}
+	settings.CommandPrefix = normalizeCommandPrefix(settings.CommandPrefix)
 	settings.PromoLinks = decodePromoLinks(promoLinksJSON)
 
 	return &settings, nil
@@ -159,10 +166,11 @@ SET
 	show_now_playing_album_art = $2,
 	show_now_playing_progress = $3,
 	show_now_playing_links = $4,
-	promo_links_json = $5,
-	roblox_link_command_target = $6,
-	roblox_link_command_template = $7,
-	updated_by = $8,
+	command_prefix = $5,
+	promo_links_json = $6,
+	roblox_link_command_target = $7,
+	roblox_link_command_template = $8,
+	updated_by = $9,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
@@ -170,6 +178,7 @@ RETURNING
 	show_now_playing_album_art,
 	show_now_playing_progress,
 	show_now_playing_links,
+	command_prefix,
 	promo_links_json,
 	roblox_link_command_target,
 	roblox_link_command_template,
@@ -181,6 +190,7 @@ RETURNING
 		settings.ShowNowPlayingAlbumArt,
 		settings.ShowNowPlayingProgress,
 		settings.ShowNowPlayingLinks,
+		normalizeCommandPrefix(settings.CommandPrefix),
 		promoLinksJSON,
 		normalizeLinkCommandTarget(settings.RobloxLinkCommandTarget),
 		strings.TrimSpace(settings.RobloxLinkCommandTemplate),
@@ -190,6 +200,7 @@ RETURNING
 		&updated.ShowNowPlayingAlbumArt,
 		&updated.ShowNowPlayingProgress,
 		&updated.ShowNowPlayingLinks,
+		&updated.CommandPrefix,
 		&promoLinksJSON,
 		&updated.RobloxLinkCommandTarget,
 		&updated.RobloxLinkCommandTemplate,
@@ -203,6 +214,7 @@ RETURNING
 		}
 		return nil, fmt.Errorf("update public home settings: %w", err)
 	}
+	updated.CommandPrefix = normalizeCommandPrefix(updated.CommandPrefix)
 	updated.PromoLinks = decodePromoLinks(promoLinksJSON)
 
 	return &updated, nil
@@ -215,6 +227,25 @@ func normalizeLinkCommandTarget(raw string) string {
 	default:
 		return "dankbot"
 	}
+}
+
+func normalizeCommandPrefix(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "!"
+	}
+
+	trimmed = strings.ReplaceAll(trimmed, " ", "")
+	if trimmed == "" {
+		return "!"
+	}
+
+	runes := []rune(trimmed)
+	if len(runes) > 5 {
+		return string(runes[:5])
+	}
+
+	return trimmed
 }
 
 func sanitizePromoLinks(items []PromoLink) []PromoLink {

@@ -23,14 +23,24 @@ function TwitchIcon() {
   );
 }
 
-export function ForbiddenPage() {
+export function ForbiddenPage({
+  fromPath: fromPathProp = "",
+}: {
+  fromPath?: string;
+}) {
   const { session, loading } = useAuth();
   const location = useLocation();
-  const fromPath =
-    typeof location.state === "object" && location.state != null && "from" in location.state
+  const fromPathState =
+    typeof location.state === "object" &&
+    location.state != null &&
+    "from" in location.state
       ? String((location.state as { from?: string }).from || "")
       : "";
-  const restrictedView = fromPath.startsWith("/dashboard") ? viewFromPathname(fromPath) : null;
+  const fromPath = fromPathProp || fromPathState;
+  const restrictedView =
+    fromPath.startsWith("/d") || fromPath.startsWith("/dashboard")
+      ? viewFromPathname(fromPath)
+      : null;
   const restrictedTitle = restrictedView != null ? pageTitleForView(restrictedView) : "";
 
   const title = loading

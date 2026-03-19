@@ -31,7 +31,7 @@ export function DashboardNotFoundPage() {
       </Typography>
 
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
-        <Button href="/dashboard" variant="contained" sx={{ minHeight: 42, px: 1.8 }}>
+        <Button href="/d" variant="contained" sx={{ minHeight: 42, px: 1.8 }}>
           Dashboard Overview
         </Button>
         <Button href="/" variant="outlined" sx={{ minHeight: 42, px: 1.8 }}>

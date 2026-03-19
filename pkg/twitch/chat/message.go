@@ -7,6 +7,7 @@ type Message struct {
 	DisplayName    string
 	IsModerator    bool
 	IsBroadcaster  bool
+	FirstMessage   bool
 	Text           string
 	ReplyTo        string
 	CustomRewardID string

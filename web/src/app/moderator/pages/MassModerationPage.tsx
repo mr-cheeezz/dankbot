@@ -1,4 +1,6 @@
 import GavelRoundedIcon from "@mui/icons-material/GavelRounded";
+import GroupAddRoundedIcon from "@mui/icons-material/GroupAddRounded";
+import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import {
   Alert,
   Box,
@@ -14,16 +16,66 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { runMassModerationAction } from "../api";
-import type { MassModerationActionResult } from "../types";
+import {
+  fetchMassModerationRecentFollowers,
+  runMassModerationAction,
+} from "../api";
+import type {
+  MassModerationActionResult,
+  MassModerationFollowerImportEntry,
+} from "../types";
 
 function parseUsernamesInput(value: string): string[] {
   return value
     .split(/[\s,]+/)
     .map((entry) => entry.trim().replace(/^@+/, "").toLowerCase())
     .filter(Boolean);
+}
+
+function mergeUsernames(existing: string[], incoming: string[]): string[] {
+  const merged = new Set<string>();
+
+  for (const username of existing) {
+    if (username.trim() !== "") {
+      merged.add(username.trim().toLowerCase());
+    }
+  }
+  for (const username of incoming) {
+    if (username.trim() !== "") {
+      merged.add(username.trim().toLowerCase());
+    }
+  }
+
+  return Array.from(merged);
+}
+
+function buildFollowerImportOptions(totalFollowers: number): number[] {
+  if (totalFollowers <= 0) {
+    return [];
+  }
+
+  let rawOptions: number[];
+  if (totalFollowers <= 10) {
+    rawOptions = [1, 3, 5, totalFollowers];
+  } else if (totalFollowers <= 25) {
+    rawOptions = [3, 5, 10, totalFollowers];
+  } else if (totalFollowers <= 100) {
+    rawOptions = [10, 25, 50, totalFollowers];
+  } else if (totalFollowers <= 500) {
+    rawOptions = [25, 50, 100, 250, totalFollowers];
+  } else {
+    rawOptions = [25, 50, 100, 250, 500];
+  }
+
+  return Array.from(
+    new Set(
+      rawOptions
+        .map((value) => Math.min(totalFollowers, Math.max(1, value)))
+        .filter((value) => value > 0),
+    ),
+  ).sort((left, right) => left - right);
 }
 
 export function MassModerationPage() {
@@ -39,6 +91,15 @@ export function MassModerationPage() {
     [],
   );
   const [massUnresolved, setMassUnresolved] = useState<string[]>([]);
+  const [recentFollowersLoading, setRecentFollowersLoading] = useState(true);
+  const [recentFollowersImporting, setRecentFollowersImporting] = useState(false);
+  const [recentFollowersError, setRecentFollowersError] = useState("");
+  const [recentFollowersTotal, setRecentFollowersTotal] = useState(0);
+  const [recentFollowersPreview, setRecentFollowersPreview] = useState<
+    MassModerationFollowerImportEntry[]
+  >([]);
+  const [importNotice, setImportNotice] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsedMassUsernames = useMemo(
     () => parseUsernamesInput(massUsernamesInput),
@@ -46,6 +107,99 @@ export function MassModerationPage() {
   );
   const massSuccessCount = massResults.filter((entry) => entry.success).length;
   const massFailureCount = massResults.length - massSuccessCount;
+  const recentFollowerOptions = useMemo(
+    () => buildFollowerImportOptions(recentFollowersTotal),
+    [recentFollowersTotal],
+  );
+
+  useEffect(() => {
+    let disposed = false;
+
+    setRecentFollowersLoading(true);
+    setRecentFollowersError("");
+
+    fetchMassModerationRecentFollowers(5)
+      .then((payload) => {
+        if (disposed) {
+          return;
+        }
+        setRecentFollowersTotal(payload.total);
+        setRecentFollowersPreview(payload.items);
+      })
+      .catch((error: unknown) => {
+        if (disposed) {
+          return;
+        }
+        setRecentFollowersError(
+          error instanceof Error
+            ? error.message
+            : "Could not load recent followers right now.",
+        );
+      })
+      .finally(() => {
+        if (!disposed) {
+          setRecentFollowersLoading(false);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  const applyImportedUsernames = (incoming: string[], sourceLabel: string) => {
+    const merged = mergeUsernames(parsedMassUsernames, incoming);
+    setMassUsernamesInput(merged.join("\n"));
+    setImportNotice(
+      `${incoming.length} username${incoming.length === 1 ? "" : "s"} imported from ${sourceLabel}.`,
+    );
+    setMassError("");
+  };
+
+  const handleRecentFollowersImport = async (limit: number) => {
+    setRecentFollowersImporting(true);
+    setRecentFollowersError("");
+    setImportNotice("");
+
+    try {
+      const payload = await fetchMassModerationRecentFollowers(limit);
+      setRecentFollowersTotal(payload.total);
+      setRecentFollowersPreview(payload.items.slice(0, 5));
+      applyImportedUsernames(
+        payload.items.map((entry) => entry.username),
+        `the last ${payload.items.length} followers`,
+      );
+    } catch (error) {
+      setRecentFollowersError(
+        error instanceof Error
+          ? error.message
+          : "Could not import recent followers right now.",
+      );
+    } finally {
+      setRecentFollowersImporting(false);
+    }
+  };
+
+  const handleImportFile = async (file: File | null) => {
+    if (file == null) {
+      return;
+    }
+
+    setImportNotice("");
+    setRecentFollowersError("");
+
+    try {
+      const text = await file.text();
+      const usernames = parseUsernamesInput(text);
+      if (usernames.length === 0) {
+        setRecentFollowersError("That file did not contain any Twitch usernames.");
+        return;
+      }
+      applyImportedUsernames(usernames, file.name);
+    } catch {
+      setRecentFollowersError("Could not read that username file.");
+    }
+  };
 
   return (
     <Paper elevation={0} sx={{ overflow: "hidden" }}>
@@ -82,6 +236,128 @@ export function MassModerationPage() {
 
       <Stack spacing={2.5} sx={{ p: 3 }}>
         {massError ? <Alert severity="error">{massError}</Alert> : null}
+        {recentFollowersError ? <Alert severity="warning">{recentFollowersError}</Alert> : null}
+        {importNotice ? <Alert severity="success">{importNotice}</Alert> : null}
+
+        <Paper elevation={0} sx={{ p: 2.5, backgroundColor: "background.default" }}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography sx={{ fontWeight: 800 }}>Import usernames</Typography>
+              <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
+                Pull in recent followers with one click or upload a plain `.txt` file of Twitch
+                logins. Imported usernames merge into the current list automatically.
+              </Typography>
+            </Box>
+
+            <Stack
+              direction={{ xs: "column", xl: "row" }}
+              spacing={2}
+              alignItems={{ xs: "stretch", xl: "flex-start" }}
+            >
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  sx={{
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    color: "text.secondary",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    mb: 1,
+                  }}
+                >
+                  Recent followers
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {recentFollowersLoading ? (
+                    <Chip label="Loading follower presets..." variant="outlined" />
+                  ) : recentFollowerOptions.length === 0 ? (
+                    <Chip label="No follower presets available" variant="outlined" />
+                  ) : (
+                    recentFollowerOptions.map((option) => (
+                      <Button
+                        key={option}
+                        variant="outlined"
+                        startIcon={<GroupAddRoundedIcon />}
+                        disabled={recentFollowersImporting}
+                        onClick={() => void handleRecentFollowersImport(option)}
+                      >
+                        Import last {option}
+                      </Button>
+                    ))
+                  )}
+                </Stack>
+                <Typography color="text.secondary" sx={{ mt: 1, fontSize: "0.86rem" }}>
+                  {recentFollowersTotal > 0
+                    ? `${recentFollowersTotal.toLocaleString()} total followers detected for preset sizing.`
+                    : "Follower presets use the linked Twitch bot account and moderator:read:followers."}
+                </Typography>
+              </Box>
+
+              <Box sx={{ minWidth: { xs: "100%", xl: 220 } }}>
+                <Typography
+                  sx={{
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    color: "text.secondary",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    mb: 1,
+                  }}
+                >
+                  Text file import
+                </Typography>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,text/plain"
+                  hidden
+                  onChange={(event) => {
+                    const [file] = Array.from(event.target.files ?? []);
+                    void handleImportFile(file ?? null);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<UploadFileRoundedIcon />}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Import .txt file
+                </Button>
+                <Typography color="text.secondary" sx={{ mt: 1, fontSize: "0.86rem" }}>
+                  One Twitch login per line works best, but commas and spaces are okay too.
+                </Typography>
+              </Box>
+            </Stack>
+
+            {recentFollowersPreview.length > 0 ? (
+              <Box>
+                <Typography
+                  sx={{
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    color: "text.secondary",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    mb: 1,
+                  }}
+                >
+                  Recent follower preview
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {recentFollowersPreview.map((entry) => (
+                    <Chip
+                      key={`${entry.username}-${entry.followedAt}`}
+                      label={entry.displayName || entry.username}
+                      variant="outlined"
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            ) : null}
+          </Stack>
+        </Paper>
 
         <TextField
           fullWidth

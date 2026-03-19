@@ -105,7 +105,7 @@ func (m *Module) song(ctx modules.CommandContext) (string, error) {
 			return "", nil
 		}
 		if len(ctx.Args) < 2 {
-			return "usage: !song add <spotify url|spotify uri|search terms>", nil
+			return "usage: " + commandPrefix(ctx) + "song add <spotify url|spotify uri|search terms>", nil
 		}
 		return m.addSong(ctx, strings.Join(ctx.Args[1:], " "))
 	case "skip":
@@ -118,11 +118,11 @@ func (m *Module) song(ctx modules.CommandContext) (string, error) {
 			return "", nil
 		}
 		if len(ctx.Args) < 2 {
-			return "usage: !song volume <0-100>", nil
+			return "usage: " + commandPrefix(ctx) + "song volume <0-100>", nil
 		}
 		return m.setVolume(ctx, ctx.Args[1])
 	default:
-		return "usage: !song [next|last|add|skip|volume]", nil
+		return "usage: " + commandPrefix(ctx) + "song [next|last|add|skip|volume]", nil
 	}
 }
 
@@ -190,7 +190,7 @@ func (m *Module) addSong(ctx modules.CommandContext, input string) (string, erro
 
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return "usage: !song add <spotify url|spotify uri|search terms>", nil
+		return "usage: " + commandPrefix(ctx) + "song add <spotify url|spotify uri|search terms>", nil
 	}
 
 	trackURI, title, err := resolveTrackURI(context.Background(), client, input)
@@ -201,7 +201,7 @@ func (m *Module) addSong(ctx modules.CommandContext, input string) (string, erro
 	if err := client.AddToQueue(context.Background(), trackURI, ""); err != nil {
 		return "", err
 	}
-	m.logAction(ctx, "!song add", buildAddSongAuditDetail(title, input))
+	m.logAction(ctx, commandPrefix(ctx)+"song add", buildAddSongAuditDetail(title, input))
 
 	if title != "" {
 		return fmt.Sprintf("Added %s to the queue.", title), nil
@@ -219,7 +219,7 @@ func (m *Module) skipSong(ctx modules.CommandContext) (string, error) {
 	if err := client.SkipNext(context.Background(), ""); err != nil {
 		return "", err
 	}
-	m.logAction(ctx, "!song skip", "skipped the current spotify song")
+	m.logAction(ctx, commandPrefix(ctx)+"song skip", "skipped the current spotify song")
 
 	return "Skipped the current song.", nil
 }
@@ -232,13 +232,13 @@ func (m *Module) setVolume(ctx modules.CommandContext, raw string) (string, erro
 
 	volume, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil {
-		return "usage: !song volume <0-100>", nil
+		return "usage: " + commandPrefix(ctx) + "song volume <0-100>", nil
 	}
 
 	if err := client.SetVolume(context.Background(), volume, ""); err != nil {
 		return "", err
 	}
-	m.logAction(ctx, "!song volume", fmt.Sprintf("set spotify volume to %d%%", volume))
+	m.logAction(ctx, commandPrefix(ctx)+"song volume", fmt.Sprintf("set spotify volume to %d%%", volume))
 
 	return fmt.Sprintf("Set Spotify volume to %d%%.", volume), nil
 }
@@ -349,6 +349,15 @@ func (m *Module) actorName(ctx modules.CommandContext) string {
 	}
 
 	return strings.TrimSpace(ctx.SenderID)
+}
+
+func commandPrefix(ctx modules.CommandContext) string {
+	prefix := strings.TrimSpace(ctx.CommandPrefix)
+	if prefix == "" {
+		return "!"
+	}
+
+	return prefix
 }
 
 func (m *Module) logAction(ctx modules.CommandContext, command, detail string) {

@@ -517,6 +517,8 @@ func (s *Service) handleNotification(ctx context.Context, envelope *WebhookEnvel
 		return s.rememberStreamStatus(ctx, envelope)
 	case "channel.poll.begin", "channel.poll.progress", "channel.poll.end":
 		return s.savePollEvent(ctx, envelope)
+	case "channel.prediction.begin", "channel.prediction.progress", "channel.prediction.lock", "channel.prediction.end":
+		return s.savePredictionEvent(ctx, envelope)
 	case "channel.channel_points_custom_reward_redemption.add":
 		return s.saveChannelPointRedemption(ctx, envelope)
 	default:
@@ -613,4 +615,46 @@ func (s *Service) saveChannelPointRedemption(ctx context.Context, envelope *Webh
 		RewardPrompt:         event.Reward.Prompt,
 		RawEvent:             envelope.Event,
 	})
+}
+
+func (s *Service) savePredictionEvent(ctx context.Context, envelope *WebhookEnvelope) error {
+	var event PredictionEvent
+	if err := json.Unmarshal(envelope.Event, &event); err != nil {
+		return fmt.Errorf("decode prediction event: %w", err)
+	}
+
+	outcomes := make([]postgres.PredictionOutcomeSnapshot, 0, len(event.Outcomes))
+	for _, outcome := range event.Outcomes {
+		outcomes = append(outcomes, postgres.PredictionOutcomeSnapshot{
+			OutcomeID:     outcome.ID,
+			Title:         outcome.Title,
+			Users:         outcome.Users,
+			ChannelPoints: int64(outcome.ChannelPoints),
+			Color:         outcome.Color,
+		})
+	}
+
+	return s.activity.SavePredictionEvent(ctx, postgres.PredictionEventSnapshot{
+		TwitchSubscriptionID: envelope.Subscription.ID,
+		EventType:            envelope.Subscription.Type,
+		PredictionID:         event.ID,
+		BroadcasterUserID:    event.BroadcasterUserID,
+		BroadcasterUserLogin: event.BroadcasterUserLogin,
+		BroadcasterUserName:  event.BroadcasterUserName,
+		Title:                event.Title,
+		Status:               event.Status,
+		WinningOutcomeID:     event.WinningOutcomeID,
+		StartedAt:            event.StartedAt,
+		EndedAt:              derefTime(event.EndedAt),
+		LockedAt:             derefTime(event.LocksAt),
+		RawEvent:             envelope.Event,
+		Outcomes:             outcomes,
+	})
+}
+
+func derefTime(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return value.UTC()
 }

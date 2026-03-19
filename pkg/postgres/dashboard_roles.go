@@ -11,7 +11,8 @@ import (
 type DashboardRoleName string
 
 const (
-	DashboardRoleEditor DashboardRoleName = "editor"
+	DashboardRoleEditor  DashboardRoleName = "editor"
+	DashboardRoleLeadMod DashboardRoleName = "lead_mod"
 )
 
 type DashboardRole struct {
@@ -230,6 +231,8 @@ func normalizeDashboardRoleName(roleName DashboardRoleName) DashboardRoleName {
 	switch DashboardRoleName(strings.ToLower(strings.TrimSpace(string(roleName)))) {
 	case DashboardRoleEditor:
 		return DashboardRoleEditor
+	case DashboardRoleLeadMod:
+		return DashboardRoleLeadMod
 	default:
 		return DashboardRoleEditor
 	}

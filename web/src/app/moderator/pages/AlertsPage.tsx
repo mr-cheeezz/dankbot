@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   IconButton,
   InputAdornment,
@@ -14,6 +15,8 @@ import {
 } from "@mui/material";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import PollRoundedIcon from "@mui/icons-material/PollRounded";
+import StarsRoundedIcon from "@mui/icons-material/StarsRounded";
 import { useEffect, useMemo, useState } from "react";
 
 import { useModerator } from "../ModeratorContext";
@@ -67,9 +70,24 @@ const initialHypeSpamConfigs: Record<HypeSpamKey, HypeSpamConfig> = {
     minimumAmount: 100,
     rateLimitSeconds: 30,
     rules: [
-      { id: "bits-1", minimumAmount: 100, lineCount: 1, emoteLine: "Cheer Cheer Cheer" },
-      { id: "bits-2", minimumAmount: 500, lineCount: 2, emoteLine: "PogChamp Cheer PogChamp" },
-      { id: "bits-3", minimumAmount: 1000, lineCount: 3, emoteLine: "Cheer PogChamp HYPE" },
+      {
+        id: "bits-1",
+        minimumAmount: 100,
+        lineCount: 1,
+        emoteLine: "Cheer Cheer Cheer",
+      },
+      {
+        id: "bits-2",
+        minimumAmount: 500,
+        lineCount: 2,
+        emoteLine: "PogChamp Cheer PogChamp",
+      },
+      {
+        id: "bits-3",
+        minimumAmount: 1000,
+        lineCount: 3,
+        emoteLine: "Cheer PogChamp HYPE",
+      },
     ],
   },
   giftedSubs: {
@@ -86,10 +104,30 @@ const initialHypeSpamConfigs: Record<HypeSpamKey, HypeSpamConfig> = {
     enabledWhenOnline: true,
     rateLimitSeconds: 30,
     tierLines: [
-      { id: "subs-tier-1", label: "Tier 1", messageCount: 1, emoteLine: "POGGIES PogU POGGIES" },
-      { id: "subs-tier-2", label: "Tier 2", messageCount: 3, emoteLine: "SubHype POGGIES SubHype" },
-      { id: "subs-tier-3", label: "Tier 3", messageCount: 5, emoteLine: "PogChamp PogU POGGIES" },
-      { id: "subs-prime", label: "Prime Gaming", messageCount: 1, emoteLine: "PrimeHype POGGIES PrimeHype" },
+      {
+        id: "subs-tier-1",
+        label: "Tier 1",
+        messageCount: 1,
+        emoteLine: "POGGIES PogU POGGIES",
+      },
+      {
+        id: "subs-tier-2",
+        label: "Tier 2",
+        messageCount: 3,
+        emoteLine: "SubHype POGGIES SubHype",
+      },
+      {
+        id: "subs-tier-3",
+        label: "Tier 3",
+        messageCount: 5,
+        emoteLine: "PogChamp PogU POGGIES",
+      },
+      {
+        id: "subs-prime",
+        label: "Prime Gaming",
+        messageCount: 1,
+        emoteLine: "PrimeHype POGGIES PrimeHype",
+      },
     ],
   },
   resubscriptions: {
@@ -98,15 +136,38 @@ const initialHypeSpamConfigs: Record<HypeSpamKey, HypeSpamConfig> = {
     enabledWhenOnline: true,
     rateLimitSeconds: 30,
     tierLines: [
-      { id: "resubs-tier-1", label: "Tier 1", messageCount: 1, emoteLine: "POGGIES PogU POGGIES" },
-      { id: "resubs-tier-2", label: "Tier 2", messageCount: 3, emoteLine: "SubHype POGGIES SubHype" },
-      { id: "resubs-tier-3", label: "Tier 3", messageCount: 5, emoteLine: "PogChamp PogU POGGIES" },
-      { id: "resubs-prime", label: "Prime Gaming", messageCount: 1, emoteLine: "PrimeHype POGGIES PrimeHype" },
+      {
+        id: "resubs-tier-1",
+        label: "Tier 1",
+        messageCount: 1,
+        emoteLine: "POGGIES PogU POGGIES",
+      },
+      {
+        id: "resubs-tier-2",
+        label: "Tier 2",
+        messageCount: 3,
+        emoteLine: "SubHype POGGIES SubHype",
+      },
+      {
+        id: "resubs-tier-3",
+        label: "Tier 3",
+        messageCount: 5,
+        emoteLine: "PogChamp PogU POGGIES",
+      },
+      {
+        id: "resubs-prime",
+        label: "Prime Gaming",
+        messageCount: 1,
+        emoteLine: "PrimeHype POGGIES PrimeHype",
+      },
     ],
   },
 };
 
-function providerIsAvailable(provider: AlertProvider, alerts: AlertEntry[]): boolean {
+function providerIsAvailable(
+  provider: AlertProvider,
+  alerts: AlertEntry[],
+): boolean {
   return alerts.some((entry) => entry.provider === provider);
 }
 
@@ -134,15 +195,44 @@ function sanitizeEmoteLine(value: string): string {
 }
 
 export function AlertsPage() {
-  const { summary, alerts, filteredAlerts, toggleAlert, updateAlertTemplate, updateAlert } = useModerator();
+  const {
+    summary,
+    alerts,
+    filteredAlerts,
+    toggleAlert,
+    updateAlertTemplate,
+    updateAlert,
+  } = useModerator();
   const [provider, setProvider] = useState<AlertProvider>("twitch");
-  const [sectionTabs, setSectionTabs] = useState<Record<string, AlertSectionTab>>(defaultSectionTabs);
-  const [hypeSpamConfigs, setHypeSpamConfigs] = useState(initialHypeSpamConfigs);
+  const [sectionTabs, setSectionTabs] =
+    useState<Record<string, AlertSectionTab>>(defaultSectionTabs);
+  const [hypeSpamConfigs, setHypeSpamConfigs] = useState(
+    initialHypeSpamConfigs,
+  );
+  const [pollSettings, setPollSettings] = useState({
+    enabled: true,
+    showPointBreakdown: true,
+    mentionExtraVoting: true,
+    minimumCalloutPoints: 1000,
+    completionTemplate: "Channel points spent: {option_breakdown}",
+  });
+  const [predictionSettings, setPredictionSettings] = useState({
+    enabled: true,
+    showLockSummary: true,
+    showOutcomeSummary: true,
+    largeSpendThreshold: 50000,
+    mentionTopPredictors: true,
+  });
 
   const availableProviders = useMemo<ProviderOption[]>(() => {
-    const options: ProviderOption[] = [{ key: "twitch", label: providerLabels.twitch }];
+    const options: ProviderOption[] = [
+      { key: "twitch", label: providerLabels.twitch },
+    ];
     const integrationMap = new Map(
-      summary.integrations.map((entry) => [entry.id.trim().toLowerCase(), entry.status.trim().toLowerCase()]),
+      summary.integrations.map((entry) => [
+        entry.id.trim().toLowerCase(),
+        entry.status.trim().toLowerCase(),
+      ]),
     );
 
     if (
@@ -160,7 +250,10 @@ export function AlertsPage() {
       (integrationMap.get("streamelements") === "linked" ||
         integrationMap.get("streamelements") === "configured")
     ) {
-      options.push({ key: "streamelements", label: providerLabels.streamelements });
+      options.push({
+        key: "streamelements",
+        label: providerLabels.streamelements,
+      });
     }
 
     return options;
@@ -178,7 +271,10 @@ export function AlertsPage() {
     }
 
     alerts
-      .filter((entry) => entry.section === "Mass Gift Subscription Alerts" && entry.enabled)
+      .filter(
+        (entry) =>
+          entry.section === "Mass Gift Subscription Alerts" && entry.enabled,
+      )
       .forEach((entry) => {
         updateAlert(entry.id, {
           enabled: false,
@@ -269,7 +365,9 @@ export function AlertsPage() {
       ...current,
       [key]: {
         ...current[key],
-        rules: (current[key].rules ?? []).filter((entry) => entry.id !== ruleId),
+        rules: (current[key].rules ?? []).filter(
+          (entry) => entry.id !== ruleId,
+        ),
       },
     }));
   };
@@ -292,8 +390,8 @@ export function AlertsPage() {
       >
         <Typography variant="h5">Chat Alerts</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          Provider-based alert templates with cleaner grouping for Twitch, Streamlabs, and
-          StreamElements.
+          Provider-based alert templates with cleaner grouping for Twitch,
+          Streamlabs, and StreamElements.
         </Typography>
       </Box>
 
@@ -313,7 +411,12 @@ export function AlertsPage() {
         }}
       >
         {availableProviders.map((entry) => (
-          <Tab key={entry.key} value={entry.key} label={entry.label} disableRipple />
+          <Tab
+            key={entry.key}
+            value={entry.key}
+            label={entry.label}
+            disableRipple
+          />
         ))}
       </Tabs>
 
@@ -329,9 +432,12 @@ export function AlertsPage() {
               bgcolor: "background.default",
             }}
           >
-            <Typography variant="h6">No alert cards match the current view.</Typography>
+            <Typography variant="h6">
+              No alert cards match the current view.
+            </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Try clearing the dashboard search or link another alerts provider first.
+              Try clearing the dashboard search or link another alerts provider
+              first.
             </Typography>
           </Paper>
         ) : (
@@ -358,7 +464,12 @@ export function AlertsPage() {
               >
                 <Stack spacing={2.5}>
                   <Stack spacing={0.75}>
-                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                      justifyContent="space-between"
+                    >
                       <Typography variant="h6" sx={{ fontSize: "1.22rem" }}>
                         {section.title}
                       </Typography>
@@ -416,15 +527,22 @@ export function AlertsPage() {
 
                     if (hypeSpamKey != null && selectedTab === "hypeSpam") {
                       const config = hypeSpamConfigs[hypeSpamKey];
-                      const basicAlertEnabled = section.entries.some((entry) => entry.enabled);
+                      const basicAlertEnabled = section.entries.some(
+                        (entry) => entry.enabled,
+                      );
                       const amountLabel =
-                        hypeSpamKey === "bits" ? "Minimum bits amount" : "Minimum gifted subs";
-                      const amountUnit = hypeSpamKey === "bits" ? "bits" : "gifts";
+                        hypeSpamKey === "bits"
+                          ? "Minimum bits amount"
+                          : "Minimum gifted subs";
+                      const amountUnit =
+                        hypeSpamKey === "bits" ? "bits" : "gifts";
                       const usesRuleTable = hypeSpamKey === "bits";
                       const usesSingleLine = hypeSpamKey === "giftedSubs";
                       const usesTierLines =
-                        hypeSpamKey === "subscriptions" || hypeSpamKey === "resubscriptions";
-                      const effectiveHypeSpamEnabled = config.enabled && !basicAlertEnabled;
+                        hypeSpamKey === "subscriptions" ||
+                        hypeSpamKey === "resubscriptions";
+                      const effectiveHypeSpamEnabled =
+                        config.enabled && !basicAlertEnabled;
 
                       return (
                         <Box
@@ -457,69 +575,115 @@ export function AlertsPage() {
                                     color: "warning.contrastText",
                                   }}
                                 >
-                                  <Typography sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                                  <Typography
+                                    sx={{
+                                      fontWeight: 700,
+                                      fontSize: "0.95rem",
+                                    }}
+                                  >
                                     Basic alert is still enabled.
                                   </Typography>
-                                  <Typography variant="body2" sx={{ color: "inherit", mt: 0.5 }}>
-                                    Hype spam will stay inactive until you disable the matching
-                                    basic alert rows in this section.
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ color: "inherit", mt: 0.5 }}
+                                  >
+                                    Hype spam will stay inactive until you
+                                    disable the matching basic alert rows in
+                                    this section.
                                   </Typography>
                                 </Box>
                               ) : null}
 
-                              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                              <Stack
+                                direction="row"
+                                alignItems="center"
+                                justifyContent="space-between"
+                              >
                                 <Box>
-                                  <Typography sx={{ fontSize: "1.05rem", fontWeight: 600 }}>
+                                  <Typography
+                                    sx={{
+                                      fontSize: "1.05rem",
+                                      fontWeight: 600,
+                                    }}
+                                  >
                                     Enabled
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    Hype spam is rate limited and only accepts emote-style lines.
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
+                                    Hype spam is rate limited and only accepts
+                                    emote-style lines.
                                   </Typography>
                                 </Box>
                                 <Switch
                                   checked={effectiveHypeSpamEnabled}
                                   onChange={() =>
-                                    updateHypeSpamConfig(hypeSpamKey, { enabled: !config.enabled })
+                                    updateHypeSpamConfig(hypeSpamKey, {
+                                      enabled: !config.enabled,
+                                    })
                                   }
                                   color="primary"
                                   disabled={basicAlertEnabled}
                                 />
                               </Stack>
 
-                              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                              <Stack
+                                direction="row"
+                                alignItems="center"
+                                justifyContent="space-between"
+                              >
                                 <Box>
-                                  <Typography sx={{ fontSize: "1rem", fontWeight: 500 }}>
+                                  <Typography
+                                    sx={{ fontSize: "1rem", fontWeight: 500 }}
+                                  >
                                     Enabled while stream offline
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    Keep this off unless you really want offline hype moments.
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
+                                    Keep this off unless you really want offline
+                                    hype moments.
                                   </Typography>
                                 </Box>
                                 <Switch
                                   checked={config.enabledWhenOffline}
                                   onChange={() =>
                                     updateHypeSpamConfig(hypeSpamKey, {
-                                      enabledWhenOffline: !config.enabledWhenOffline,
+                                      enabledWhenOffline:
+                                        !config.enabledWhenOffline,
                                     })
                                   }
                                   color="primary"
                                 />
                               </Stack>
 
-                              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                              <Stack
+                                direction="row"
+                                alignItems="center"
+                                justifyContent="space-between"
+                              >
                                 <Box>
-                                  <Typography sx={{ fontSize: "1rem", fontWeight: 500 }}>
+                                  <Typography
+                                    sx={{ fontSize: "1rem", fontWeight: 500 }}
+                                  >
                                     Enabled while stream online
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    Recommended for real hype moments, not constant spam.
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
+                                    Recommended for real hype moments, not
+                                    constant spam.
                                   </Typography>
                                 </Box>
                                 <Switch
                                   checked={config.enabledWhenOnline}
                                   onChange={() =>
                                     updateHypeSpamConfig(hypeSpamKey, {
-                                      enabledWhenOnline: !config.enabledWhenOnline,
+                                      enabledWhenOnline:
+                                        !config.enabledWhenOnline,
                                     })
                                   }
                                   color="primary"
@@ -534,13 +698,18 @@ export function AlertsPage() {
                                   value={config.minimumAmount}
                                   onChange={(event) =>
                                     updateHypeSpamConfig(hypeSpamKey, {
-                                      minimumAmount: Math.max(1, Number(event.target.value || "1")),
+                                      minimumAmount: Math.max(
+                                        1,
+                                        Number(event.target.value || "1"),
+                                      ),
                                     })
                                   }
                                   helperText="The smallest amount that should trigger hype spam at all."
                                   InputProps={{
                                     endAdornment: (
-                                      <InputAdornment position="end">{amountUnit}</InputAdornment>
+                                      <InputAdornment position="end">
+                                        {amountUnit}
+                                      </InputAdornment>
                                     ),
                                   }}
                                   disabled={basicAlertEnabled}
@@ -556,14 +725,19 @@ export function AlertsPage() {
                                   updateHypeSpamConfig(hypeSpamKey, {
                                     rateLimitSeconds: Math.max(
                                       minHypeSpamCooldownSeconds,
-                                      Number(event.target.value || String(minHypeSpamCooldownSeconds)),
+                                      Number(
+                                        event.target.value ||
+                                          String(minHypeSpamCooldownSeconds),
+                                      ),
                                     ),
                                   })
                                 }
                                 helperText={`Minimum ${minHypeSpamCooldownSeconds}s between hype spam bursts. No abuse.`}
                                 InputProps={{
                                   endAdornment: (
-                                    <InputAdornment position="end">seconds</InputAdornment>
+                                    <InputAdornment position="end">
+                                      seconds
+                                    </InputAdornment>
                                   ),
                                 }}
                                 disabled={basicAlertEnabled}
@@ -571,14 +745,25 @@ export function AlertsPage() {
 
                               {hypeSpamKey === "giftedSubs" ? (
                                 <Chip
-                                  color={effectiveHypeSpamEnabled ? "warning" : "default"}
-                                  variant={effectiveHypeSpamEnabled ? "filled" : "outlined"}
+                                  color={
+                                    effectiveHypeSpamEnabled
+                                      ? "warning"
+                                      : "default"
+                                  }
+                                  variant={
+                                    effectiveHypeSpamEnabled
+                                      ? "filled"
+                                      : "outlined"
+                                  }
                                   label={
                                     effectiveHypeSpamEnabled
                                       ? "Mass gift alerts are automatically muted while gifted hype spam is on."
                                       : "Mass gift alerts stay available while gifted hype spam is off."
                                   }
-                                  sx={{ alignSelf: "flex-start", maxWidth: "100%" }}
+                                  sx={{
+                                    alignSelf: "flex-start",
+                                    maxWidth: "100%",
+                                  }}
                                 />
                               ) : null}
                             </Stack>
@@ -594,12 +779,26 @@ export function AlertsPage() {
                             }}
                           >
                             <Stack spacing={1.75}>
-                              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                              <Stack
+                                direction="row"
+                                alignItems="center"
+                                justifyContent="space-between"
+                              >
                                 <Box>
-                                  <Typography sx={{ fontSize: "1.05rem", fontWeight: 600 }}>
-                                    {usesTierLines ? "Tier Hype Lines" : "Messages"}
+                                  <Typography
+                                    sx={{
+                                      fontSize: "1.05rem",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {usesTierLines
+                                      ? "Tier Hype Lines"
+                                      : "Messages"}
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary">
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
                                     {usesSingleLine
                                       ? "One emote-only line per gifted sub. Keep it short and hype."
                                       : usesTierLines
@@ -625,7 +824,10 @@ export function AlertsPage() {
                                       key={rule.id}
                                       direction={{ xs: "column", md: "row" }}
                                       spacing={1}
-                                      alignItems={{ xs: "stretch", md: "center" }}
+                                      alignItems={{
+                                        xs: "stretch",
+                                        md: "center",
+                                      }}
                                     >
                                       <TextField
                                         sx={{ width: { xs: "100%", md: 150 } }}
@@ -633,9 +835,18 @@ export function AlertsPage() {
                                         label={`Min ${amountUnit}`}
                                         value={rule.minimumAmount}
                                         onChange={(event) =>
-                                          updateHypeSpamRule(hypeSpamKey, rule.id, {
-                                            minimumAmount: Math.max(1, Number(event.target.value || "1")),
-                                          })
+                                          updateHypeSpamRule(
+                                            hypeSpamKey,
+                                            rule.id,
+                                            {
+                                              minimumAmount: Math.max(
+                                                1,
+                                                Number(
+                                                  event.target.value || "1",
+                                                ),
+                                              ),
+                                            },
+                                          )
                                         }
                                         disabled={basicAlertEnabled}
                                       />
@@ -645,12 +856,21 @@ export function AlertsPage() {
                                         label="Lines"
                                         value={rule.lineCount}
                                         onChange={(event) =>
-                                          updateHypeSpamRule(hypeSpamKey, rule.id, {
-                                            lineCount: Math.max(
-                                              1,
-                                              Math.min(maxHypeSpamLines, Number(event.target.value || "1")),
-                                            ),
-                                          })
+                                          updateHypeSpamRule(
+                                            hypeSpamKey,
+                                            rule.id,
+                                            {
+                                              lineCount: Math.max(
+                                                1,
+                                                Math.min(
+                                                  maxHypeSpamLines,
+                                                  Number(
+                                                    event.target.value || "1",
+                                                  ),
+                                                ),
+                                              ),
+                                            },
+                                          )
                                         }
                                         helperText={`Max ${maxHypeSpamLines}`}
                                         disabled={basicAlertEnabled}
@@ -660,17 +880,31 @@ export function AlertsPage() {
                                         label="Message"
                                         value={rule.emoteLine}
                                         onChange={(event) =>
-                                          updateHypeSpamRule(hypeSpamKey, rule.id, {
-                                            emoteLine: sanitizeEmoteLine(event.target.value),
-                                          })
+                                          updateHypeSpamRule(
+                                            hypeSpamKey,
+                                            rule.id,
+                                            {
+                                              emoteLine: sanitizeEmoteLine(
+                                                event.target.value,
+                                              ),
+                                            },
+                                          )
                                         }
                                         helperText="Use emote tokens only, like POGGIES PogU SubHype."
                                         disabled={basicAlertEnabled}
                                       />
                                       <IconButton
                                         color="error"
-                                        onClick={() => deleteHypeSpamRule(hypeSpamKey, rule.id)}
-                                        disabled={basicAlertEnabled || (config.rules?.length ?? 0) <= 1}
+                                        onClick={() =>
+                                          deleteHypeSpamRule(
+                                            hypeSpamKey,
+                                            rule.id,
+                                          )
+                                        }
+                                        disabled={
+                                          basicAlertEnabled ||
+                                          (config.rules?.length ?? 0) <= 1
+                                        }
                                       >
                                         <DeleteOutlineRoundedIcon />
                                       </IconButton>
@@ -685,7 +919,9 @@ export function AlertsPage() {
                                   value={config.singleLine ?? ""}
                                   onChange={(event) =>
                                     updateHypeSpamConfig(hypeSpamKey, {
-                                      singleLine: sanitizeEmoteLine(event.target.value),
+                                      singleLine: sanitizeEmoteLine(
+                                        event.target.value,
+                                      ),
                                     })
                                   }
                                   helperText="This one emote line is repeated once per gifted sub."
@@ -699,7 +935,10 @@ export function AlertsPage() {
                                       key={entry.id}
                                       direction={{ xs: "column", md: "row" }}
                                       spacing={1}
-                                      alignItems={{ xs: "stretch", md: "center" }}
+                                      alignItems={{
+                                        xs: "stretch",
+                                        md: "center",
+                                      }}
                                     >
                                       <TextField
                                         sx={{ width: { xs: "100%", md: 170 } }}
@@ -723,11 +962,16 @@ export function AlertsPage() {
                                             ...current,
                                             [hypeSpamKey]: {
                                               ...current[hypeSpamKey],
-                                              tierLines: current[hypeSpamKey].tierLines?.map((line) =>
+                                              tierLines: current[
+                                                hypeSpamKey
+                                              ].tierLines?.map((line) =>
                                                 line.id === entry.id
                                                   ? {
                                                       ...line,
-                                                      emoteLine: sanitizeEmoteLine(event.target.value),
+                                                      emoteLine:
+                                                        sanitizeEmoteLine(
+                                                          event.target.value,
+                                                        ),
                                                     }
                                                   : line,
                                               ),
@@ -765,9 +1009,16 @@ export function AlertsPage() {
                           },
                         }}
                       >
-                        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+                        <Stack
+                          direction="row"
+                          spacing={2}
+                          alignItems="center"
+                          justifyContent="space-between"
+                        >
                           <Box>
-                            <Typography sx={{ fontSize: "1.05rem", fontWeight: 600 }}>
+                            <Typography
+                              sx={{ fontSize: "1.05rem", fontWeight: 600 }}
+                            >
                               {entry.label}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
@@ -794,7 +1045,9 @@ export function AlertsPage() {
                           minRows={2}
                           label="Alert Message"
                           value={entry.template}
-                          onChange={(event) => updateAlertTemplate(entry.id, event.target.value)}
+                          onChange={(event) =>
+                            updateAlertTemplate(entry.id, event.target.value)
+                          }
                           disabled={massGiftSuppressed}
                         />
 
@@ -813,11 +1066,15 @@ export function AlertsPage() {
                             InputProps={{
                               startAdornment:
                                 entry.minimumPrefix != null ? (
-                                  <InputAdornment position="start">{entry.minimumPrefix}</InputAdornment>
+                                  <InputAdornment position="start">
+                                    {entry.minimumPrefix}
+                                  </InputAdornment>
                                 ) : undefined,
                               endAdornment:
                                 entry.minimumUnit != null ? (
-                                  <InputAdornment position="end">{entry.minimumUnit}</InputAdornment>
+                                  <InputAdornment position="end">
+                                    {entry.minimumUnit}
+                                  </InputAdornment>
                                 ) : undefined,
                             }}
                           />
@@ -825,6 +1082,222 @@ export function AlertsPage() {
                       </Stack>
                     ));
                   })()}
+
+                  {provider === "twitch" && section.title === "Poll Alerts" ? (
+                    <Box
+                      sx={{
+                        pt: 2,
+                        borderTop: "1px solid",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Stack spacing={2.25}>
+                        <Stack direction="row" spacing={1.2} alignItems="center">
+                          <PollRoundedIcon sx={{ color: "primary.main" }} />
+                          <Box>
+                            <Typography variant="h6" sx={{ fontSize: "1.22rem" }}>
+                              Poll point behavior
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.35 }}
+                            >
+                              Tune how extra-vote channel point totals get
+                              surfaced in poll alerts.
+                            </Typography>
+                          </Box>
+                        </Stack>
+
+                        <Stack spacing={1.25}>
+                          <CheckboxRow
+                            label="Enable poll point add-ons"
+                            checked={pollSettings.enabled}
+                            onChange={(checked) =>
+                              setPollSettings((current) => ({
+                                ...current,
+                                enabled: checked,
+                              }))
+                            }
+                          />
+                          <CheckboxRow
+                            label="Show per-option point breakdown when a poll ends"
+                            checked={pollSettings.showPointBreakdown}
+                            onChange={(checked) =>
+                              setPollSettings((current) => ({
+                                ...current,
+                                showPointBreakdown: checked,
+                              }))
+                            }
+                          />
+                          <CheckboxRow
+                            label="Mention when extra voting with channel points was enabled"
+                            checked={pollSettings.mentionExtraVoting}
+                            onChange={(checked) =>
+                              setPollSettings((current) => ({
+                                ...current,
+                                mentionExtraVoting: checked,
+                              }))
+                            }
+                          />
+                        </Stack>
+
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: {
+                              xs: "1fr",
+                              md: "280px minmax(0, 1fr)",
+                            },
+                            gap: 2,
+                          }}
+                        >
+                          <TextField
+                            fullWidth
+                            type="number"
+                            label="Minimum callout points"
+                            value={pollSettings.minimumCalloutPoints}
+                            onChange={(event) =>
+                              setPollSettings((current) => ({
+                                ...current,
+                                minimumCalloutPoints:
+                                  Number(event.target.value) || 0,
+                              }))
+                            }
+                            inputProps={{ min: 0, step: 100 }}
+                          />
+                          <TextField
+                            fullWidth
+                            label="Completion template"
+                            value={pollSettings.completionTemplate}
+                            onChange={(event) =>
+                              setPollSettings((current) => ({
+                                ...current,
+                                completionTemplate: event.target.value,
+                              }))
+                            }
+                            multiline
+                            minRows={3}
+                          />
+                        </Box>
+                      </Stack>
+                    </Box>
+                  ) : null}
+
+                  {provider === "twitch" &&
+                  section.title === "Prediction Alerts" ? (
+                    <Box
+                      sx={{
+                        pt: 2,
+                        borderTop: "1px solid",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Stack spacing={2.25}>
+                        <Stack direction="row" spacing={1.2} alignItems="center">
+                          <StarsRoundedIcon sx={{ color: "primary.main" }} />
+                          <Box>
+                            <Typography variant="h6" sx={{ fontSize: "1.22rem" }}>
+                              Prediction point behavior
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.35 }}
+                            >
+                              Decide when big prediction spends get called out
+                              and how point winners are summarized back into
+                              chat.
+                            </Typography>
+                          </Box>
+                        </Stack>
+
+                        <Stack spacing={1.25}>
+                          <CheckboxRow
+                            label="Enable prediction point add-ons"
+                            checked={predictionSettings.enabled}
+                            onChange={(checked) =>
+                              setPredictionSettings((current) => ({
+                                ...current,
+                                enabled: checked,
+                              }))
+                            }
+                          />
+                          <CheckboxRow
+                            label="Show locked-outcome summary"
+                            checked={predictionSettings.showLockSummary}
+                            onChange={(checked) =>
+                              setPredictionSettings((current) => ({
+                                ...current,
+                                showLockSummary: checked,
+                              }))
+                            }
+                          />
+                          <CheckboxRow
+                            label="Show outcome winner summary"
+                            checked={predictionSettings.showOutcomeSummary}
+                            onChange={(checked) =>
+                              setPredictionSettings((current) => ({
+                                ...current,
+                                showOutcomeSummary: checked,
+                              }))
+                            }
+                          />
+                          <CheckboxRow
+                            label="Mention top predictors on locks and results"
+                            checked={predictionSettings.mentionTopPredictors}
+                            onChange={(checked) =>
+                              setPredictionSettings((current) => ({
+                                ...current,
+                                mentionTopPredictors: checked,
+                              }))
+                            }
+                          />
+                        </Stack>
+
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: {
+                              xs: "1fr",
+                              md: "220px minmax(0, 1fr)",
+                            },
+                            gap: 2,
+                          }}
+                        >
+                          <TextField
+                            fullWidth
+                            type="number"
+                            label="Large spend threshold"
+                            value={predictionSettings.largeSpendThreshold}
+                            onChange={(event) =>
+                              setPredictionSettings((current) => ({
+                                ...current,
+                                largeSpendThreshold:
+                                  Number(event.target.value) || 0,
+                              }))
+                            }
+                            inputProps={{ min: 0, step: 1000 }}
+                            helperText="Only surface prediction progress callouts above this spend."
+                          />
+                          <Box
+                            sx={{
+                              px: 1,
+                              alignSelf: "center",
+                            }}
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              Lock and result wording is edited directly in the
+                              <strong> Prediction Locked </strong>
+                              and
+                              <strong> Prediction Ended </strong>
+                              alert rows above.
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Stack>
+                    </Box>
+                  ) : null}
                 </Stack>
               </Paper>
             ))}
@@ -832,5 +1305,25 @@ export function AlertsPage() {
         )}
       </Box>
     </Paper>
+  );
+}
+
+function CheckboxRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <Stack direction="row" spacing={1.1} alignItems="center">
+      <Checkbox
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <Typography>{label}</Typography>
+    </Stack>
   );
 }

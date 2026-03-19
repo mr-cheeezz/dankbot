@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Container,
+  IconButton,
   Link,
   Stack,
   TextField,
@@ -11,7 +12,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { AccountMenu } from "../auth/AccountMenu";
 import { useAuth } from "../auth/AuthContext";
@@ -61,6 +62,8 @@ function PublicNavButton({
 export function PublicLayout() {
   const { session, loading } = useAuth();
   const [summary, setSummary] = useState<PublicSummary>(defaultPublicSummary);
+  const [searchInput, setSearchInput] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,6 +84,14 @@ export function PublicLayout() {
   }, []);
 
   const streamerLabel = formatStreamerTitle(summary.channelName || summary.channelLogin || "streamer");
+
+  const goToUserProfile = () => {
+    const query = searchInput.trim().replace(/^@+/, "");
+    if (query === "") {
+      return;
+    }
+    navigate(`/user/${encodeURIComponent(query.toLowerCase())}`);
+  };
 
   return (
     <Box
@@ -128,10 +139,29 @@ export function PublicLayout() {
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
             <TextField
               size="small"
-              placeholder="search commands, quotes, recaps"
+              placeholder="search twitch users..."
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  goToUserProfile();
+                }
+              }}
               InputProps={{
-                startAdornment: <SearchRoundedIcon fontSize="small" sx={{ mr: 1, color: "text.secondary" }} />,
-                readOnly: true,
+                startAdornment: (
+                  <SearchRoundedIcon fontSize="small" sx={{ mr: 1, color: "text.secondary" }} />
+                ),
+                endAdornment: (
+                  <IconButton
+                    size="small"
+                    onClick={goToUserProfile}
+                    aria-label="search user profile"
+                    disabled={searchInput.trim() === ""}
+                  >
+                    <SearchRoundedIcon fontSize="small" />
+                  </IconButton>
+                ),
               }}
               sx={{
                 width: "100%",
@@ -174,7 +204,7 @@ export function PublicLayout() {
 
               {!loading && session.loggedIn && session.canAccessDashboard ? (
                 <Button
-                  href="/dashboard"
+                  href="/d"
                   variant="contained"
                   sx={{
                     minHeight: 42,
@@ -192,7 +222,7 @@ export function PublicLayout() {
                     },
                   }}
                 >
-                  Moderator Dashboard
+                  Dashboard
                 </Button>
               ) : null}
 
@@ -243,6 +273,13 @@ export function PublicLayout() {
           </Typography>
 
           <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            <Link
+              href="/d/docs"
+              underline="hover"
+              color="text.secondary"
+            >
+              API Docs
+            </Link>
             <Link
               href="https://mrcheeezz.com"
               target="_blank"

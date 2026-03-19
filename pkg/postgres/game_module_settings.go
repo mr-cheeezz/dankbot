@@ -9,10 +9,14 @@ import (
 )
 
 type GameModuleSettings struct {
-	KeywordResponse string
-	UpdatedBy       string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	KeywordResponse         string
+	PlaytimeTemplate        string
+	GamesPlayedTemplate     string
+	GamesPlayedItemTemplate string
+	GamesPlayedLimit        int
+	UpdatedBy               string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 type GameModuleSettingsStore struct {
@@ -25,7 +29,11 @@ func NewGameModuleSettingsStore(client *Client) *GameModuleSettingsStore {
 
 func DefaultGameModuleSettings() GameModuleSettings {
 	return GameModuleSettings{
-		KeywordResponse: "@{target}, use !game to see what {streamer} is currently playing.",
+		KeywordResponse:         "@{target}, use !game to see what {streamer} is currently playing.",
+		PlaytimeTemplate:        "{streamer} has been playing {game} for {duration}.",
+		GamesPlayedTemplate:     "{label}: {items}",
+		GamesPlayedItemTemplate: "{game} ({duration})",
+		GamesPlayedLimit:        5,
 	}
 }
 
@@ -42,14 +50,22 @@ func (s *GameModuleSettingsStore) EnsureDefault(ctx context.Context) error {
 INSERT INTO game_module_settings (
 	id,
 	keyword_response,
+	playtime_template,
+	gamesplayed_template,
+	gamesplayed_item_template,
+	gamesplayed_limit,
 	updated_by,
 	created_at,
 	updated_at
 )
-VALUES (1, $1, '', NOW(), NOW())
+VALUES (1, $1, $2, $3, $4, $5, '', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
 		normalizeGameKeywordResponse(defaults.KeywordResponse),
+		normalizeGamePlaytimeTemplate(defaults.PlaytimeTemplate),
+		normalizeGameGamesPlayedTemplate(defaults.GamesPlayedTemplate),
+		normalizeGameGamesPlayedItemTemplate(defaults.GamesPlayedItemTemplate),
+		normalizeGameGamesPlayedLimit(defaults.GamesPlayedLimit),
 	)
 	if err != nil {
 		return fmt.Errorf("ensure game module settings defaults: %w", err)
@@ -70,6 +86,10 @@ func (s *GameModuleSettingsStore) Get(ctx context.Context) (*GameModuleSettings,
 		`
 SELECT
 	keyword_response,
+	playtime_template,
+	gamesplayed_template,
+	gamesplayed_item_template,
+	gamesplayed_limit,
 	updated_by,
 	created_at,
 	updated_at
@@ -78,6 +98,10 @@ WHERE id = 1
 `,
 	).Scan(
 		&settings.KeywordResponse,
+		&settings.PlaytimeTemplate,
+		&settings.GamesPlayedTemplate,
+		&settings.GamesPlayedItemTemplate,
+		&settings.GamesPlayedLimit,
 		&settings.UpdatedBy,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -90,6 +114,10 @@ WHERE id = 1
 	}
 
 	settings.KeywordResponse = normalizeGameKeywordResponse(settings.KeywordResponse)
+	settings.PlaytimeTemplate = normalizeGamePlaytimeTemplate(settings.PlaytimeTemplate)
+	settings.GamesPlayedTemplate = normalizeGameGamesPlayedTemplate(settings.GamesPlayedTemplate)
+	settings.GamesPlayedItemTemplate = normalizeGameGamesPlayedItemTemplate(settings.GamesPlayedItemTemplate)
+	settings.GamesPlayedLimit = normalizeGameGamesPlayedLimit(settings.GamesPlayedLimit)
 	return &settings, nil
 }
 
@@ -106,19 +134,35 @@ func (s *GameModuleSettingsStore) Update(ctx context.Context, settings GameModul
 UPDATE game_module_settings
 SET
 	keyword_response = $1,
-	updated_by = $2,
+	playtime_template = $2,
+	gamesplayed_template = $3,
+	gamesplayed_item_template = $4,
+	gamesplayed_limit = $5,
+	updated_by = $6,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
 	keyword_response,
+	playtime_template,
+	gamesplayed_template,
+	gamesplayed_item_template,
+	gamesplayed_limit,
 	updated_by,
 	created_at,
 	updated_at
 `,
 		normalizeGameKeywordResponse(settings.KeywordResponse),
+		normalizeGamePlaytimeTemplate(settings.PlaytimeTemplate),
+		normalizeGameGamesPlayedTemplate(settings.GamesPlayedTemplate),
+		normalizeGameGamesPlayedItemTemplate(settings.GamesPlayedItemTemplate),
+		normalizeGameGamesPlayedLimit(settings.GamesPlayedLimit),
 		strings.TrimSpace(settings.UpdatedBy),
 	).Scan(
 		&updated.KeywordResponse,
+		&updated.PlaytimeTemplate,
+		&updated.GamesPlayedTemplate,
+		&updated.GamesPlayedItemTemplate,
+		&updated.GamesPlayedLimit,
 		&updated.UpdatedBy,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,
@@ -131,6 +175,10 @@ RETURNING
 	}
 
 	updated.KeywordResponse = normalizeGameKeywordResponse(updated.KeywordResponse)
+	updated.PlaytimeTemplate = normalizeGamePlaytimeTemplate(updated.PlaytimeTemplate)
+	updated.GamesPlayedTemplate = normalizeGameGamesPlayedTemplate(updated.GamesPlayedTemplate)
+	updated.GamesPlayedItemTemplate = normalizeGameGamesPlayedItemTemplate(updated.GamesPlayedItemTemplate)
+	updated.GamesPlayedLimit = normalizeGameGamesPlayedLimit(updated.GamesPlayedLimit)
 	return &updated, nil
 }
 
@@ -138,6 +186,40 @@ func normalizeGameKeywordResponse(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return DefaultGameModuleSettings().KeywordResponse
+	}
+	return value
+}
+
+func normalizeGamePlaytimeTemplate(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return DefaultGameModuleSettings().PlaytimeTemplate
+	}
+	return value
+}
+
+func normalizeGameGamesPlayedTemplate(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return DefaultGameModuleSettings().GamesPlayedTemplate
+	}
+	return value
+}
+
+func normalizeGameGamesPlayedItemTemplate(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return DefaultGameModuleSettings().GamesPlayedItemTemplate
+	}
+	return value
+}
+
+func normalizeGameGamesPlayedLimit(value int) int {
+	if value < 1 {
+		return DefaultGameModuleSettings().GamesPlayedLimit
+	}
+	if value > 25 {
+		return 25
 	}
 	return value
 }

@@ -70,6 +70,7 @@ export type PublicUserProfile = {
   avatarURL: string;
   description: string;
   broadcasterType: string;
+  streamRole: "vip" | "viewer" | "moderator" | "lead_mod" | "broadcaster";
   twitchURL: string;
   createdAt: string;
   redemptionCount: number;
@@ -90,6 +91,33 @@ export type PublicUserProfile = {
   chatStatsAvailable: boolean;
   pollStatsAvailable: boolean;
   redemptionStatsReady: boolean;
+  hasOpenTab: boolean;
+  tabBalanceCents: number;
+  tabLastInterestAt: string;
+  lastSeenAt: string;
+  lastChatActivityAt: string;
+  pollCount: number;
+  pollEndedCount: number;
+  lastPollAt: string;
+  predictionCount: number;
+  predictionEndedCount: number;
+  lastPredictionAt: string;
+  profileEnabled: boolean;
+  showTabSection: boolean;
+  showTabHistory: boolean;
+  showRedemptionActivity: boolean;
+  showPollStats: boolean;
+  showPredictionStats: boolean;
+  showLastSeen: boolean;
+  showLastChatActivity: boolean;
+  recentTabEvents: Array<{
+    id: number;
+    action: string;
+    amountCents: number;
+    balanceCents: number;
+    note: string;
+    createdAt: string;
+  }>;
 };
 
 type PublicSummaryResponse = {
@@ -170,6 +198,7 @@ type PublicUserProfileResponse = {
   avatar_url: string;
   description: string;
   broadcaster_type: string;
+  stream_role: "vip" | "viewer" | "moderator" | "lead_mod" | "broadcaster";
   twitch_url: string;
   created_at: string;
   redemption_count: number;
@@ -190,6 +219,44 @@ type PublicUserProfileResponse = {
   chat_stats_available: boolean;
   poll_stats_available: boolean;
   redemption_stats_ready: boolean;
+  has_open_tab: boolean;
+  tab_balance_cents: number;
+  tab_last_interest_at: string;
+  last_seen_at: string;
+  last_chat_activity_at: string;
+  poll_count: number;
+  poll_ended_count: number;
+  last_poll_at: string;
+  prediction_count: number;
+  prediction_ended_count: number;
+  last_prediction_at: string;
+  profile_enabled: boolean;
+  show_tab_section: boolean;
+  show_tab_history: boolean;
+  show_redemption_activity: boolean;
+  show_poll_stats: boolean;
+  show_prediction_stats: boolean;
+  show_last_seen: boolean;
+  show_last_chat_activity: boolean;
+  recent_tab_events: Array<{
+    id: number;
+    action: string;
+    amount_cents: number;
+    balance_cents: number;
+    note: string;
+    created_at: string;
+  }>;
+};
+
+type PublicUserTabHistoryResponse = {
+  items: Array<{
+    id: number;
+    action: string;
+    amount_cents: number;
+    balance_cents: number;
+    note: string;
+    created_at: string;
+  }>;
 };
 
 export const defaultPublicSummary: PublicSummary = {
@@ -246,6 +313,7 @@ export const defaultPublicUserProfile: PublicUserProfile = {
   avatarURL: "",
   description: "",
   broadcasterType: "",
+  streamRole: "viewer",
   twitchURL: "",
   createdAt: "",
   redemptionCount: 0,
@@ -256,6 +324,26 @@ export const defaultPublicUserProfile: PublicUserProfile = {
   chatStatsAvailable: false,
   pollStatsAvailable: false,
   redemptionStatsReady: false,
+  hasOpenTab: false,
+  tabBalanceCents: 0,
+  tabLastInterestAt: "",
+  lastSeenAt: "",
+  lastChatActivityAt: "",
+  pollCount: 0,
+  pollEndedCount: 0,
+  lastPollAt: "",
+  predictionCount: 0,
+  predictionEndedCount: 0,
+  lastPredictionAt: "",
+  profileEnabled: true,
+  showTabSection: true,
+  showTabHistory: true,
+  showRedemptionActivity: true,
+  showPollStats: true,
+  showPredictionStats: true,
+  showLastSeen: true,
+  showLastChatActivity: true,
+  recentTabEvents: [],
 };
 
 export async function fetchPublicSummary(signal?: AbortSignal): Promise<PublicSummary> {
@@ -398,6 +486,7 @@ export async function fetchPublicUserProfile(
     avatarURL: payload.avatar_url,
     description: payload.description,
     broadcasterType: payload.broadcaster_type,
+    streamRole: payload.stream_role ?? "viewer",
     twitchURL: payload.twitch_url,
     createdAt: payload.created_at,
     redemptionCount: payload.redemption_count,
@@ -418,5 +507,62 @@ export async function fetchPublicUserProfile(
     chatStatsAvailable: payload.chat_stats_available,
     pollStatsAvailable: payload.poll_stats_available,
     redemptionStatsReady: payload.redemption_stats_ready,
+    hasOpenTab: payload.has_open_tab,
+    tabBalanceCents: payload.tab_balance_cents,
+    tabLastInterestAt: payload.tab_last_interest_at,
+    lastSeenAt: payload.last_seen_at,
+    lastChatActivityAt: payload.last_chat_activity_at,
+    pollCount: payload.poll_count,
+    pollEndedCount: payload.poll_ended_count,
+    lastPollAt: payload.last_poll_at,
+    predictionCount: payload.prediction_count,
+    predictionEndedCount: payload.prediction_ended_count,
+    lastPredictionAt: payload.last_prediction_at,
+    profileEnabled: payload.profile_enabled,
+    showTabSection: payload.show_tab_section,
+    showTabHistory: payload.show_tab_history,
+    showRedemptionActivity: payload.show_redemption_activity,
+    showPollStats: payload.show_poll_stats,
+    showPredictionStats: payload.show_prediction_stats,
+    showLastSeen: payload.show_last_seen,
+    showLastChatActivity: payload.show_last_chat_activity,
+    recentTabEvents: (payload.recent_tab_events ?? []).map((entry) => ({
+      id: entry.id,
+      action: entry.action,
+      amountCents: entry.amount_cents,
+      balanceCents: entry.balance_cents,
+      note: entry.note,
+      createdAt: entry.created_at,
+    })),
   };
+}
+
+export async function fetchPublicUserTabHistory(
+  login: string,
+  signal?: AbortSignal,
+): Promise<PublicUserProfile["recentTabEvents"]> {
+  const response = await fetch(
+    `/api/public/users/${encodeURIComponent(login)}/tabs/history?limit=100`,
+    {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`failed to load tab history: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as PublicUserTabHistoryResponse;
+  return (payload.items ?? []).map((entry) => ({
+    id: entry.id,
+    action: entry.action,
+    amountCents: entry.amount_cents,
+    balanceCents: entry.balance_cents,
+    note: entry.note,
+    createdAt: entry.created_at,
+  }));
 }

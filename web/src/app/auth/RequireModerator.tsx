@@ -1,6 +1,7 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { useAuth } from "./AuthContext";
+import { ForbiddenPage } from "../errors/ForbiddenPage";
 
 export function RequireModerator({ children }: { children: JSX.Element }) {
   const location = useLocation();
@@ -11,7 +12,7 @@ export function RequireModerator({ children }: { children: JSX.Element }) {
   }
 
   if (!session.canAccessDashboard) {
-    return <Navigate to="/403" replace state={{ from: location.pathname }} />;
+    return <ForbiddenPage fromPath={location.pathname} />;
   }
 
   return children;

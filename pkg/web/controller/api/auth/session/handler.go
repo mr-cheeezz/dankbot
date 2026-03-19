@@ -21,6 +21,8 @@ type sessionUserResponse struct {
 	DisplayName        string `json:"display_name"`
 	AvatarURL          string `json:"avatar_url"`
 	IsModerator        bool   `json:"is_moderator"`
+	IsVIP              bool   `json:"is_vip"`
+	IsLeadModerator    bool   `json:"is_lead_moderator"`
 	IsBroadcaster      bool   `json:"is_broadcaster"`
 	IsBotAccount       bool   `json:"is_bot_account"`
 	IsEditor           bool   `json:"is_editor"`
@@ -62,6 +64,8 @@ func (h handler) status(w http.ResponseWriter, r *http.Request) {
 			DisplayName:        userSession.DisplayName,
 			AvatarURL:          userSession.AvatarURL,
 			IsModerator:        userSession.IsModerator,
+			IsVIP:              userSession.IsVIP,
+			IsLeadModerator:    userSession.IsLeadModerator,
 			IsBroadcaster:      userSession.IsBroadcaster,
 			IsBotAccount:       userSession.IsBotAccount,
 			IsEditor:           userSession.IsEditor,
@@ -123,6 +127,8 @@ func (h handler) refreshAccess(r *http.Request, sessionID string, userSession *s
 
 	next := *userSession
 	next.IsModerator = access.IsModerator
+	next.IsVIP = access.IsVIP
+	next.IsLeadModerator = access.IsLeadModerator
 	next.IsBroadcaster = access.IsBroadcaster
 	next.IsBotAccount = access.IsBotAccount
 	next.IsEditor = access.IsEditor

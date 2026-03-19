@@ -13,15 +13,26 @@ import {
   fetchBotControls,
   fetchAuditLogs,
   fetchDefaultKeywordSettings,
+  fetchModuleCatalog,
   fetchDashboardSummary,
   fetchFollowersOnlyModuleSettings,
   fetchGameModuleSettings,
+  fetchNewChatterGreetingModuleSettings,
+  fetchNowPlayingModuleSettings,
+  fetchQuoteModuleSettings,
+  fetchTabsModuleSettings,
+  fetchUserProfileModuleSettings,
   fetchModes,
   fetchSpamFilters,
   saveBotMode,
   saveDefaultKeywordSetting,
   saveFollowersOnlyModuleSettings,
   saveGameModuleSettings,
+  saveNewChatterGreetingModuleSettings,
+  saveNowPlayingModuleSettings,
+  saveQuoteModuleSettings,
+  saveTabsModuleSettings,
+  saveUserProfileModuleSettings,
   saveSpamFilter,
   toggleDashboardKillswitch,
   updateMode as updateDashboardMode,
@@ -49,10 +60,16 @@ import type {
   DashboardSummary,
   FollowersOnlyModuleSettings,
   GameModuleSettings,
+  NewChatterGreetingModuleSettings,
+  NowPlayingModuleSettings,
+  TabsModuleSettings,
+  UserProfileModuleSettings,
   GiveawayEntry,
   KeywordEntry,
   ModeEntry,
+  ModuleCatalogEntry,
   ModuleEntry,
+  ModuleSettingEntry,
   SpamFilterEntry,
   TimerEntry,
 } from "./types";
@@ -106,8 +123,13 @@ type ModeratorContextValue = {
   channelPointRewards: ChannelPointRewardEntry[];
   filteredChannelPointRewards: ChannelPointRewardEntry[];
   toggleChannelPointReward: (id: string) => void;
-  updateChannelPointReward: (id: string, next: Partial<ChannelPointRewardEntry>) => void;
-  createChannelPointReward: (entry: Omit<ChannelPointRewardEntry, "id">) => void;
+  updateChannelPointReward: (
+    id: string,
+    next: Partial<ChannelPointRewardEntry>,
+  ) => void;
+  createChannelPointReward: (
+    entry: Omit<ChannelPointRewardEntry, "id">,
+  ) => void;
   deleteChannelPointReward: (id: string) => void;
   modules: ModuleEntry[];
   filteredModules: ModuleEntry[];
@@ -160,113 +182,417 @@ function mergeSpamFilterMetadata(
 
   return {
     ...entry,
-    lengthSettings: entry.lengthSettings ?? existing?.lengthSettings ?? preset?.lengthSettings,
-    linkSettings: entry.linkSettings ?? existing?.linkSettings ?? preset?.linkSettings,
+    lengthSettings:
+      entry.lengthSettings ??
+      existing?.lengthSettings ??
+      preset?.lengthSettings,
+    linkSettings:
+      entry.linkSettings ?? existing?.linkSettings ?? preset?.linkSettings,
+    capsSettings:
+      entry.capsSettings ?? existing?.capsSettings ?? preset?.capsSettings,
+    messageFloodSettings:
+      entry.messageFloodSettings ??
+      existing?.messageFloodSettings ??
+      preset?.messageFloodSettings,
   };
 }
 
 const followersOnlyModuleID = "auto-followers-only";
+const newChatterGreetingModuleID = "new-chatter-greeting";
 const gameModuleID = "game";
+const nowPlayingModuleID = "now-playing";
+const quoteModuleID = "quotes";
+const tabsModuleID = "tabs";
+const userProfileModuleID = "user-profile";
+type ModuleCatalogByID = Map<string, ModuleCatalogEntry>;
+
+function normalizeModuleSettingType(
+  value: string,
+): ModuleSettingEntry["type"] {
+  switch (value) {
+    case "boolean":
+    case "number":
+    case "select":
+    case "textarea":
+      return value;
+    default:
+      return "text";
+  }
+}
+
+function buildModuleEntryFromCatalog(
+  catalogEntry: ModuleCatalogEntry,
+  enabled: boolean,
+  valuesByID: Map<string, string>,
+): ModuleEntry {
+  return {
+    id: catalogEntry.id,
+    name: catalogEntry.name,
+    state: catalogEntry.state,
+    detail: catalogEntry.detail,
+    enabled,
+    commands: [...catalogEntry.commands],
+    settings: catalogEntry.settings.map((setting) => ({
+      id: setting.id,
+      label: setting.label,
+      value: valuesByID.get(setting.id) ?? "",
+      type: normalizeModuleSettingType(setting.type),
+      helperText: setting.helperText,
+      options: setting.options,
+    })),
+  };
+}
+
+function upsertModuleFromCatalog(
+  current: ModuleEntry[],
+  catalogByID: ModuleCatalogByID,
+  moduleID: string,
+  enabled: boolean,
+  nextValues: Record<string, string>,
+): ModuleEntry[] {
+  const catalogEntry = catalogByID.get(moduleID);
+  if (catalogEntry == null) {
+    return current;
+  }
+
+  const existing = current.find((entry) => entry.id === moduleID);
+  const valuesByID = new Map<string, string>();
+  for (const setting of existing?.settings ?? []) {
+    valuesByID.set(setting.id, setting.value);
+  }
+  for (const [settingID, value] of Object.entries(nextValues)) {
+    valuesByID.set(settingID, value);
+  }
+
+  const mergedEntry = buildModuleEntryFromCatalog(
+    catalogEntry,
+    enabled,
+    valuesByID,
+  );
+
+  if (existing == null) {
+    return [mergedEntry, ...current];
+  }
+
+  return current.map((entry) => (entry.id === moduleID ? mergedEntry : entry));
+}
 
 function mergeFollowersOnlyModuleSettings(
   current: ModuleEntry[],
   settings: FollowersOnlyModuleSettings,
+  catalogByID: ModuleCatalogByID,
 ): ModuleEntry[] {
-  return current.map((entry) => {
-    if (entry.id !== followersOnlyModuleID) {
-      return entry;
-    }
-
-    return {
-      ...entry,
-      enabled: settings.enabled,
-      settings: entry.settings.map((setting) =>
-        setting.id === "auto-disable-minutes"
-          ? { ...setting, value: String(settings.autoDisableAfterMinutes) }
-          : setting,
-      ),
-    };
-  });
+  return upsertModuleFromCatalog(
+    current,
+    catalogByID,
+    followersOnlyModuleID,
+    settings.enabled,
+    {
+      "auto-disable-minutes": String(settings.autoDisableAfterMinutes),
+    },
+  );
 }
 
-function followersOnlySettingsFromModule(entry: ModuleEntry): FollowersOnlyModuleSettings {
-  const autoDisableSetting = entry.settings.find((setting) => setting.id === "auto-disable-minutes");
-  const rawValue = Number.parseInt(autoDisableSetting?.value ?? "30", 10);
+function followersOnlySettingsFromModule(
+  entry: ModuleEntry,
+): FollowersOnlyModuleSettings {
+  const autoDisableSetting = entry.settings.find(
+    (setting) => setting.id === "auto-disable-minutes",
+  );
+  const rawValue = Number.parseInt(autoDisableSetting?.value ?? "0", 10);
 
   return {
     enabled: entry.enabled,
-    autoDisableAfterMinutes: Number.isFinite(rawValue) && rawValue > 0 ? rawValue : 30,
+    autoDisableAfterMinutes:
+      Number.isFinite(rawValue) && rawValue > 0 ? rawValue : 0,
   };
 }
 
-function mergeGameModuleSettings(current: ModuleEntry[], settings: GameModuleSettings): ModuleEntry[] {
-  return current.map((entry) => {
-    if (entry.id !== gameModuleID) {
-      return entry;
-    }
+function mergeNewChatterGreetingModuleSettings(
+  current: ModuleEntry[],
+  settings: NewChatterGreetingModuleSettings,
+  catalogByID: ModuleCatalogByID,
+): ModuleEntry[] {
+  return upsertModuleFromCatalog(
+    current,
+    catalogByID,
+    newChatterGreetingModuleID,
+    settings.enabled,
+    {
+      "greeting-messages": settings.messages.join("\n"),
+    },
+  );
+}
 
-    return {
-      ...entry,
-      settings: entry.settings.map((setting) => {
-        switch (setting.id) {
-          case "viewer-question-enabled":
-            return { ...setting, value: settings.enabled ? "true" : "false" };
-          case "viewer-question-ai-detection":
-            return { ...setting, value: settings.aiDetectionEnabled ? "true" : "false" };
-          case "viewer-question-response":
-            return { ...setting, value: settings.keywordResponse };
-          default:
-            return setting;
-        }
-      }),
-    };
+function newChatterGreetingSettingsFromModule(
+  entry: ModuleEntry,
+): NewChatterGreetingModuleSettings {
+  const rawValue =
+    entry.settings.find((setting) => setting.id === "greeting-messages")
+      ?.value ?? "";
+
+  const messages = rawValue
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+
+  return {
+    enabled: entry.enabled,
+    messages,
+  };
+}
+
+function mergeGameModuleSettings(
+  current: ModuleEntry[],
+  settings: GameModuleSettings,
+  catalogByID: ModuleCatalogByID,
+): ModuleEntry[] {
+  return upsertModuleFromCatalog(current, catalogByID, gameModuleID, true, {
+    "viewer-question-enabled": settings.enabled ? "true" : "false",
+    "viewer-question-ai-detection": settings.aiDetectionEnabled
+      ? "true"
+      : "false",
+    "viewer-question-response": settings.keywordResponse,
+    "playtime-template": settings.playtimeTemplate,
+    "gamesplayed-template": settings.gamesPlayedTemplate,
+    "gamesplayed-item-template": settings.gamesPlayedItemTemplate,
+    "gamesplayed-limit": String(settings.gamesPlayedLimit),
   });
 }
 
 function gameModuleSettingsFromModule(entry: ModuleEntry): GameModuleSettings {
-  const enabled = entry.settings.find((setting) => setting.id === "viewer-question-enabled")?.value === "true";
+  const enabled =
+    entry.settings.find((setting) => setting.id === "viewer-question-enabled")
+      ?.value === "true";
   const aiDetectionEnabled =
-    entry.settings.find((setting) => setting.id === "viewer-question-ai-detection")?.value === "true";
+    entry.settings.find(
+      (setting) => setting.id === "viewer-question-ai-detection",
+    )?.value === "true";
   const keywordResponse =
-    entry.settings.find((setting) => setting.id === "viewer-question-response")?.value ??
-    "@{target}, use !game to see what {streamer} is currently playing.";
+    entry.settings.find((setting) => setting.id === "viewer-question-response")
+      ?.value ?? "";
+  const playtimeTemplate =
+    entry.settings.find((setting) => setting.id === "playtime-template")
+      ?.value ?? "";
+  const gamesPlayedTemplate =
+    entry.settings.find((setting) => setting.id === "gamesplayed-template")
+      ?.value ?? "";
+  const gamesPlayedItemTemplate =
+    entry.settings.find((setting) => setting.id === "gamesplayed-item-template")
+      ?.value ?? "";
+  const limitRaw = Number.parseInt(
+    entry.settings.find((setting) => setting.id === "gamesplayed-limit")
+      ?.value ?? "5",
+    10,
+  );
+  const gamesPlayedLimit =
+    Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 5;
 
   return {
     enabled,
     aiDetectionEnabled,
     keywordResponse,
+    playtimeTemplate,
+    gamesPlayedTemplate,
+    gamesPlayedItemTemplate,
+    gamesPlayedLimit,
+  };
+}
+
+function mergeNowPlayingModuleSettings(
+  current: ModuleEntry[],
+  settings: NowPlayingModuleSettings,
+  catalogByID: ModuleCatalogByID,
+): ModuleEntry[] {
+  return upsertModuleFromCatalog(
+    current,
+    catalogByID,
+    nowPlayingModuleID,
+    settings.enabled,
+    {
+      "viewer-question-ai-detection": settings.aiDetectionEnabled
+        ? "true"
+        : "false",
+      "viewer-question-response": settings.keywordResponse,
+    },
+  );
+}
+
+function nowPlayingModuleSettingsFromModule(
+  entry: ModuleEntry,
+): NowPlayingModuleSettings {
+  const aiDetectionEnabled =
+    entry.settings.find(
+      (setting) => setting.id === "viewer-question-ai-detection",
+    )?.value === "true";
+  const keywordResponse =
+    entry.settings.find((setting) => setting.id === "viewer-question-response")
+      ?.value ?? "";
+
+  return {
+    enabled: entry.enabled,
+    aiDetectionEnabled,
+    keywordResponse,
+  };
+}
+
+function mergeQuoteModuleSettings(
+  current: ModuleEntry[],
+  settings: { enabled: boolean },
+  catalogByID: ModuleCatalogByID,
+): ModuleEntry[] {
+  return upsertModuleFromCatalog(
+    current,
+    catalogByID,
+    quoteModuleID,
+    settings.enabled,
+    {},
+  );
+}
+
+function mergeTabsModuleSettings(
+  current: ModuleEntry[],
+  settings: TabsModuleSettings,
+  catalogByID: ModuleCatalogByID,
+): ModuleEntry[] {
+  return upsertModuleFromCatalog(current, catalogByID, tabsModuleID, settings.enabled, {
+    enabled: settings.enabled ? "true" : "false",
+    "interest-rate-percent": String(settings.interestRatePercent),
+    "interest-every-days": String(settings.interestEveryDays),
+  });
+}
+
+function tabsModuleSettingsFromModule(entry: ModuleEntry): TabsModuleSettings {
+  const enabled =
+    entry.settings.find((setting) => setting.id === "enabled")?.value ===
+    "true";
+  const interestRateRaw = Number.parseFloat(
+    entry.settings.find((setting) => setting.id === "interest-rate-percent")
+      ?.value ?? "0",
+  );
+  const interestEveryDaysRaw = Number.parseInt(
+    entry.settings.find((setting) => setting.id === "interest-every-days")
+      ?.value ?? "7",
+    10,
+  );
+
+  return {
+    enabled,
+    interestRatePercent:
+      Number.isFinite(interestRateRaw) && interestRateRaw >= 0
+        ? interestRateRaw
+        : 0,
+    interestEveryDays:
+      Number.isFinite(interestEveryDaysRaw) && interestEveryDaysRaw > 0
+        ? interestEveryDaysRaw
+        : 7,
+  };
+}
+
+function mergeUserProfileModuleSettings(
+  current: ModuleEntry[],
+  settings: UserProfileModuleSettings,
+  catalogByID: ModuleCatalogByID,
+): ModuleEntry[] {
+  return upsertModuleFromCatalog(
+    current,
+    catalogByID,
+    userProfileModuleID,
+    settings.enabled,
+    {
+      enabled: settings.enabled ? "true" : "false",
+      "show-tab-section": settings.showTabSection ? "true" : "false",
+      "show-tab-history": settings.showTabHistory ? "true" : "false",
+      "show-redemption-activity": settings.showRedemptionActivity
+        ? "true"
+        : "false",
+      "show-poll-stats": settings.showPollStats ? "true" : "false",
+      "show-prediction-stats": settings.showPredictionStats ? "true" : "false",
+      "show-last-seen": settings.showLastSeen ? "true" : "false",
+      "show-last-chat-activity": settings.showLastChatActivity
+        ? "true"
+        : "false",
+    },
+  );
+}
+
+function userProfileModuleSettingsFromModule(
+  entry: ModuleEntry,
+): UserProfileModuleSettings {
+  const getBool = (id: string, fallback: boolean) => {
+    const value = entry.settings.find((setting) => setting.id === id)?.value;
+    if (value == null || value.trim() === "") {
+      return fallback;
+    }
+    return value === "true";
+  };
+
+  return {
+    enabled: getBool("enabled", entry.enabled),
+    showTabSection: getBool("show-tab-section", true),
+    showTabHistory: getBool("show-tab-history", true),
+    showRedemptionActivity: getBool("show-redemption-activity", true),
+    showPollStats: getBool("show-poll-stats", true),
+    showPredictionStats: getBool("show-prediction-stats", true),
+    showLastSeen: getBool("show-last-seen", true),
+    showLastChatActivity: getBool("show-last-chat-activity", true),
   };
 }
 
 export function ModeratorProvider({ children }: PropsWithChildren) {
-  const [summary, setSummary] = useState<DashboardSummary>(defaultDashboardSummary);
+  const [summary, setSummary] = useState<DashboardSummary>(
+    defaultDashboardSummary,
+  );
   const [summaryLoading, setSummaryLoading] = useState(true);
-  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(initialAuditEntries);
+  const [auditEntries, setAuditEntries] =
+    useState<AuditEntry[]>(initialAuditEntries);
   const [notice, setNotice] = useState(
     "dashboard controls are local UI actions until the real settings endpoints are wired",
   );
   const [query, setQuery] = useState("");
-  const [commands, setCommands] = useState<CommandEntry[]>(initialCommandEntries);
-  const [keywords, setKeywords] = useState<KeywordEntry[]>(initialKeywordEntries);
+  const [commands, setCommands] = useState<CommandEntry[]>(
+    initialCommandEntries,
+  );
+  const [keywords, setKeywords] = useState<KeywordEntry[]>(
+    initialKeywordEntries,
+  );
   const [modes, setModes] = useState<ModeEntry[]>(initialModeEntries);
   const [timers, setTimers] = useState<TimerEntry[]>(initialTimerEntries);
-  const [giveaways, setGiveaways] = useState<GiveawayEntry[]>(initialGiveawayEntries);
-  const [channelPointRewards, setChannelPointRewards] =
-    useState<ChannelPointRewardEntry[]>(initialChannelPointRewardEntries);
+  const [giveaways, setGiveaways] = useState<GiveawayEntry[]>(
+    initialGiveawayEntries,
+  );
+  const [channelPointRewards, setChannelPointRewards] = useState<
+    ChannelPointRewardEntry[]
+  >(initialChannelPointRewardEntries);
+  const [moduleCatalog, setModuleCatalog] = useState<ModuleCatalogEntry[]>([]);
   const [modules, setModules] = useState<ModuleEntry[]>(initialModuleEntries);
   const [alerts, setAlerts] = useState<AlertEntry[]>(initialAlertEntries);
-  const [spamFilters, setSpamFilters] = useState<SpamFilterEntry[]>(initialSpamFilterEntries);
-  const [selectedCommandId, setSelectedCommandId] = useState(initialCommandEntries[0]?.id ?? "");
-  const [selectedAlertId, setSelectedAlertId] = useState(initialAlertEntries[0]?.id ?? "");
-  const [selectedSpamFilterId, setSelectedSpamFilterId] = useState(initialSpamFilterEntries[0]?.id ?? "");
+  const [spamFilters, setSpamFilters] = useState<SpamFilterEntry[]>(
+    initialSpamFilterEntries,
+  );
+  const [selectedCommandId, setSelectedCommandId] = useState(
+    initialCommandEntries[0]?.id ?? "",
+  );
+  const [selectedAlertId, setSelectedAlertId] = useState(
+    initialAlertEntries[0]?.id ?? "",
+  );
+  const [selectedSpamFilterId, setSelectedSpamFilterId] = useState(
+    initialSpamFilterEntries[0]?.id ?? "",
+  );
   const [hiddenPanels, setHiddenPanels] = useState<HiddenPanel[]>([]);
   const [blockedPhrase, setBlockedPhrase] = useState("");
   const [botMuted, setBotMuted] = useState(false);
   const [channelJoined, setChannelJoined] = useState(true);
   const [streamTitle, setStreamTitle] = useState(initialStreamTitle);
   const [streamGame, setStreamGame] = useState(initialStreamGame);
-  const [availableBotModes, setAvailableBotModes] = useState<BotModeOption[]>([]);
+  const [availableBotModes, setAvailableBotModes] = useState<BotModeOption[]>(
+    [],
+  );
   const [currentBotModeKey, setCurrentBotModeKey] = useState("join");
+  const moduleCatalogLookup = useMemo(
+    () => new Map(moduleCatalog.map((entry) => [entry.id, entry])),
+    [moduleCatalog],
+  );
 
   const refreshAuditEntries = async (signal?: AbortSignal) => {
     try {
@@ -301,8 +627,12 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     fetchSpamFilters(controller.signal)
       .then((nextFilters) => {
         if (nextFilters.length > 0) {
-          setSpamFilters(nextFilters.map((entry) => mergeSpamFilterMetadata(entry)));
-          setSelectedSpamFilterId((current) => current || nextFilters[0]?.id || "");
+          setSpamFilters(
+            nextFilters.map((entry) => mergeSpamFilterMetadata(entry)),
+          );
+          setSelectedSpamFilterId(
+            (current) => current || nextFilters[0]?.id || "",
+          );
         }
       })
       .catch(() => {
@@ -326,7 +656,10 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     fetchDefaultKeywordSettings(controller.signal)
       .then((nextSettings) => {
         const settingsByName = new Map(
-          nextSettings.map((entry) => [entry.keywordName.trim().toLowerCase(), entry]),
+          nextSettings.map((entry) => [
+            entry.keywordName.trim().toLowerCase(),
+            entry,
+          ]),
         );
         setKeywords((current) =>
           current.map((entry) => {
@@ -334,7 +667,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
               return entry;
             }
 
-            const setting = settingsByName.get(entry.trigger.trim().toLowerCase());
+            const setting = settingsByName.get(
+              entry.trigger.trim().toLowerCase(),
+            );
             if (setting == null) {
               return entry;
             }
@@ -351,31 +686,135 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
         setKeywords(initialKeywordEntries);
       });
 
-    fetchFollowersOnlyModuleSettings(controller.signal)
-      .then((nextSettings) => {
-        setModules((current) => mergeFollowersOnlyModuleSettings(current, nextSettings));
-      })
-      .catch(() => {
-        setModules((current) =>
-          mergeFollowersOnlyModuleSettings(current, {
-            enabled: false,
-            autoDisableAfterMinutes: 30,
-          }),
-        );
-      });
+    fetchModuleCatalog(controller.signal)
+      .then((catalogEntries) => {
+        if (controller.signal.aborted) {
+          return;
+        }
 
-    fetchGameModuleSettings(controller.signal)
-      .then((nextSettings) => {
-        setModules((current) => mergeGameModuleSettings(current, nextSettings));
+        setModuleCatalog(catalogEntries);
+        setModules(
+          catalogEntries.map((entry) =>
+            buildModuleEntryFromCatalog(entry, false, new Map()),
+          ),
+        );
+
+        const catalogByID = new Map(
+          catalogEntries.map((entry) => [entry.id, entry]),
+        );
+
+        void fetchFollowersOnlyModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeFollowersOnlyModuleSettings(
+                current,
+                nextSettings,
+                catalogByID,
+              ),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice(
+                "Could not load the auto followers-only module right now.",
+              );
+            }
+          });
+
+        void fetchNewChatterGreetingModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeNewChatterGreetingModuleSettings(
+                current,
+                nextSettings,
+                catalogByID,
+              ),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice(
+                "Could not load the new chatter greeting module right now.",
+              );
+            }
+          });
+
+        void fetchGameModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeGameModuleSettings(current, nextSettings, catalogByID),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice("Could not load the game module settings right now.");
+            }
+          });
+
+        void fetchNowPlayingModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeNowPlayingModuleSettings(
+                current,
+                nextSettings,
+                catalogByID,
+              ),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice(
+                "Could not load the now playing module settings right now.",
+              );
+            }
+          });
+
+        void fetchQuoteModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeQuoteModuleSettings(current, nextSettings, catalogByID),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice("Could not load the quotes module settings right now.");
+            }
+          });
+
+        void fetchTabsModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeTabsModuleSettings(current, nextSettings, catalogByID),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice("Could not load the tabs module settings right now.");
+            }
+          });
+
+        void fetchUserProfileModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeUserProfileModuleSettings(
+                current,
+                nextSettings,
+                catalogByID,
+              ),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice(
+                "Could not load the user profile module settings right now.",
+              );
+            }
+          });
       })
       .catch(() => {
-        setModules((current) =>
-          mergeGameModuleSettings(current, {
-            enabled: true,
-            aiDetectionEnabled: true,
-            keywordResponse: "@{target}, use !game to see what {streamer} is currently playing.",
-          }),
-        );
+        if (!controller.signal.aborted) {
+          setNotice("Could not load modules right now.");
+        }
       });
 
     fetchModes(controller.signal)
@@ -400,7 +839,10 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
         return;
       }
 
@@ -482,7 +924,10 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     }
 
     return modules.filter((entry) =>
-      [entry.name, entry.state, entry.detail].join(" ").toLowerCase().includes(normalizedQuery),
+      [entry.name, entry.state, entry.detail]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery),
     );
   }, [modules, normalizedQuery]);
 
@@ -537,11 +982,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       [
         entry.name,
         entry.type,
-        entry.status,
         entry.entryMethod,
         entry.description,
         entry.entryTrigger,
-        entry.requiredModeKey,
         entry.chatPrompt,
         entry.winnerMessage,
       ]
@@ -648,7 +1091,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
   const updateCommand = (commandId: string, next: Partial<CommandEntry>) => {
     setCommands((current) =>
-      current.map((entry) => (entry.id === commandId ? { ...entry, ...next } : entry)),
+      current.map((entry) =>
+        entry.id === commandId ? { ...entry, ...next } : entry,
+      ),
     );
   };
 
@@ -659,7 +1104,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
   const deleteCommand = (commandId: string) => {
     setCommands((current) =>
-      current.filter((entry) => !(entry.id === commandId && entry.kind === "custom")),
+      current.filter(
+        (entry) => !(entry.id === commandId && entry.kind === "custom"),
+      ),
     );
   };
 
@@ -690,7 +1137,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
     if (nextDefaultSetting != null) {
       void saveDefaultKeywordSetting(nextDefaultSetting).catch(() => {
-        setNotice(`${nextDefaultSetting?.keywordName} default keyword could not be saved right now`);
+        setNotice(
+          `${nextDefaultSetting?.keywordName} default keyword could not be saved right now`,
+        );
       });
     }
   };
@@ -719,7 +1168,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
     if (nextDefaultSetting != null) {
       void saveDefaultKeywordSetting(nextDefaultSetting).catch(() => {
-        setNotice(`${nextDefaultSetting?.keywordName} default keyword could not be saved right now`);
+        setNotice(
+          `${nextDefaultSetting?.keywordName} default keyword could not be saved right now`,
+        );
       });
     }
   };
@@ -731,7 +1182,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
   const deleteKeyword = (keywordId: string) => {
     setKeywords((current) =>
-      current.filter((entry) => !(entry.id === keywordId && entry.kind === "custom")),
+      current.filter(
+        (entry) => !(entry.id === keywordId && entry.kind === "custom"),
+      ),
     );
   };
 
@@ -752,6 +1205,8 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
           keywordDescription: merged.keywordDescription,
           keywordResponse: merged.keywordResponse,
           coordinatedTwitchTitle: merged.coordinatedTwitchTitle,
+          coordinatedTwitchCategoryID: merged.coordinatedTwitchCategoryID,
+          coordinatedTwitchCategoryName: merged.coordinatedTwitchCategoryName,
           timerEnabled: merged.timerEnabled,
           timerMessage: merged.timerMessage,
           timerIntervalSeconds: merged.timerIntervalSeconds,
@@ -760,7 +1215,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
         current.key,
       );
       setModes(nextModes);
-      setAvailableBotModes(nextModes.map((entry) => ({ key: entry.key, title: entry.title })));
+      setAvailableBotModes(
+        nextModes.map((entry) => ({ key: entry.key, title: entry.title })),
+      );
       const nextControls = await fetchBotControls().catch(() => null);
       if (nextControls != null) {
         setAvailableBotModes(nextControls.modes);
@@ -775,14 +1232,18 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     try {
       const nextModes = await createDashboardMode(entry);
       setModes(nextModes);
-      setAvailableBotModes(nextModes.map((item) => ({ key: item.key, title: item.title })));
+      setAvailableBotModes(
+        nextModes.map((item) => ({ key: item.key, title: item.title })),
+      );
       const nextControls = await fetchBotControls().catch(() => null);
       if (nextControls != null) {
         setAvailableBotModes(nextControls.modes);
         setCurrentBotModeKey(nextControls.currentModeKey || "join");
       }
     } catch {
-      setNotice(`${entry.title || entry.key} mode could not be created right now`);
+      setNotice(
+        `${entry.title || entry.key} mode could not be created right now`,
+      );
     }
   };
 
@@ -795,7 +1256,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     try {
       const nextModes = await deleteDashboardMode(current.key);
       setModes(nextModes);
-      setAvailableBotModes(nextModes.map((item) => ({ key: item.key, title: item.title })));
+      setAvailableBotModes(
+        nextModes.map((item) => ({ key: item.key, title: item.title })),
+      );
       const nextControls = await fetchBotControls().catch(() => null);
       if (nextControls != null) {
         setAvailableBotModes(nextControls.modes);
@@ -813,13 +1276,17 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
   const updateTimer = async (timerId: string, next: Partial<TimerEntry>) => {
     setTimers((current) =>
-      current.map((entry) => (entry.id === timerId ? { ...entry, ...next } : entry)),
+      current.map((entry) =>
+        entry.id === timerId ? { ...entry, ...next } : entry,
+      ),
     );
   };
 
   const deleteTimer = (timerId: string) => {
     setTimers((current) =>
-      current.filter((entry) => !(entry.id === timerId && entry.source === "custom")),
+      current.filter(
+        (entry) => !(entry.id === timerId && entry.source === "custom"),
+      ),
     );
   };
 
@@ -833,7 +1300,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
   const updateGiveaway = (giveawayId: string, next: Partial<GiveawayEntry>) => {
     setGiveaways((current) =>
-      current.map((entry) => (entry.id === giveawayId ? { ...entry, ...next } : entry)),
+      current.map((entry) =>
+        entry.id === giveawayId ? { ...entry, ...next } : entry,
+      ),
     );
   };
 
@@ -861,11 +1330,15 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     next: Partial<ChannelPointRewardEntry>,
   ) => {
     setChannelPointRewards((current) =>
-      current.map((entry) => (entry.id === rewardId ? { ...entry, ...next } : entry)),
+      current.map((entry) =>
+        entry.id === rewardId ? { ...entry, ...next } : entry,
+      ),
     );
   };
 
-  const createChannelPointReward = (entry: Omit<ChannelPointRewardEntry, "id">) => {
+  const createChannelPointReward = (
+    entry: Omit<ChannelPointRewardEntry, "id">,
+  ) => {
     const id = `reward-${Date.now().toString(36)}`;
     setChannelPointRewards((current) => [{ ...entry, id }, ...current]);
   };
@@ -892,9 +1365,13 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     );
 
     if (moduleId === followersOnlyModuleID) {
-      void saveFollowersOnlyModuleSettings(followersOnlySettingsFromModule(optimisticEntry)).catch(() => {
+      void saveFollowersOnlyModuleSettings(
+        followersOnlySettingsFromModule(optimisticEntry),
+      ).catch(() => {
         setModules((current) =>
-          current.map((entry) => (entry.id === moduleId ? currentEntry : entry)),
+          current.map((entry) =>
+            entry.id === moduleId ? currentEntry : entry,
+          ),
         );
         setNotice("Could not save the auto followers-only module right now.");
       });
@@ -904,13 +1381,129 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     if (moduleId === gameModuleID) {
       void saveGameModuleSettings(gameModuleSettingsFromModule(optimisticEntry))
         .then((saved) => {
-          setModules((current) => mergeGameModuleSettings(current, saved));
+          setModules((current) =>
+            mergeGameModuleSettings(current, saved, moduleCatalogLookup),
+          );
         })
         .catch(() => {
           setModules((current) =>
-            current.map((entry) => (entry.id === moduleId ? currentEntry : entry)),
+            current.map((entry) =>
+              entry.id === moduleId ? currentEntry : entry,
+            ),
           );
-          setNotice("Could not save the game module keyword settings right now.");
+          setNotice(
+            "Could not save the game module keyword settings right now.",
+          );
+        });
+      return;
+    }
+
+    if (moduleId === newChatterGreetingModuleID) {
+      void saveNewChatterGreetingModuleSettings(
+        newChatterGreetingSettingsFromModule(optimisticEntry),
+      )
+        .then((saved) => {
+          setModules((current) =>
+            mergeNewChatterGreetingModuleSettings(
+              current,
+              saved,
+              moduleCatalogLookup,
+            ),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) =>
+              entry.id === moduleId ? currentEntry : entry,
+            ),
+          );
+          setNotice("Could not save the new chatter greeting module right now.");
+        });
+      return;
+    }
+
+    if (moduleId === nowPlayingModuleID) {
+      void saveNowPlayingModuleSettings(
+        nowPlayingModuleSettingsFromModule(optimisticEntry),
+      )
+        .then((saved) => {
+          setModules((current) =>
+            mergeNowPlayingModuleSettings(
+              current,
+              saved,
+              moduleCatalogLookup,
+            ),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) =>
+              entry.id === moduleId ? currentEntry : entry,
+            ),
+          );
+          setNotice(
+            "Could not save the now playing module keyword settings right now.",
+          );
+        });
+      return;
+    }
+
+    if (moduleId === quoteModuleID) {
+      void saveQuoteModuleSettings({ enabled: optimisticEntry.enabled })
+        .then((saved) => {
+          setModules((current) =>
+            mergeQuoteModuleSettings(current, saved, moduleCatalogLookup),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) =>
+              entry.id === moduleId ? currentEntry : entry,
+            ),
+          );
+          setNotice("Could not save the quotes module right now.");
+        });
+      return;
+    }
+
+    if (moduleId === tabsModuleID) {
+      void saveTabsModuleSettings(tabsModuleSettingsFromModule(optimisticEntry))
+        .then((saved) => {
+          setModules((current) =>
+            mergeTabsModuleSettings(current, saved, moduleCatalogLookup),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) =>
+              entry.id === moduleId ? currentEntry : entry,
+            ),
+          );
+          setNotice("Could not save the tabs module settings right now.");
+        });
+      return;
+    }
+
+    if (moduleId === userProfileModuleID) {
+      void saveUserProfileModuleSettings(
+        userProfileModuleSettingsFromModule(optimisticEntry),
+      )
+        .then((saved) => {
+          setModules((current) =>
+            mergeUserProfileModuleSettings(
+              current,
+              saved,
+              moduleCatalogLookup,
+            ),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) =>
+              entry.id === moduleId ? currentEntry : entry,
+            ),
+          );
+          setNotice("Could not save the user profile module settings right now.");
         });
     }
   };
@@ -927,9 +1520,17 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     );
 
     if (moduleId === followersOnlyModuleID) {
-      void saveFollowersOnlyModuleSettings(followersOnlySettingsFromModule(merged))
+      void saveFollowersOnlyModuleSettings(
+        followersOnlySettingsFromModule(merged),
+      )
         .then((saved) => {
-          setModules((current) => mergeFollowersOnlyModuleSettings(current, saved));
+          setModules((current) =>
+            mergeFollowersOnlyModuleSettings(
+              current,
+              saved,
+              moduleCatalogLookup,
+            ),
+          );
         })
         .catch(() => {
           setModules((current) =>
@@ -943,13 +1544,113 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     if (moduleId === gameModuleID) {
       void saveGameModuleSettings(gameModuleSettingsFromModule(merged))
         .then((saved) => {
-          setModules((current) => mergeGameModuleSettings(current, saved));
+          setModules((current) =>
+            mergeGameModuleSettings(current, saved, moduleCatalogLookup),
+          );
         })
         .catch(() => {
           setModules((current) =>
             current.map((entry) => (entry.id === moduleId ? existing : entry)),
           );
-          setNotice("Could not save the game module keyword settings right now.");
+          setNotice(
+            "Could not save the game module keyword settings right now.",
+          );
+        });
+      return;
+    }
+
+    if (moduleId === newChatterGreetingModuleID) {
+      void saveNewChatterGreetingModuleSettings(
+        newChatterGreetingSettingsFromModule(merged),
+      )
+        .then((saved) => {
+          setModules((current) =>
+            mergeNewChatterGreetingModuleSettings(
+              current,
+              saved,
+              moduleCatalogLookup,
+            ),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) => (entry.id === moduleId ? existing : entry)),
+          );
+          setNotice("Could not save the new chatter greeting module right now.");
+        });
+      return;
+    }
+
+    if (moduleId === nowPlayingModuleID) {
+      void saveNowPlayingModuleSettings(nowPlayingModuleSettingsFromModule(merged))
+        .then((saved) => {
+          setModules((current) =>
+            mergeNowPlayingModuleSettings(
+              current,
+              saved,
+              moduleCatalogLookup,
+            ),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) => (entry.id === moduleId ? existing : entry)),
+          );
+          setNotice(
+            "Could not save the now playing module keyword settings right now.",
+          );
+        });
+      return;
+    }
+
+    if (moduleId === quoteModuleID) {
+      void saveQuoteModuleSettings({ enabled: merged.enabled })
+        .then((saved) => {
+          setModules((current) =>
+            mergeQuoteModuleSettings(current, saved, moduleCatalogLookup),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) => (entry.id === moduleId ? existing : entry)),
+          );
+          setNotice("Could not save the quotes module right now.");
+        });
+      return;
+    }
+
+    if (moduleId === tabsModuleID) {
+      void saveTabsModuleSettings(tabsModuleSettingsFromModule(merged))
+        .then((saved) => {
+          setModules((current) =>
+            mergeTabsModuleSettings(current, saved, moduleCatalogLookup),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) => (entry.id === moduleId ? existing : entry)),
+          );
+          setNotice("Could not save the tabs module settings right now.");
+        });
+      return;
+    }
+
+    if (moduleId === userProfileModuleID) {
+      void saveUserProfileModuleSettings(userProfileModuleSettingsFromModule(merged))
+        .then((saved) => {
+          setModules((current) =>
+            mergeUserProfileModuleSettings(
+              current,
+              saved,
+              moduleCatalogLookup,
+            ),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) => (entry.id === moduleId ? existing : entry)),
+          );
+          setNotice("Could not save the user profile module settings right now.");
         });
     }
   };
@@ -970,13 +1671,17 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
 
   const updateAlertTemplate = (alertId: string, template: string) => {
     setAlerts((current) =>
-      current.map((entry) => (entry.id === alertId ? { ...entry, template } : entry)),
+      current.map((entry) =>
+        entry.id === alertId ? { ...entry, template } : entry,
+      ),
     );
   };
 
   const updateAlert = (alertId: string, next: Partial<AlertEntry>) => {
     setAlerts((current) =>
-      current.map((entry) => (entry.id === alertId ? { ...entry, ...next } : entry)),
+      current.map((entry) =>
+        entry.id === alertId ? { ...entry, ...next } : entry,
+      ),
     );
   };
 
@@ -995,7 +1700,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       const saved = await saveSpamFilter(optimisticEntry);
       setSpamFilters((current) =>
         current.map((entry) =>
-          entry.id === filterId ? mergeSpamFilterMetadata(saved, optimisticEntry) : entry,
+          entry.id === filterId
+            ? mergeSpamFilterMetadata(saved, optimisticEntry)
+            : entry,
         ),
       );
     } catch {
@@ -1006,10 +1713,15 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     }
   };
 
-  const updateSpamFilterLocal = (filterId: string, next: Partial<SpamFilterEntry>) => {
+  const updateSpamFilterLocal = (
+    filterId: string,
+    next: Partial<SpamFilterEntry>,
+  ) => {
     setSpamFilters((current) =>
       current.map((entry) =>
-        entry.id === filterId ? mergeSpamFilterMetadata({ ...entry, ...next }, entry) : entry,
+        entry.id === filterId
+          ? mergeSpamFilterMetadata({ ...entry, ...next }, entry)
+          : entry,
       ),
     );
   };
@@ -1023,7 +1735,10 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    const optimisticEntry = mergeSpamFilterMetadata({ ...currentEntry, ...next }, currentEntry);
+    const optimisticEntry = mergeSpamFilterMetadata(
+      { ...currentEntry, ...next },
+      currentEntry,
+    );
     setSpamFilters((current) =>
       current.map((entry) => (entry.id === filterId ? optimisticEntry : entry)),
     );
@@ -1032,7 +1747,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       const saved = await saveSpamFilter(optimisticEntry);
       setSpamFilters((current) =>
         current.map((entry) =>
-          entry.id === filterId ? mergeSpamFilterMetadata(saved, optimisticEntry) : entry,
+          entry.id === filterId
+            ? mergeSpamFilterMetadata(saved, optimisticEntry)
+            : entry,
         ),
       );
     } catch {
@@ -1044,7 +1761,9 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
   };
 
   const hidePanel = (panel: HiddenPanel) => {
-    setHiddenPanels((current) => (current.includes(panel) ? current : [...current, panel]));
+    setHiddenPanels((current) =>
+      current.includes(panel) ? current : [...current, panel],
+    );
   };
 
   const restorePanels = () => {
@@ -1158,10 +1877,10 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       spamFilters,
       filteredSpamFilters,
       selectedSpamFilter,
-    setSelectedSpamFilterId,
-    toggleSpamFilter,
-    updateSpamFilterLocal,
-    updateSpamFilter,
+      setSelectedSpamFilterId,
+      toggleSpamFilter,
+      updateSpamFilterLocal,
+      updateSpamFilter,
       hiddenPanels,
       hidePanel,
       restorePanels,
@@ -1234,7 +1953,11 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     ],
   );
 
-  return <ModeratorContext.Provider value={value}>{children}</ModeratorContext.Provider>;
+  return (
+    <ModeratorContext.Provider value={value}>
+      {children}
+    </ModeratorContext.Provider>
+  );
 }
 
 export function useModerator() {

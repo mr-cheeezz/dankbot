@@ -38,6 +38,7 @@ const defaultSettings: PublicHomeSettings = {
   showNowPlayingAlbumArt: true,
   showNowPlayingProgress: true,
   showNowPlayingLinks: true,
+  commandPrefix: "!",
   promoLinks: [],
   robloxLinkCommandTarget: "dankbot",
   robloxLinkCommandTemplate: "",
@@ -64,6 +65,7 @@ export function SettingsPage() {
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesSaving, setRolesSaving] = useState(false);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [userSearchError, setUserSearchError] = useState("");
   const [message, setMessage] = useState("");
   const [rolesMessage, setRolesMessage] = useState("");
   const [editorLogin, setEditorLogin] = useState("");
@@ -75,6 +77,7 @@ export function SettingsPage() {
     () => summary.integrations.some((entry) => entry.id === "spotify" && entry.status === "linked"),
     [summary.integrations],
   );
+  const commandPrefixDisplay = settings.commandPrefix.trim() === "" ? "!" : settings.commandPrefix.trim();
   const canManageEditors = session.user?.isBroadcaster === true || session.user?.isAdmin === true;
   const editorRoles = useMemo(
     () => dashboardRoles.filter((entry) => entry.roleName === "editor"),
@@ -117,18 +120,21 @@ export function SettingsPage() {
     const query = editorLogin.trim();
     if (query.length < 2) {
       setEditorSearchResults([]);
+      setUserSearchError("");
       return;
     }
 
     const controller = new AbortController();
     const timeoutID = window.setTimeout(() => {
       setUserSearchLoading(true);
+      setUserSearchError("");
       searchDashboardTwitchUsers(query, controller.signal)
         .then((results) => {
           setEditorSearchResults(results);
         })
         .catch(() => {
           setEditorSearchResults([]);
+          setUserSearchError("Could not load Twitch suggestions right now. Exact login still works.");
         })
         .finally(() => {
           setUserSearchLoading(false);
@@ -140,6 +146,30 @@ export function SettingsPage() {
       window.clearTimeout(timeoutID);
     };
   }, [canManageEditors, editorLogin]);
+
+  const editorSearchOptions = useMemo(() => {
+    const normalizedLogin = editorLogin.trim().replace(/^@+/, "").toLowerCase();
+    if (normalizedLogin.length < 2) {
+      return editorSearchResults;
+    }
+
+    const hasExactMatch = editorSearchResults.some(
+      (entry) => entry.login.trim().toLowerCase() === normalizedLogin,
+    );
+    if (hasExactMatch) {
+      return editorSearchResults;
+    }
+
+    return [
+      {
+        userId: `exact-login:${normalizedLogin}`,
+        login: normalizedLogin,
+        displayName: "",
+        avatarURL: "",
+      },
+      ...editorSearchResults,
+    ];
+  }, [editorLogin, editorSearchResults]);
 
   const updateField = <K extends keyof PublicHomeSettings>(key: K, value: PublicHomeSettings[K]) => {
     setSettings((current) => ({
@@ -310,7 +340,7 @@ export function SettingsPage() {
                         a channel moderator.
                       </Typography>
                       <Autocomplete
-                        options={editorSearchResults}
+                        options={editorSearchOptions}
                         loading={userSearchLoading}
                         filterOptions={(options) => options}
                         value={selectedEditorCandidate}
@@ -348,15 +378,27 @@ export function SettingsPage() {
                               src={option.avatarURL || undefined}
                               sx={{ width: 32, height: 32, bgcolor: "primary.dark" }}
                             >
-                              {(option.displayName || option.login).slice(0, 2).toUpperCase()}
+                              {(option.userId.startsWith("exact-login:")
+                                ? option.login
+                                : option.displayName || option.login)
+                                .slice(0, 2)
+                                .toUpperCase()}
                             </Avatar>
                             <Box sx={{ minWidth: 0 }}>
                               <Typography sx={{ fontWeight: 700 }} noWrap>
-                                {option.displayName || option.login}
+                                {option.userId.startsWith("exact-login:")
+                                  ? `Use exact login @${option.login}`
+                                  : option.displayName || option.login}
                               </Typography>
-                              <Typography color="text.secondary" sx={{ fontSize: "0.88rem" }} noWrap>
-                                @{option.login}
-                              </Typography>
+                              {option.userId.startsWith("exact-login:") ? (
+                                <Typography color="text.secondary" sx={{ fontSize: "0.88rem" }} noWrap>
+                                  Add this exact login even if Twitch shows no suggestions.
+                                </Typography>
+                              ) : (
+                                <Typography color="text.secondary" sx={{ fontSize: "0.88rem" }} noWrap>
+                                  @{option.login}
+                                </Typography>
+                              )}
                             </Box>
                           </Box>
                         )}
@@ -365,7 +407,12 @@ export function SettingsPage() {
                             {...params}
                             label="Search Twitch users"
                             placeholder="Start typing a Twitch login or display name"
-                            helperText="Exact Twitch login lookup works for any user. Broader suggestions depend on Twitch channel search."
+                            helperText={
+                              userSearchError !== ""
+                                ? userSearchError
+                                : "Exact Twitch login lookup works for any user. Broader suggestions depend on Twitch channel search."
+                            }
+                            error={userSearchError !== ""}
                           />
                         )}
                       />
@@ -671,6 +718,92 @@ export function SettingsPage() {
           <Stack spacing={2.5}>
             <Box>
               <Stack direction="row" spacing={1} alignItems="center">
+                <LinkRoundedIcon color="primary" />
+                <Typography variant="h5">Chat Command Prefix</Typography>
+              </Stack>
+              <Typography color="text.secondary" sx={{ mt: 0.8, maxWidth: 760 }}>
+                Set the default command prefix for chat commands. This is global and not tied to
+                Roblox link syncing.
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1fr) minmax(340px, 0.95fr)" },
+                gap: 2.5,
+              }}
+            >
+              <Stack spacing={2}>
+                <TextField
+                  label="Chat command prefix"
+                  value={settings.commandPrefix}
+                  onChange={(event) => updateField("commandPrefix", event.target.value)}
+                  disabled={saving || loading}
+                  helperText="Default is !. Example prefixes: !, ?, ."
+                  placeholder="!"
+                />
+
+                <Stack direction="row" spacing={1.25}>
+                  <Button
+                    variant="contained"
+                    onClick={() => {
+                      void handleSave();
+                    }}
+                    disabled={saving || loading}
+                  >
+                    {saving ? "Saving..." : "Save Prefix"}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      updateField("commandPrefix", "!");
+                    }}
+                    disabled={saving || loading}
+                  >
+                    Default (!)
+                  </Button>
+                </Stack>
+
+                {message !== "" ? (
+                  <Typography color="text.secondary" sx={{ fontSize: "0.92rem" }}>
+                    {message}
+                  </Typography>
+                ) : null}
+              </Stack>
+
+              <Card variant="outlined">
+                <CardContent sx={{ p: 2 }}>
+                  <Typography
+                    sx={{
+                      fontSize: "0.78rem",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: "text.secondary",
+                      mb: 1.4,
+                    }}
+                  >
+                    Preview
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>
+                    Example: {commandPrefixDisplay}help
+                  </Typography>
+                  <Typography color="text.secondary" sx={{ mt: 0.8, fontSize: "0.9rem" }}>
+                    The same prefix is used across command usage and UI previews.
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent sx={{ p: 2.5 }}>
+          <Stack spacing={2.5}>
+            <Box>
+              <Stack direction="row" spacing={1} alignItems="center">
                 <OpenInNewRoundedIcon color="primary" />
                 <Typography variant="h5">Public Home Promo Links</Typography>
               </Stack>
@@ -771,7 +904,7 @@ export function SettingsPage() {
                 <Typography variant="h5">Roblox Link Command</Typography>
               </Stack>
               <Typography color="text.secondary" sx={{ mt: 0.8, maxWidth: 820 }}>
-                Choose who should own <strong>!link</strong> after a moderator posts a Roblox
+                Choose who should own <strong>{`${commandPrefixDisplay}link`}</strong> after a moderator posts a Roblox
                 private server link. DankBot can answer it directly, or it can push a chat
                 management command into another bot.
               </Typography>
@@ -802,7 +935,7 @@ export function SettingsPage() {
                   }
                   disabled={saving || loading}
                 >
-                  <MenuItem value="dankbot">DankBot built-in !link</MenuItem>
+                  <MenuItem value="dankbot">{`DankBot built-in ${commandPrefixDisplay}link`}</MenuItem>
                   <MenuItem value="nightbot">Nightbot</MenuItem>
                   <MenuItem value="fossabot">Fossabot</MenuItem>
                   <MenuItem value="pajbot">Pajbot</MenuItem>
@@ -853,6 +986,12 @@ export function SettingsPage() {
                     Reset
                   </Button>
                 </Stack>
+
+                {message !== "" ? (
+                  <Typography color="text.secondary" sx={{ fontSize: "0.92rem" }}>
+                    {message}
+                  </Typography>
+                ) : null}
               </Stack>
 
               <Card variant="outlined">
@@ -873,7 +1012,7 @@ export function SettingsPage() {
                   <Stack spacing={1.1}>
                     <Typography sx={{ fontWeight: 700 }}>
                       {settings.robloxLinkCommandTarget === "dankbot"
-                        ? "DankBot will answer !link itself"
+                        ? `DankBot will answer ${commandPrefixDisplay}link itself`
                         : "DankBot will send this command into chat"}
                     </Typography>
                     <Box
@@ -889,7 +1028,7 @@ export function SettingsPage() {
                       }}
                     >
                       {settings.robloxLinkCommandTarget === "dankbot"
-                        ? "!link -> https://www.roblox.com/share?code=example&type=Server"
+                        ? `${commandPrefixDisplay}link -> https://www.roblox.com/share?code=example&type=Server`
                         : (settings.robloxLinkCommandTemplate || "{link}").replace(
                             "{link}",
                             "https://www.roblox.com/share?code=example&type=Server",

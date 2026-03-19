@@ -15,6 +15,7 @@ type publicHomeSettingsResponse struct {
 	ShowNowPlayingAlbumArt    bool                `json:"show_now_playing_album_art"`
 	ShowNowPlayingProgress    bool                `json:"show_now_playing_progress"`
 	ShowNowPlayingLinks       bool                `json:"show_now_playing_links"`
+	CommandPrefix             string              `json:"command_prefix"`
 	PromoLinks                []promoLinkResponse `json:"promo_links"`
 	RobloxLinkCommandTarget   string              `json:"roblox_link_command_target"`
 	RobloxLinkCommandTemplate string              `json:"roblox_link_command_template"`
@@ -102,6 +103,7 @@ func (h handler) updatePublicHomeSettings(w http.ResponseWriter, r *http.Request
 		ShowNowPlayingAlbumArt:    request.ShowNowPlayingAlbumArt,
 		ShowNowPlayingProgress:    request.ShowNowPlayingProgress,
 		ShowNowPlayingLinks:       request.ShowNowPlayingLinks,
+		CommandPrefix:             request.CommandPrefix,
 		PromoLinks:                promoLinksFromResponse(request.PromoLinks),
 		RobloxLinkCommandTarget:   request.RobloxLinkCommandTarget,
 		RobloxLinkCommandTemplate: request.RobloxLinkCommandTemplate,
@@ -126,6 +128,7 @@ func publicHomeSettingsToResponse(settings postgres.PublicHomeSettings) publicHo
 		ShowNowPlayingAlbumArt:    settings.ShowNowPlayingAlbumArt,
 		ShowNowPlayingProgress:    settings.ShowNowPlayingProgress,
 		ShowNowPlayingLinks:       settings.ShowNowPlayingLinks,
+		CommandPrefix:             settings.CommandPrefix,
 		PromoLinks:                promoLinksToResponse(settings.PromoLinks),
 		RobloxLinkCommandTarget:   settings.RobloxLinkCommandTarget,
 		RobloxLinkCommandTemplate: settings.RobloxLinkCommandTemplate,

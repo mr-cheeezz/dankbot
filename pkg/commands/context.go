@@ -8,6 +8,7 @@ type Context struct {
 	DisplayName   string
 	IsModerator   bool
 	IsBroadcaster bool
+	CommandPrefix string
 	Message       string
 	Command       string
 	Args          []string

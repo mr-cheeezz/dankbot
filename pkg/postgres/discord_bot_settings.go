@@ -16,10 +16,21 @@ type DiscordPingRole struct {
 	Enabled  bool   `json:"enabled"`
 }
 
+type DiscordGamePingSettings struct {
+	Enabled          bool   `json:"enabled"`
+	ChannelID        string `json:"channel_id"`
+	RoleID           string `json:"role_id"`
+	RoleName         string `json:"role_name"`
+	MessageTemplate  string `json:"message_template"`
+	IncludeWatchLink bool   `json:"include_watch_link"`
+	IncludeJoinLink  bool   `json:"include_join_link"`
+}
+
 type DiscordBotSettings struct {
 	GuildID          string
 	DefaultChannelID string
 	PingRoles        []DiscordPingRole
+	GamePing         DiscordGamePingSettings
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -37,6 +48,19 @@ func DefaultDiscordBotSettings(guildID string) DiscordBotSettings {
 		GuildID:          strings.TrimSpace(guildID),
 		DefaultChannelID: "",
 		PingRoles:        []DiscordPingRole{},
+		GamePing:         defaultDiscordGamePingSettings(),
+	}
+}
+
+func defaultDiscordGamePingSettings() DiscordGamePingSettings {
+	return DiscordGamePingSettings{
+		Enabled:          false,
+		ChannelID:        "",
+		RoleID:           "",
+		RoleName:         "",
+		MessageTemplate:  "NEW GAME: {game}",
+		IncludeWatchLink: true,
+		IncludeJoinLink:  true,
 	}
 }
 
@@ -51,6 +75,10 @@ func (s *DiscordBotSettingsStore) EnsureDefault(ctx context.Context, guildID str
 	if err != nil {
 		return fmt.Errorf("marshal discord bot settings defaults: %w", err)
 	}
+	gamePingPayload, err := json.Marshal(normalizeDiscordGamePingSettings(defaults.GamePing))
+	if err != nil {
+		return fmt.Errorf("marshal discord game ping defaults: %w", err)
+	}
 
 	_, err = db.ExecContext(
 		ctx,
@@ -60,15 +88,17 @@ INSERT INTO discord_bot_settings (
 	guild_id,
 	default_channel_id,
 	ping_roles_json,
+	game_ping_json,
 	created_at,
 	updated_at
 )
-VALUES (1, $1, $2, $3, NOW(), NOW())
+VALUES (1, $1, $2, $3, $4, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
 		strings.TrimSpace(defaults.GuildID),
 		strings.TrimSpace(defaults.DefaultChannelID),
 		payload,
+		gamePingPayload,
 	)
 	if err != nil {
 		return fmt.Errorf("ensure discord bot settings defaults: %w", err)
@@ -86,6 +116,7 @@ func (s *DiscordBotSettingsStore) Get(ctx context.Context) (*DiscordBotSettings,
 	var (
 		settings DiscordBotSettings
 		rawJSON  []byte
+		rawGame  []byte
 	)
 	err = db.QueryRowContext(
 		ctx,
@@ -94,6 +125,7 @@ SELECT
 	guild_id,
 	default_channel_id,
 	ping_roles_json,
+	game_ping_json,
 	created_at,
 	updated_at
 FROM discord_bot_settings
@@ -103,6 +135,7 @@ WHERE id = 1
 		&settings.GuildID,
 		&settings.DefaultChannelID,
 		&rawJSON,
+		&rawGame,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
 	)
@@ -118,10 +151,16 @@ WHERE id = 1
 			return nil, fmt.Errorf("decode discord bot ping roles: %w", err)
 		}
 	}
+	if len(rawGame) > 0 {
+		if err := json.Unmarshal(rawGame, &settings.GamePing); err != nil {
+			return nil, fmt.Errorf("decode discord game ping settings: %w", err)
+		}
+	}
 
 	settings.GuildID = strings.TrimSpace(settings.GuildID)
 	settings.DefaultChannelID = strings.TrimSpace(settings.DefaultChannelID)
 	settings.PingRoles = normalizeDiscordPingRoles(settings.PingRoles)
+	settings.GamePing = normalizeDiscordGamePingSettings(settings.GamePing)
 
 	return &settings, nil
 }
@@ -136,16 +175,22 @@ func (s *DiscordBotSettingsStore) Update(ctx context.Context, settings DiscordBo
 		GuildID:          strings.TrimSpace(settings.GuildID),
 		DefaultChannelID: strings.TrimSpace(settings.DefaultChannelID),
 		PingRoles:        normalizeDiscordPingRoles(settings.PingRoles),
+		GamePing:         normalizeDiscordGamePingSettings(settings.GamePing),
 	}
 
 	payload, err := json.Marshal(normalized.PingRoles)
 	if err != nil {
 		return nil, fmt.Errorf("marshal discord bot ping roles: %w", err)
 	}
+	gamePingPayload, err := json.Marshal(normalized.GamePing)
+	if err != nil {
+		return nil, fmt.Errorf("marshal discord game ping settings: %w", err)
+	}
 
 	var (
 		updated DiscordBotSettings
 		rawJSON []byte
+		rawGame []byte
 	)
 	err = db.QueryRowContext(
 		ctx,
@@ -155,22 +200,26 @@ SET
 	guild_id = $1,
 	default_channel_id = $2,
 	ping_roles_json = $3,
+	game_ping_json = $4,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
 	guild_id,
 	default_channel_id,
 	ping_roles_json,
+	game_ping_json,
 	created_at,
 	updated_at
 `,
 		normalized.GuildID,
 		normalized.DefaultChannelID,
 		payload,
+		gamePingPayload,
 	).Scan(
 		&updated.GuildID,
 		&updated.DefaultChannelID,
 		&rawJSON,
+		&rawGame,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,
 	)
@@ -186,7 +235,13 @@ RETURNING
 			return nil, fmt.Errorf("decode updated discord bot ping roles: %w", err)
 		}
 	}
+	if len(rawGame) > 0 {
+		if err := json.Unmarshal(rawGame, &updated.GamePing); err != nil {
+			return nil, fmt.Errorf("decode updated discord game ping settings: %w", err)
+		}
+	}
 	updated.PingRoles = normalizeDiscordPingRoles(updated.PingRoles)
+	updated.GamePing = normalizeDiscordGamePingSettings(updated.GamePing)
 
 	return &updated, nil
 }
@@ -240,4 +295,26 @@ func normalizeDiscordPingAlias(value string) string {
 	})
 
 	return strings.Trim(strings.Join(fields, "-"), "-")
+}
+
+func normalizeDiscordGamePingSettings(settings DiscordGamePingSettings) DiscordGamePingSettings {
+	defaults := defaultDiscordGamePingSettings()
+	looksLikeEmptyLegacy := !settings.Enabled &&
+		!settings.IncludeWatchLink &&
+		!settings.IncludeJoinLink &&
+		strings.TrimSpace(settings.ChannelID) == "" &&
+		strings.TrimSpace(settings.RoleID) == "" &&
+		strings.TrimSpace(settings.MessageTemplate) == ""
+	settings.ChannelID = strings.TrimSpace(settings.ChannelID)
+	settings.RoleID = strings.TrimSpace(settings.RoleID)
+	settings.RoleName = strings.TrimSpace(settings.RoleName)
+	settings.MessageTemplate = strings.TrimSpace(settings.MessageTemplate)
+	if settings.MessageTemplate == "" {
+		settings.MessageTemplate = defaults.MessageTemplate
+	}
+	if looksLikeEmptyLegacy {
+		settings.IncludeWatchLink = defaults.IncludeWatchLink
+		settings.IncludeJoinLink = defaults.IncludeJoinLink
+	}
+	return settings
 }

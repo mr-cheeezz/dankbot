@@ -1,8 +1,25 @@
 import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import AlbumRoundedIcon from "@mui/icons-material/AlbumRounded";
+import ChatRoundedIcon from "@mui/icons-material/ChatRounded";
+import FacebookIcon from "@mui/icons-material/Facebook";
+import GitHubIcon from "@mui/icons-material/GitHub";
 import GraphicEqRoundedIcon from "@mui/icons-material/GraphicEqRounded";
+import InstagramIcon from "@mui/icons-material/Instagram";
+import LanguageRoundedIcon from "@mui/icons-material/LanguageRounded";
+import LinkedInIcon from "@mui/icons-material/LinkedIn";
+import LiveTvRoundedIcon from "@mui/icons-material/LiveTvRounded";
 import MusicNoteRoundedIcon from "@mui/icons-material/MusicNoteRounded";
+import PinterestIcon from "@mui/icons-material/Pinterest";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
+import PublicRoundedIcon from "@mui/icons-material/PublicRounded";
+import RedditIcon from "@mui/icons-material/Reddit";
+import SmartDisplayRoundedIcon from "@mui/icons-material/SmartDisplayRounded";
+import SportsEsportsRoundedIcon from "@mui/icons-material/SportsEsportsRounded";
+import StorefrontRoundedIcon from "@mui/icons-material/StorefrontRounded";
+import TelegramIcon from "@mui/icons-material/Telegram";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import XIcon from "@mui/icons-material/X";
+import YouTubeIcon from "@mui/icons-material/YouTube";
 import {
   Box,
   Button,
@@ -122,7 +139,7 @@ export function PublicHomePage() {
   const streamerTitle = formatStreamerTitle(summary.channelName || summary.channelLogin);
   const joinCardTitle = `Join ${streamerTitle}`;
   const showNowPlayingCard =
-    summary.nowPlaying.enabled && summary.nowPlaying.trackName.trim() !== "";
+    loading || (summary.nowPlaying.enabled && summary.nowPlaying.trackName.trim() !== "");
   const showPromoLinks = summary.promoLinks.length > 0;
   const liveNowPlayingProgressMS = useMemo(() => {
     if (!summary.nowPlaying.isPlaying) {
@@ -161,89 +178,116 @@ export function PublicHomePage() {
         }}
       >
         <Box>
-          <Card>
-            <CardContent sx={{ p: 2.5 }}>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                justifyContent="space-between"
-                spacing={1.5}
-                sx={{ mb: 2 }}
-              >
-                <Box>
-                  <Typography variant="h4">{summary.channelName}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    {summary.streamLive ? "live now" : "currently offline"}
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip color={summary.streamLive ? "success" : "default"} label={summary.streamLive ? "Live" : "Offline"} />
-                  <Chip
-                    color={summary.botRunning ? "primary" : "error"}
-                    label={summary.botRunning ? "Bot online" : "Bot offline"}
-                    sx={botStatusChipSx(summary.botRunning)}
-                  />
+          <Stack spacing={2.5}>
+            <Card>
+              <CardContent sx={{ p: 2.5 }}>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  justifyContent="space-between"
+                  spacing={1.5}
+                  sx={{ mb: 2 }}
+                >
+                  <Box>
+                    <Typography variant="h4">{summary.channelName}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {summary.streamLive ? "live now" : "currently offline"}
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Chip color={summary.streamLive ? "success" : "default"} label={summary.streamLive ? "Live" : "Offline"} />
+                    <Chip
+                      color={loading ? "default" : summary.botRunning ? "primary" : "error"}
+                      label={loading ? "Loading..." : summary.botRunning ? "Bot online" : "Bot offline"}
+                      sx={botStatusChipSx(summary.botRunning)}
+                    />
+                  </Stack>
                 </Stack>
-              </Stack>
 
-              {summary.streamLive && embedURL !== "" ? (
+                {summary.streamLive && embedURL !== "" ? (
+                  <Box
+                    sx={{
+                      overflow: "hidden",
+                      borderRadius: 1,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      aspectRatio: "16 / 9",
+                      mb: 2,
+                      "& iframe": {
+                        width: "100%",
+                        height: "100%",
+                        border: 0,
+                      },
+                    }}
+                  >
+                    <iframe
+                      title={`${summary.channelName} live stream`}
+                      src={embedURL}
+                      allowFullScreen
+                    />
+                  </Box>
+                ) : (
+                  <PaperLikeNotice
+                    title={loading ? "checking stream status..." : `${summary.channelName} is offline right now.`}
+                    copy="When the stream is live, the homepage will drop the Twitch embed right here so viewers can watch without leaving the site."
+                  />
+                )}
+
                 <Box
                   sx={{
-                    overflow: "hidden",
-                    borderRadius: 1,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    aspectRatio: "16 / 9",
-                    mb: 2,
-                    "& iframe": {
-                      width: "100%",
-                      height: "100%",
-                      border: 0,
-                    },
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                    gap: 1.5,
                   }}
                 >
-                  <iframe
-                    title={`${summary.channelName} live stream`}
-                    src={embedURL}
-                    allowFullScreen
+                  <MetaCard label="stream title" value={summary.streamTitle || "offline"} />
+                  <MetaCard label="current game" value={summary.streamGameName || "waiting for stream"} />
+                  <MetaCard
+                    label={summary.streamLive ? "live for" : "offline for"}
+                    value={
+                      summary.streamLive
+                        ? liveDuration
+                        : summary.streamEndedAt !== ""
+                          ? offlineDuration
+                          : "waiting for next stream"
+                    }
+                  />
+                  <MetaCard
+                    label={summary.streamLive ? "viewers" : "offline chatters"}
+                    value={
+                      summary.streamLive
+                        ? summary.viewerCount.toLocaleString()
+                        : summary.chatterCount.toLocaleString()
+                    }
                   />
                 </Box>
-              ) : (
-                <PaperLikeNotice
-                  title={loading ? "checking stream status..." : `${summary.channelName} is offline right now.`}
-                  copy="When the stream is live, the homepage will drop the Twitch embed right here so viewers can watch without leaving the site."
-                />
-              )}
+              </CardContent>
+            </Card>
 
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                  gap: 1.5,
-                }}
-              >
-                <MetaCard label="stream title" value={summary.streamTitle || "offline"} />
-                <MetaCard label="current game" value={summary.streamGameName || "waiting for stream"} />
-                <MetaCard
-                  label={summary.streamLive ? "live for" : "offline for"}
-                  value={
-                    summary.streamLive
-                      ? liveDuration
-                      : summary.streamEndedAt !== ""
-                        ? offlineDuration
-                        : "waiting for next stream"
-                  }
-                />
-                <MetaCard
-                  label={summary.streamLive ? "viewers" : "offline chatters"}
-                  value={
-                    summary.streamLive
-                      ? summary.viewerCount.toLocaleString()
-                      : summary.chatterCount.toLocaleString()
-                  }
-                />
-              </Box>
-            </CardContent>
-          </Card>
+            {showPromoLinks ? (
+              <Card>
+                <CardContent sx={{ p: 2.5 }}>
+                  <SectionHead title="Quick Links" subtitle="featured by the streamer" />
+
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: {
+                        xs: "1fr",
+                        sm: "repeat(2, minmax(0, 1fr))",
+                        xl: "repeat(3, minmax(0, 1fr))",
+                      },
+                      gap: 1.15,
+                      mt: 1.5,
+                    }}
+                  >
+                    {summary.promoLinks.map((link) => (
+                      <PromoLinkButton key={`${link.label}-${link.href}`} link={link} />
+                    ))}
+                  </Box>
+                </CardContent>
+              </Card>
+            ) : null}
+          </Stack>
         </Box>
 
         <Box>
@@ -258,7 +302,7 @@ export function PublicHomePage() {
                   />
                   <StatusRow
                     label="Uptime"
-                    value={summary.botRunning ? `Online for ${botUptime}` : "Offline"}
+                    value={loading ? "Loading..." : summary.botRunning ? `Online for ${botUptime}` : "Offline"}
                     valueSx={botStatusTextSx(summary.botRunning)}
                   />
                 </Stack>
@@ -270,9 +314,18 @@ export function PublicHomePage() {
                 <CardContent sx={{ p: 2.5 }}>
                   <SectionHead
                     title="Now Playing"
-                    subtitle={summary.nowPlaying.isPlaying ? "listening now" : "paused on spotify"}
+                    subtitle={
+                      loading
+                        ? "loading spotify..."
+                        : summary.nowPlaying.isPlaying
+                          ? "listening now"
+                          : "paused on spotify"
+                    }
                   />
 
+                  {loading ? (
+                    <AlertLikeMessage message="Loading Spotify status..." />
+                  ) : (
                   <Stack
                     direction={{ xs: "column", sm: "row" }}
                     spacing={1.75}
@@ -384,29 +437,7 @@ export function PublicHomePage() {
                       ) : null}
                     </Box>
                   </Stack>
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {showPromoLinks ? (
-              <Card>
-                <CardContent sx={{ p: 2.5 }}>
-                  <SectionHead title="Quick Links" subtitle="featured by the streamer" />
-
-                  <Stack direction="row" spacing={1.2} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
-                    {summary.promoLinks.map((link) => (
-                      <Button
-                        key={`${link.label}-${link.href}`}
-                        href={link.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        variant="outlined"
-                        endIcon={<OpenInNewRoundedIcon fontSize="small" />}
-                      >
-                        {link.label}
-                      </Button>
-                    ))}
-                  </Stack>
+                  )}
                 </CardContent>
               </Card>
             ) : null}
@@ -609,6 +640,25 @@ function PaperLikeNotice({ title, copy }: { title: string; copy: string }) {
   );
 }
 
+function AlertLikeMessage({ message }: { message: string }) {
+  return (
+    <Box
+      sx={{
+        mt: 1.5,
+        p: 1.5,
+        border: "1px solid",
+        borderColor: "divider",
+        borderRadius: 1,
+        bgcolor: "rgba(255,255,255,0.02)",
+      }}
+    >
+      <Typography variant="body2" color="text.secondary">
+        {message}
+      </Typography>
+    </Box>
+  );
+}
+
 function ActionLink({ href, label }: { href: string; label: string }) {
   return (
     <Button
@@ -622,6 +672,154 @@ function ActionLink({ href, label }: { href: string; label: string }) {
       {label}
     </Button>
   );
+}
+
+function PromoLinkButton({
+  link,
+}: {
+  link: {
+    label: string;
+    href: string;
+  };
+}) {
+  const metadata = getPromoLinkMetadata(link.href);
+
+  return (
+    <Button
+      component="a"
+      href={link.href}
+      target="_blank"
+      rel="noreferrer"
+      variant="outlined"
+      startIcon={metadata.icon}
+      endIcon={<OpenInNewRoundedIcon fontSize="small" />}
+      sx={{
+        justifyContent: "space-between",
+        px: 1.35,
+        py: 1.1,
+        minHeight: 52,
+        borderRadius: 1.35,
+        textTransform: "none",
+        fontWeight: 700,
+      }}
+    >
+      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+          {link.label}
+        </Box>
+        <Typography
+          component="span"
+          sx={{
+            fontSize: "0.74rem",
+            lineHeight: 1.2,
+            color: "text.secondary",
+            fontWeight: 500,
+            textTransform: "none",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: "100%",
+          }}
+        >
+          {metadata.hostLabel}
+        </Typography>
+      </Box>
+    </Button>
+  );
+}
+
+function getPromoLinkMetadata(href: string): { icon: ReactNode; hostLabel: string } {
+  const fallback = {
+    icon: <PublicRoundedIcon fontSize="small" />,
+    hostLabel: "External link",
+  };
+
+  try {
+    const url = new URL(href);
+    const hostname = url.hostname.replace(/^www\./, "").toLowerCase();
+    const parts = hostname.split(".");
+    const root = parts.length >= 2 ? parts.slice(-2).join(".") : hostname;
+
+    if (root === "github.com") {
+      return { icon: <GitHubIcon fontSize="small" />, hostLabel: "GitHub" };
+    }
+    if (root === "youtube.com" || hostname === "youtu.be") {
+      return { icon: <YouTubeIcon fontSize="small" />, hostLabel: "YouTube" };
+    }
+    if (root === "instagram.com") {
+      return { icon: <InstagramIcon fontSize="small" />, hostLabel: "Instagram" };
+    }
+    if (root === "x.com" || root === "twitter.com") {
+      return { icon: <XIcon fontSize="small" />, hostLabel: "X" };
+    }
+    if (root === "discord.com" || root === "discord.gg") {
+      return { icon: <ChatRoundedIcon fontSize="small" />, hostLabel: "Discord" };
+    }
+    if (root === "facebook.com" || hostname === "fb.me") {
+      return { icon: <FacebookIcon fontSize="small" />, hostLabel: "Facebook" };
+    }
+    if (root === "linkedin.com") {
+      return { icon: <LinkedInIcon fontSize="small" />, hostLabel: "LinkedIn" };
+    }
+    if (root === "reddit.com") {
+      return { icon: <RedditIcon fontSize="small" />, hostLabel: "Reddit" };
+    }
+    if (root === "telegram.org" || hostname === "t.me") {
+      return { icon: <TelegramIcon fontSize="small" />, hostLabel: "Telegram" };
+    }
+    if (root === "whatsapp.com" || hostname === "wa.me") {
+      return { icon: <WhatsAppIcon fontSize="small" />, hostLabel: "WhatsApp" };
+    }
+    if (root === "pinterest.com") {
+      return { icon: <PinterestIcon fontSize="small" />, hostLabel: "Pinterest" };
+    }
+    if (root === "spotify.com") {
+      return { icon: <MusicNoteRoundedIcon fontSize="small" />, hostLabel: "Spotify" };
+    }
+    if (
+      root === "twitch.tv" ||
+      root === "kick.com" ||
+      root === "tiktok.com" ||
+      hostname.endsWith(".tiktok.com")
+    ) {
+      return {
+        icon:
+          root === "tiktok.com"
+            ? <SmartDisplayRoundedIcon fontSize="small" />
+            : <LiveTvRoundedIcon fontSize="small" />,
+        hostLabel:
+          root === "twitch.tv" ? "Twitch" : root === "kick.com" ? "Kick" : "TikTok",
+      };
+    }
+    if (root === "steamcommunity.com" || root === "steampowered.com") {
+      return { icon: <SportsEsportsRoundedIcon fontSize="small" />, hostLabel: "Steam" };
+    }
+    if (
+      root === "patreon.com" ||
+      root === "gumroad.com" ||
+      root === "shopify.com" ||
+      root === "etsy.com" ||
+      hostname.includes("shop") ||
+      hostname.includes("store") ||
+      hostname.includes("merch")
+    ) {
+      return { icon: <StorefrontRoundedIcon fontSize="small" />, hostLabel: "Shop" };
+    }
+    if (root === "linktr.ee" || root === "beacons.ai" || root === "solo.to") {
+      return { icon: <LanguageRoundedIcon fontSize="small" />, hostLabel: "Link hub" };
+    }
+
+    const niceHost = root
+      .replace(/\.(com|gg|tv|net|org|io|ai|me|app|co)$/i, "")
+      .replace(/[-_]/g, " ");
+
+    return {
+      icon: <PublicRoundedIcon fontSize="small" />,
+      hostLabel: niceHost === "" ? "Website" : niceHost.replace(/\b\w/g, (char) => char.toUpperCase()),
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function formatDuration(value: string, nowMS: number): string {

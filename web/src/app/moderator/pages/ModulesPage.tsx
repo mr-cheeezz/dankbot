@@ -9,7 +9,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   Stack,
   Switch,
   Typography,
@@ -125,15 +124,6 @@ export function ModulesPage() {
                       />
                     </Stack>
                   </Stack>
-
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={`${entry.settings.length} setting${entry.settings.length === 1 ? "" : "s"}`}
-                    />
-                  </Stack>
-
                   <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1.25}>
                     <Typography color="text.secondary" sx={{ fontSize: "0.85rem" }}>
                       {entry.enabled ? "Ready to edit live settings." : "Disabled until you turn it back on."}
@@ -142,7 +132,7 @@ export function ModulesPage() {
                       variant="outlined"
                       size="small"
                       startIcon={<EditOutlinedIcon fontSize="small" />}
-                      onClick={() => navigate(`/dashboard/modules/${encodeURIComponent(entry.id)}`)}
+                      onClick={() => navigate(`/d/modules/${encodeURIComponent(entry.id)}`)}
                     >
                       Edit
                     </Button>
@@ -160,6 +150,8 @@ export function ModulesPage() {
 function moduleIcon(moduleID: ModuleEntry["id"]): SvgIconComponent {
   switch (moduleID) {
     case "auto-followers-only":
+      return PeopleAltRoundedIcon;
+    case "new-chatter-greeting":
       return PeopleAltRoundedIcon;
     case "default-commands":
       return ForumRoundedIcon;

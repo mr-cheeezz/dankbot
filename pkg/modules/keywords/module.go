@@ -15,13 +15,14 @@ import (
 const reloadInterval = 10 * time.Second
 
 type Module struct {
-	store     *postgres.KeywordStore
-	defaults  *postgres.DefaultKeywordSettingStore
-	game      *postgres.GameModuleSettingsStore
-	state     *postgres.BotStateStore
-	modes     *postgres.BotModeStore
-	accounts  *postgres.TwitchAccountStore
-	validator SemanticValidator
+	store      *postgres.KeywordStore
+	defaults   *postgres.DefaultKeywordSettingStore
+	game       *postgres.GameModuleSettingsStore
+	nowPlaying *postgres.NowPlayingModuleSettingsStore
+	state      *postgres.BotStateStore
+	modes      *postgres.BotModeStore
+	accounts   *postgres.TwitchAccountStore
+	validator  SemanticValidator
 
 	mu              sync.RWMutex
 	keywords        []postgres.Keyword
@@ -56,9 +57,8 @@ var builtInKeywords = []builtInKeyword{
 	{
 		name:      "what song is this",
 		candidate: shouldHandleBuiltInSong,
-		response: func(_ *Module, ctx modules.CommandContext) (string, error) {
-			target := targetMention(ctx)
-			return fmt.Sprintf("%s, use !song to see the current track. You can also use !song next or !song last.", target), nil
+		response: func(m *Module, ctx modules.CommandContext) (string, error) {
+			return m.builtInSongReply(ctx)
 		},
 	},
 	{
@@ -120,6 +120,13 @@ func (m *Module) SetGameModuleSettingsStore(store *postgres.GameModuleSettingsSt
 	m.game = store
 }
 
+func (m *Module) SetNowPlayingModuleSettingsStore(store *postgres.NowPlayingModuleSettingsStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.nowPlaying = store
+}
+
 func (m *Module) Name() string {
 	return "keywords"
 }
@@ -146,6 +153,11 @@ func (m *Module) Start(ctx context.Context) error {
 			return err
 		}
 	}
+	if m.nowPlaying != nil {
+		if err := m.nowPlaying.EnsureDefault(ctx); err != nil {
+			return err
+		}
+	}
 	if err := m.reload(ctx); err != nil {
 		return err
 	}
@@ -155,7 +167,7 @@ func (m *Module) Start(ctx context.Context) error {
 }
 
 func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResult, error) {
-	if strings.HasPrefix(strings.TrimSpace(ctx.Message), "!") {
+	if hasCommandPrefix(ctx.Message, ctx.CommandPrefix) {
 		return modules.MessageResult{}, nil
 	}
 
@@ -231,6 +243,16 @@ func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResul
 	}
 
 	return modules.MessageResult{}, nil
+}
+
+func hasCommandPrefix(message, prefix string) bool {
+	message = strings.TrimSpace(message)
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		prefix = "!"
+	}
+
+	return strings.HasPrefix(message, prefix)
 }
 
 func (m *Module) runReloadLoop(ctx context.Context) {
@@ -449,9 +471,6 @@ func (m *Module) builtInJoinReply(ctx modules.CommandContext) (string, error) {
 }
 
 func (m *Module) builtInGameReply(ctx modules.CommandContext) (string, error) {
-	target := targetMention(ctx)
-	streamer := m.streamerName(context.Background())
-
 	m.mu.RLock()
 	gameStore := m.game
 	m.mu.RUnlock()
@@ -467,6 +486,31 @@ func (m *Module) builtInGameReply(ctx modules.CommandContext) (string, error) {
 		}
 	}
 
+	return m.renderModuleKeywordResponse(ctx, responseTemplate), nil
+}
+
+func (m *Module) builtInSongReply(ctx modules.CommandContext) (string, error) {
+	m.mu.RLock()
+	nowPlayingStore := m.nowPlaying
+	m.mu.RUnlock()
+
+	responseTemplate := postgres.DefaultNowPlayingModuleSettings().KeywordResponse
+	if nowPlayingStore != nil {
+		settings, err := nowPlayingStore.Get(context.Background())
+		if err != nil {
+			return "", err
+		}
+		if settings != nil && strings.TrimSpace(settings.KeywordResponse) != "" {
+			responseTemplate = settings.KeywordResponse
+		}
+	}
+
+	return m.renderModuleKeywordResponse(ctx, responseTemplate), nil
+}
+
+func (m *Module) renderModuleKeywordResponse(ctx modules.CommandContext, template string) string {
+	target := targetMention(ctx)
+	streamer := m.streamerName(context.Background())
 	targetName := strings.TrimPrefix(strings.TrimSpace(target), "@")
 	replacer := strings.NewReplacer(
 		"@{target}", "@"+targetName,
@@ -474,7 +518,7 @@ func (m *Module) builtInGameReply(ctx modules.CommandContext) (string, error) {
 		"{streamer}", strings.TrimSpace(streamer),
 	)
 
-	return strings.TrimSpace(replacer.Replace(responseTemplate)), nil
+	return strings.TrimSpace(replacer.Replace(template))
 }
 
 func shouldHandleBuiltIn1v1(message string) bool {

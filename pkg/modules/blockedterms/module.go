@@ -21,7 +21,8 @@ type banUserFunc func(context.Context, string, string) error
 
 type compiledTerm struct {
 	postgres.BlockedTerm
-	regex *regexp.Regexp
+	regex                  *regexp.Regexp
+	normalizedPhraseGroups [][]string
 }
 
 type Module struct {
@@ -132,6 +133,8 @@ func (m *Module) reload(ctx context.Context) error {
 				continue
 			}
 			compiled.regex = regex
+		} else {
+			compiled.normalizedPhraseGroups = normalizePhraseGroups(item.PhraseGroups)
 		}
 
 		next = append(next, compiled)
@@ -158,6 +161,16 @@ func (m *Module) matchingTerm(message string) *compiledTerm {
 			continue
 		}
 
+		if len(term.normalizedPhraseGroups) > 0 {
+			for _, group := range term.normalizedPhraseGroups {
+				if phraseGroupMatches(group, normalized) {
+					copyTerm := term
+					return &copyTerm
+				}
+			}
+			continue
+		}
+
 		if strings.Contains(normalized, strings.ToLower(term.Pattern)) {
 			copyTerm := term
 			return &copyTerm
@@ -180,6 +193,8 @@ func (m *Module) applyAction(ctx modules.CommandContext, term compiledTerm) {
 	if reason == "" {
 		reason = "Blocked term detected."
 	}
+
+	reason += " - Automated by dankbot"
 
 	if strings.Contains(action, "delete") && strings.TrimSpace(ctx.MessageID) != "" && deleteMessage != nil {
 		if err := deleteMessage(context.Background(), ctx.MessageID); err != nil {
@@ -211,4 +226,38 @@ func (m *Module) applyAction(ctx modules.CommandContext, term compiledTerm) {
 			}
 		}
 	}
+}
+
+func normalizePhraseGroups(groups [][]string) [][]string {
+	normalized := make([][]string, 0, len(groups))
+	for _, group := range groups {
+		nextGroup := make([]string, 0, len(group))
+		for _, phrase := range group {
+			value := strings.TrimSpace(strings.ToLower(phrase))
+			if value == "" {
+				continue
+			}
+			nextGroup = append(nextGroup, value)
+		}
+		if len(nextGroup) == 0 {
+			continue
+		}
+		normalized = append(normalized, nextGroup)
+	}
+
+	return normalized
+}
+
+func phraseGroupMatches(group []string, normalizedMessage string) bool {
+	if len(group) == 0 {
+		return false
+	}
+
+	for _, phrase := range group {
+		if !strings.Contains(normalizedMessage, phrase) {
+			return false
+		}
+	}
+
+	return true
 }

@@ -25,7 +25,8 @@ type channelsResponse struct {
 }
 
 type UpdateChannelInformationRequest struct {
-	Title *string `json:"title,omitempty"`
+	Title  *string `json:"title,omitempty"`
+	GameID *string `json:"game_id,omitempty"`
 }
 
 func (c *Client) GetChannelsByBroadcasterIDs(ctx context.Context, broadcasterIDs []string) ([]Channel, error) {

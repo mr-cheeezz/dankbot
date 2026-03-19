@@ -21,9 +21,11 @@ import (
 	robloxmodule "github.com/mr-cheeezz/dankbot/pkg/modules/game"
 	keywordsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/keywords"
 	modesmodule "github.com/mr-cheeezz/dankbot/pkg/modules/modes"
+	newchattergreetingmodule "github.com/mr-cheeezz/dankbot/pkg/modules/newchattergreeting"
 	spotifymodule "github.com/mr-cheeezz/dankbot/pkg/modules/now-playing"
 	quotesmodule "github.com/mr-cheeezz/dankbot/pkg/modules/quotes"
 	spamfiltersmodule "github.com/mr-cheeezz/dankbot/pkg/modules/spamfilters"
+	tabsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/tabs"
 	"github.com/mr-cheeezz/dankbot/pkg/openai"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 	redispkg "github.com/mr-cheeezz/dankbot/pkg/redis"
@@ -46,13 +48,18 @@ type runtime struct {
 	modeStore          *postgres.BotModeStore
 	stateStore         *postgres.BotStateStore
 	socialStore        *postgres.BotSocialPromotionStore
+	publicHomeSettings *postgres.PublicHomeSettingsStore
 	auditStore         *postgres.AuditLogStore
 	modeModule         *modesmodule.Module
 	alertsModule       *alertsmodule.Module
 	discordBotModule   *discordbotmodule.Module
+	greetingModule     *newchattergreetingmodule.Module
 	spotifyModule      *spotifymodule.Module
 	spamFiltersModule  *spamfiltersmodule.Module
 	blockedTermsModule *blockedtermsmodule.Module
+	chatActivityStore  *postgres.TwitchUserChatActivityStore
+	chatActivityMu     sync.Mutex
+	chatActivityLast   map[string]time.Time
 	botAccount         *postgres.TwitchAccount
 	streamer           *postgres.TwitchAccount
 	onConnectOnce      sync.Once
@@ -61,6 +68,7 @@ type runtime struct {
 	helixToken         *twitchoauth.Token
 	helixMu            sync.Mutex
 	helixSendDownUntil time.Time
+	commandPrefix      string
 	startedAt          time.Time
 }
 
@@ -88,9 +96,11 @@ func newRuntime(cfg *config.Config) *runtime {
 	stateStore := postgres.NewBotStateStore(postgresClient)
 	socialStore := postgres.NewBotSocialPromotionStore(postgresClient)
 	auditStore := postgres.NewAuditLogStore(postgresClient)
+	chatActivityStore := postgres.NewTwitchUserChatActivityStore(postgresClient)
 	publicHomeSettingsStore := postgres.NewPublicHomeSettingsStore(postgresClient)
 	defaultCommandStore := postgres.NewDefaultCommandSettingStore(postgresClient)
 	defaultKeywordStore := postgres.NewDefaultKeywordSettingStore(postgresClient)
+	gameModuleSettingsStore := postgres.NewGameModuleSettingsStore(postgresClient)
 	modeModule := modesmodule.New(modeStore, stateStore, socialStore, auditStore, cfg.Main.AdminID, cfg.Main.StreamerID)
 	streamChecker := newStreamStatusChecker(cfg, twitchAccountStore)
 	modeModule.SetStreamLiveChecker(streamChecker.IsLive)
@@ -99,9 +109,11 @@ func newRuntime(cfg *config.Config) *runtime {
 	alertsModule := alertsmodule.New(redisClient, stateStore)
 	discordModule := discordbotmodule.New(
 		postgres.NewDiscordBotSettingsStore(postgresClient),
+		stateStore,
 		"",
 		cfg.Main.AdminID,
 	)
+	discordModule.SetStreamLiveChecker(streamChecker.IsLive)
 	spotifyModule := spotifymodule.New(
 		postgres.NewSpotifyAccountStore(postgresClient),
 		twitchAccountStore,
@@ -122,7 +134,8 @@ func newRuntime(cfg *config.Config) *runtime {
 		cfg.Main.StreamerID,
 	)
 	keywordsModule.SetModeStore(modeStore)
-	keywordsModule.SetGameModuleSettingsStore(postgres.NewGameModuleSettingsStore(postgresClient))
+	keywordsModule.SetGameModuleSettingsStore(gameModuleSettingsStore)
+	keywordsModule.SetNowPlayingModuleSettingsStore(postgres.NewNowPlayingModuleSettingsStore(postgresClient))
 	if cfg.OpenAI.Enabled && cfg.OpenAI.KeywordValidation {
 		keywordsModule.SetSemanticValidator(openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, cfg.OpenAI.Timeout))
 	}
@@ -142,12 +155,23 @@ func newRuntime(cfg *config.Config) *runtime {
 	moduleRunner.Register(blockedTermsModule)
 	moduleRunner.Register(spamFiltersModule)
 	moduleRunner.Register(keywordsModule)
-	moduleRunner.Register(quotesmodule.New(postgres.NewQuoteStore(postgresClient), auditStore, cfg.Main.AdminID, cfg.Main.StreamerID))
+	greetingModule := newchattergreetingmodule.New(postgres.NewNewChatterGreetingModuleSettingsStore(postgresClient))
+	moduleRunner.Register(greetingModule)
+	quotesModule := quotesmodule.New(postgres.NewQuoteStore(postgresClient), auditStore, cfg.Main.AdminID, cfg.Main.StreamerID)
+	quotesModule.SetSettingsStore(postgres.NewQuoteModuleSettingsStore(postgresClient))
+	moduleRunner.Register(quotesModule)
+	moduleRunner.Register(tabsmodule.New(
+		postgres.NewUserTabStore(postgresClient),
+		postgres.NewTabsModuleSettingsStore(postgresClient),
+		cfg.Main.AdminID,
+		cfg.Main.StreamerID,
+	))
 	moduleRunner.Register(robloxmodule.New(
 		cfg.Roblox.Cookie,
 		cfg.Twitch.ClientID,
 		cfg.Main.StreamerID,
 		postgres.NewRobloxPlaytimeStore(postgresClient),
+		gameModuleSettingsStore,
 		twitchOAuthService,
 		twitchAccountStore,
 	))
@@ -164,14 +188,19 @@ func newRuntime(cfg *config.Config) *runtime {
 		modeStore:          modeStore,
 		stateStore:         stateStore,
 		socialStore:        socialStore,
+		publicHomeSettings: publicHomeSettingsStore,
 		auditStore:         auditStore,
 		modeModule:         modeModule,
 		alertsModule:       alertsModule,
 		discordBotModule:   discordModule,
+		greetingModule:     greetingModule,
 		spotifyModule:      spotifyModule,
 		spamFiltersModule:  spamFiltersModule,
 		blockedTermsModule: blockedTermsModule,
+		chatActivityStore:  chatActivityStore,
+		chatActivityLast:   make(map[string]time.Time),
 		helixOAuth:         twitchOAuthService,
+		commandPrefix:      "!",
 		startedAt:          time.Now().UTC(),
 	}
 }
@@ -184,6 +213,9 @@ func (r *runtime) Run(ctx context.Context) error {
 
 	if err := r.modules.Start(ctx); err != nil {
 		return err
+	}
+	if err := r.configureCommandPrefix(ctx); err != nil {
+		fmt.Printf("warning: could not load command prefix from channel settings: %v\n", err)
 	}
 
 	if err := r.initializeChat(ctx); err != nil {
@@ -226,6 +258,31 @@ func (r *runtime) Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+func (r *runtime) configureCommandPrefix(ctx context.Context) error {
+	prefix := "!"
+	if r.publicHomeSettings != nil {
+		if err := r.publicHomeSettings.EnsureDefault(ctx); err != nil {
+			return err
+		}
+
+		settings, err := r.publicHomeSettings.Get(ctx)
+		if err != nil {
+			return err
+		}
+		if settings != nil {
+			prefix = settings.CommandPrefix
+		}
+	}
+
+	prefix = normalizeRuntimeCommandPrefix(prefix)
+	r.commandPrefix = prefix
+	if r.dispatcher != nil {
+		r.dispatcher.SetPrefix(prefix)
+	}
+
+	return nil
 }
 
 func (r *runtime) runBotHeartbeat(ctx context.Context) {
@@ -364,6 +421,9 @@ func (r *runtime) initializeChat(ctx context.Context) error {
 	if r.spotifyModule != nil {
 		r.spotifyModule.SetChatOutput(streamerAccount.Login, r.sendChannelMessage)
 	}
+	if r.greetingModule != nil {
+		r.greetingModule.SetChatOutput(streamerAccount.Login, r.sendChannelMessage)
+	}
 	if r.spamFiltersModule != nil {
 		r.spamFiltersModule.SetModerationActions(r.deleteChatMessage, r.timeoutChatUser)
 	}
@@ -448,6 +508,7 @@ func (r *runtime) initializeDiscord(ctx context.Context) error {
 	r.discord = client
 	if r.discordBotModule != nil {
 		r.discordBotModule.SetDiscordSender(client.SendMessage)
+		r.discordBotModule.SetDiscordEmbedSender(client.SendEmbed)
 	}
 
 	return nil
@@ -562,8 +623,7 @@ func (r *runtime) onPrivateMessage(message chat.Message) {
 	if r.botAccount != nil && message.SenderID == r.botAccount.TwitchUserID {
 		return
 	}
-
-	fmt.Printf("[%s] %s: %s\n", message.Channel, message.Sender, message.Text)
+	r.trackChatActivity(message)
 
 	if r.killswitchEnabled(message.Text) {
 		return
@@ -578,6 +638,8 @@ func (r *runtime) onPrivateMessage(message chat.Message) {
 			DisplayName:   message.DisplayName,
 			IsModerator:   message.IsModerator,
 			IsBroadcaster: message.IsBroadcaster,
+			CommandPrefix: r.commandPrefix,
+			FirstMessage:  message.FirstMessage,
 			MessageID:     message.ReplyTo,
 			Message:       message.Text,
 		})
@@ -615,9 +677,37 @@ func (r *runtime) onPrivateMessage(message chat.Message) {
 	r.sendChatReply(message, result.Reply)
 }
 
-func (r *runtime) onDiscordMessage(message discordbot.Message) {
-	fmt.Printf("[discord:%s] %s: %s\n", message.ChannelID, message.Sender, message.Content)
+func (r *runtime) trackChatActivity(message chat.Message) {
+	if r.chatActivityStore == nil {
+		return
+	}
+	userID := strings.TrimSpace(message.SenderID)
+	userLogin := strings.TrimSpace(message.Sender)
+	if userID == "" || userLogin == "" {
+		return
+	}
 
+	now := time.Now().UTC()
+	key := userID
+	if key == "" {
+		key = strings.ToLower(strings.TrimPrefix(userLogin, "@"))
+	}
+
+	r.chatActivityMu.Lock()
+	lastWrite := r.chatActivityLast[key]
+	if !lastWrite.IsZero() && now.Sub(lastWrite) < 30*time.Second {
+		r.chatActivityMu.Unlock()
+		return
+	}
+	r.chatActivityLast[key] = now
+	r.chatActivityMu.Unlock()
+
+	if err := r.chatActivityStore.Touch(context.Background(), userID, userLogin, message.DisplayName, now); err != nil {
+		fmt.Printf("chat activity track error: %v\n", err)
+	}
+}
+
+func (r *runtime) onDiscordMessage(message discordbot.Message) {
 	if r.killswitchEnabled(message.Content) {
 		return
 	}
@@ -631,6 +721,8 @@ func (r *runtime) onDiscordMessage(message discordbot.Message) {
 			DisplayName:   message.DisplayName,
 			IsModerator:   message.IsModerator || message.IsOwnerOrAdmin,
 			IsBroadcaster: message.IsOwnerOrAdmin,
+			CommandPrefix: r.commandPrefix,
+			FirstMessage:  false,
 			MessageID:     "",
 			Message:       message.Content,
 		})
@@ -677,7 +769,7 @@ func (r *runtime) killswitchEnabled(message string) bool {
 		return false
 	}
 
-	commandName := extractCommandName(message)
+	commandName := extractCommandName(message, r.commandPrefix)
 	if commandName == "killswitch" || commandName == "ks" {
 		return false
 	}
@@ -691,13 +783,14 @@ func (r *runtime) killswitchEnabled(message string) bool {
 	return state != nil && state.KillswitchEnabled
 }
 
-func extractCommandName(message string) string {
+func extractCommandName(message, prefix string) string {
+	prefix = normalizeRuntimeCommandPrefix(prefix)
 	message = strings.TrimSpace(message)
-	if !strings.HasPrefix(message, "!") {
+	if !strings.HasPrefix(message, prefix) {
 		return ""
 	}
 
-	commandLine := strings.TrimSpace(strings.TrimPrefix(message, "!"))
+	commandLine := strings.TrimSpace(strings.TrimPrefix(message, prefix))
 	if commandLine == "" {
 		return ""
 	}
@@ -710,8 +803,17 @@ func extractCommandName(message string) string {
 	return strings.ToLower(parts[0])
 }
 
-func isCommandMessage(message string) bool {
-	return strings.HasPrefix(strings.TrimSpace(message), "!")
+func isCommandMessage(message, prefix string) bool {
+	return strings.HasPrefix(strings.TrimSpace(message), normalizeRuntimeCommandPrefix(prefix))
+}
+
+func normalizeRuntimeCommandPrefix(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "!"
+	}
+
+	return trimmed
 }
 
 func (r *runtime) sendChatReply(message chat.Message, reply string) {

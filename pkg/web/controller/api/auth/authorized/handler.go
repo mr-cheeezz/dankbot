@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -594,8 +595,8 @@ var dashboardAuthorizedPage = template.Must(template.New("authorized-dashboard")
         </div>
       </div>
       <nav class="top-links" aria-label="Auth navigation">
-        <a class="top-link" href="/dashboard">Dashboard</a>
-        <a class="top-link" href="/dashboard/integrations">Integrations</a>
+        <a class="top-link" href="/d">Dashboard</a>
+        <a class="top-link" href="/d/integrations">Integrations</a>
         <a class="top-link" href="/">Home</a>
       </nav>
     </header>
@@ -629,6 +630,7 @@ var dashboardAuthorizedPage = template.Must(template.New("authorized-dashboard")
 func Register(mux *http.ServeMux, appState *state.State) {
 	h := handler{appState: appState}
 	mux.Handle("/authorized", http.HandlerFunc(h.authorizedCallback))
+	mux.Handle("/d/authorized", http.HandlerFunc(h.dashboardAuthorizedCallback))
 	mux.Handle("/connected", http.HandlerFunc(h.connectedCallback))
 }
 
@@ -641,6 +643,15 @@ func (h handler) authorizedCallback(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeMethodNotAllowed(w, authPageVariantDashboard, http.MethodGet, http.MethodPost)
 	}
+}
+
+func (h handler) dashboardAuthorizedCallback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w, authPageVariantDashboard, http.MethodGet)
+		return
+	}
+
+	h.oauthCallback(w, r, authPageVariantDashboard)
 }
 
 func (h handler) connectedCallback(w http.ResponseWriter, r *http.Request) {
@@ -659,6 +670,10 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 		if description := strings.TrimSpace(query.Get("error_description")); description != "" {
 			message += ": " + description
 		}
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(message, variant))
+			return
+		}
 		writeOAuthErrorPage(w, message, http.StatusBadRequest, variant)
 		return
 	}
@@ -666,10 +681,18 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 	stateKey := strings.TrimSpace(query.Get("state"))
 	code := strings.TrimSpace(query.Get("code"))
 	if stateKey == "" {
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData("missing oauth state", variant))
+			return
+		}
 		writeOAuthErrorPage(w, "missing oauth state", http.StatusBadRequest, variant)
 		return
 	}
 	if code == "" {
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData("missing oauth code", variant))
+			return
+		}
 		writeOAuthErrorPage(w, "missing oauth code", http.StatusBadRequest, variant)
 		return
 	}
@@ -680,7 +703,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 		if twitchResult.Flow == twitchoauth.FlowSiteLogin {
 			loginResult, err := h.persistSiteLoginSession(r.Context(), twitchResult)
 			if err != nil {
-				writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, authPageVariantDashboard)
+				writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 				return
 			}
 
@@ -697,21 +720,34 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			}
 			if loginResult.canAccessDashboard {
 				page.SecondaryLabel = "Open dashboard"
-				page.SecondaryHref = "/dashboard"
+				page.SecondaryHref = "/d"
 			}
-			writeAuthorizedPage(w, http.StatusOK, authPageVariantDashboard, page)
+			writeAuthorizedPage(w, http.StatusOK, variant, page)
 			return
 		}
 
 		response, err := h.finishTwitchLinkedCallback(r.Context(), twitchResult)
 		if err != nil {
+			if variant == authPageVariantDashboard {
+				redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
+				return
+			}
 			writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 			return
 		}
-		writeAuthorizedPage(w, http.StatusOK, variant, buildAuthorizedPageData(response))
+		page := buildAuthorizedPageData(response)
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "success", page)
+			return
+		}
+		writeAuthorizedPage(w, http.StatusOK, variant, page)
 		return
 	case errors.Is(err, twitchoauth.ErrStateNotFound):
 	default:
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
+			return
+		}
 		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 		return
 	}
@@ -721,10 +757,19 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 	response, err = h.handleRobloxCallback(r.Context(), stateKey, code)
 	switch {
 	case err == nil:
-		writeAuthorizedPage(w, http.StatusOK, variant, buildAuthorizedPageData(response))
+		page := buildAuthorizedPageData(response)
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "success", page)
+			return
+		}
+		writeAuthorizedPage(w, http.StatusOK, variant, page)
 		return
 	case errors.Is(err, robloxoauth.ErrStateNotFound):
 	default:
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
+			return
+		}
 		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 		return
 	}
@@ -732,10 +777,19 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 	response, err = h.handleSpotifyCallback(r.Context(), stateKey, code)
 	switch {
 	case err == nil:
-		writeAuthorizedPage(w, http.StatusOK, variant, buildAuthorizedPageData(response))
+		page := buildAuthorizedPageData(response)
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "success", page)
+			return
+		}
+		writeAuthorizedPage(w, http.StatusOK, variant, page)
 		return
 	case errors.Is(err, spotifyoauth.ErrStateNotFound):
 	default:
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
+			return
+		}
 		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 		return
 	}
@@ -743,10 +797,19 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 	response, err = h.handleStreamlabsCallback(r.Context(), stateKey, code)
 	switch {
 	case err == nil:
-		writeAuthorizedPage(w, http.StatusOK, variant, buildAuthorizedPageData(response))
+		page := buildAuthorizedPageData(response)
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "success", page)
+			return
+		}
+		writeAuthorizedPage(w, http.StatusOK, variant, page)
 		return
 	case errors.Is(err, streamlabsoauth.ErrStateNotFound):
 	default:
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
+			return
+		}
 		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 		return
 	}
@@ -754,11 +817,24 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 	response, err = h.handleStreamElementsCallback(r.Context(), stateKey, code)
 	switch {
 	case err == nil:
-		writeAuthorizedPage(w, http.StatusOK, variant, buildAuthorizedPageData(response))
+		page := buildAuthorizedPageData(response)
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "success", page)
+			return
+		}
+		writeAuthorizedPage(w, http.StatusOK, variant, page)
 		return
 	case errors.Is(err, streamelementsoauth.ErrStateNotFound):
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData("unknown oauth state", variant))
+			return
+		}
 		writeOAuthErrorPage(w, "unknown oauth state", http.StatusBadRequest, variant)
 	default:
+		if variant == authPageVariantDashboard {
+			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
+			return
+		}
 		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 	}
 }
@@ -844,6 +920,8 @@ func (h handler) persistSiteLoginSession(ctx context.Context, result *twitchoaut
 		DisplayName:        displayName,
 		AvatarURL:          avatarURL,
 		IsModerator:        access.IsModerator,
+		IsVIP:              access.IsVIP,
+		IsLeadModerator:    access.IsLeadModerator,
 		IsBroadcaster:      access.IsBroadcaster,
 		IsBotAccount:       access.IsBotAccount,
 		IsEditor:           access.IsEditor,
@@ -1230,7 +1308,7 @@ func writeAuthorizedPage(w http.ResponseWriter, statusCode int, variant authPage
 	}
 }
 
-func writeOAuthErrorPage(w http.ResponseWriter, message string, statusCode int, variant authPageVariant) {
+func buildOAuthErrorPageData(message string, variant authPageVariant) authorizedPageData {
 	page := authorizedPageData{
 		Title:          "Authorization failed",
 		Eyebrow:        "OAuth error",
@@ -1238,13 +1316,41 @@ func writeOAuthErrorPage(w http.ResponseWriter, message string, statusCode int, 
 		PrimaryLabel:   "Back to home",
 		PrimaryHref:    "/",
 		SecondaryLabel: "Open integrations",
-		SecondaryHref:  "/dashboard/integrations",
+		SecondaryHref:  "/d/integrations",
 	}
 	if variant == authPageVariantDashboard {
 		page.PrimaryLabel = "Back to dashboard"
-		page.PrimaryHref = "/dashboard"
+		page.PrimaryHref = "/d"
 	}
+	return page
+}
+
+func writeOAuthErrorPage(w http.ResponseWriter, message string, statusCode int, variant authPageVariant) {
+	page := buildOAuthErrorPageData(message, variant)
 	writeAuthorizedPage(w, statusCode, variant, page)
+}
+
+func redirectDashboardIntegrationResult(
+	w http.ResponseWriter,
+	r *http.Request,
+	status string,
+	page authorizedPageData,
+) {
+	params := url.Values{}
+	params.Set("oauth_status", strings.TrimSpace(status))
+	if title := strings.TrimSpace(page.Title); title != "" {
+		params.Set("oauth_title", title)
+	}
+	if message := strings.TrimSpace(page.Message); message != "" {
+		params.Set("oauth_message", message)
+	}
+
+	target := "/d/integrations"
+	if encoded := params.Encode(); encoded != "" {
+		target += "?" + encoded
+	}
+
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 func buildAuthorizedPageData(response *callbackResponse) authorizedPageData {
@@ -1253,7 +1359,7 @@ func buildAuthorizedPageData(response *callbackResponse) authorizedPageData {
 		Eyebrow:        "OAuth success",
 		Message:        "The account was linked successfully and DankBot can use it now.",
 		PrimaryLabel:   "Open integrations",
-		PrimaryHref:    "/dashboard/integrations",
+		PrimaryHref:    "/d/integrations",
 		SecondaryLabel: "Back to home",
 		SecondaryHref:  "/",
 	}

@@ -1,6 +1,8 @@
 import CampaignRoundedIcon from "@mui/icons-material/CampaignRounded";
 import BlockRoundedIcon from "@mui/icons-material/BlockRounded";
 import CardGiftcardRoundedIcon from "@mui/icons-material/CardGiftcardRounded";
+import ExpandLessRoundedIcon from "@mui/icons-material/ExpandLessRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import ExtensionRoundedIcon from "@mui/icons-material/ExtensionRounded";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import GavelRoundedIcon from "@mui/icons-material/GavelRounded";
@@ -22,8 +24,10 @@ import {
   Avatar,
   Box,
   Chip,
+  Collapse,
   Divider,
   Drawer,
+  IconButton,
   InputAdornment,
   List,
   ListItemButton,
@@ -36,6 +40,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, type ReactNode } from "react";
+import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { AccountMenu } from "../auth/AccountMenu";
@@ -54,6 +59,14 @@ import {
 import type { ViewKey } from "./types";
 
 const drawerWidth = 248;
+
+const discordSidebarTabs = [
+  { key: "overview", label: "Overview", to: "/d/discord" },
+  { key: "commands", label: "Commands", to: "/d/discord/commands" },
+  { key: "moderation", label: "Moderation", to: "/d/discord/moderation" },
+  { key: "role-pings", label: "Role Pings", to: "/d/discord/role-pings" },
+  { key: "game-pings", label: "Game Ping", to: "/d/discord/game-pings" },
+] as const;
 
 function initialsForName(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -111,6 +124,10 @@ export function ModeratorLayout() {
   const { session } = useAuth();
   const { summary, summaryLoading, query, setQuery, toggleKillswitch } =
     useModerator();
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(navSections.map((section) => [section.title, false])),
+  );
+  const [discordSubnavCollapsed, setDiscordSubnavCollapsed] = useState(true);
   const discordConfigured = summary.integrations.some(
     (entry) =>
       entry.id === "discord" &&
@@ -121,6 +138,26 @@ export function ModeratorLayout() {
   useEffect(() => {
     document.title = buildSiteTitle(summary.channelName);
   }, [summary.channelName]);
+
+  const toggleSection = (title: string) => {
+    setCollapsedSections((current) => ({
+      ...current,
+      [title]: !current[title],
+    }));
+  };
+
+  const activeDiscordTab =
+    currentView === "discord"
+      ? location.pathname === "/d/discord/moderation"
+        ? "moderation"
+        : location.pathname === "/d/discord/role-pings"
+          ? "role-pings"
+          : location.pathname === "/d/discord/game-pings"
+            ? "game-pings"
+          : location.pathname === "/d/discord/commands"
+            ? "commands"
+            : "overview"
+      : null;
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
@@ -220,71 +257,177 @@ export function ModeratorLayout() {
         </Box>
 
         <Box sx={{ px: 1.25, overflowY: "auto" }}>
-          {navSections.map((section) => (
-            <Box key={section.title} sx={{ mb: 2 }}>
-              <Typography
-                sx={{
-                  px: 1.5,
-                  pb: 0.75,
-                  color: "text.secondary",
-                  fontSize: "0.78rem",
-                  fontWeight: 700,
-                }}
-              >
-                {section.title}
-              </Typography>
-              <List disablePadding>
-                {section.items
-                  .filter((item) => canAccessDashboardView(session, item.key))
-                  .filter((item) => item.key !== "discord" || discordConfigured)
-                  .map((item) => (
-                    <NavLink
-                      key={item.key}
-                      to={pathForView(item.key)}
-                      end={item.key === "dashboard"}
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      {({ isActive }) => (
-                        <ListItemButton
-                          selected={isActive}
-                          sx={{
-                            borderRadius: 1,
-                            mb: 0.25,
-                            mx: 0.5,
-                            minHeight: 42,
-                            "&.Mui-selected": {
-                              bgcolor: "rgba(74,137,255,0.12)",
-                              color: "primary.main",
-                            },
-                            "&.Mui-selected:hover": {
-                              bgcolor: "rgba(74,137,255,0.18)",
-                            },
-                          }}
+          {navSections.map((section) => {
+            const visibleItems = section.items
+              .filter((item) => canAccessDashboardView(session, item.key))
+              .filter((item) => item.key !== "discord" || discordConfigured);
+
+            if (visibleItems.length === 0) {
+              return null;
+            }
+
+            const collapsed = collapsedSections[section.title] ?? false;
+
+            return (
+              <Box key={section.title} sx={{ mb: 2 }}>
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  sx={{ px: 0.75, pb: 0.35 }}
+                >
+                  <Typography
+                    sx={{
+                      px: 0.75,
+                      color: "text.secondary",
+                      fontSize: "0.78rem",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {section.title}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={() => toggleSection(section.title)}
+                    aria-label={collapsed ? `Expand ${section.title}` : `Collapse ${section.title}`}
+                    sx={{
+                      color: "text.secondary",
+                      width: 28,
+                      height: 28,
+                    }}
+                  >
+                    {collapsed ? (
+                      <ExpandMoreRoundedIcon fontSize="small" />
+                    ) : (
+                      <ExpandLessRoundedIcon fontSize="small" />
+                    )}
+                  </IconButton>
+                </Stack>
+                <Collapse in={!collapsed} timeout="auto" unmountOnExit>
+                  <List disablePadding>
+                    {visibleItems.map((item) => (
+                      <Box key={item.key}>
+                        <NavLink
+                          to={pathForView(item.key)}
+                          end={item.key === "dashboard"}
+                          style={{ textDecoration: "none", color: "inherit" }}
                         >
-                          <ListItemIcon
+                        {({ isActive }) => (
+                          <ListItemButton
+                            selected={isActive}
                             sx={{
-                              minWidth: 34,
-                              color: isActive
-                                ? "primary.main"
-                                : "text.secondary",
+                              borderRadius: 1,
+                              mb: item.key === "discord" ? 0.1 : 0.25,
+                                mx: 0.5,
+                                minHeight: 42,
+                                "&.Mui-selected": {
+                                  bgcolor: "rgba(74,137,255,0.12)",
+                                  color: "primary.main",
+                                },
+                                "&.Mui-selected:hover": {
+                                  bgcolor: "rgba(74,137,255,0.18)",
+                                },
                             }}
                           >
-                            {iconForView(item.key)}
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={item.label}
-                            primaryTypographyProps={{
-                              fontSize: "0.96rem",
-                              fontWeight: isActive ? 700 : 500,
-                            }}
-                          />
-                        </ListItemButton>
-                      )}
-                    </NavLink>
-                  ))}
-              </List>
-            </Box>
-          ))}
+                            <ListItemIcon
+                              sx={{
+                                minWidth: 34,
+                                  color: isActive
+                                    ? "primary.main"
+                                    : "text.secondary",
+                                }}
+                              >
+                                {iconForView(item.key)}
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={item.label}
+                                primaryTypographyProps={{
+                                  fontSize: "0.96rem",
+                                  fontWeight: isActive ? 700 : 500,
+                                }}
+                              />
+                              {item.key === "discord" ? (
+                                <IconButton
+                                  size="small"
+                                  edge="end"
+                                  aria-label={
+                                    discordSubnavCollapsed
+                                      ? "Expand Discord Bot links"
+                                      : "Collapse Discord Bot links"
+                                  }
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    setDiscordSubnavCollapsed((current) => !current);
+                                  }}
+                                  sx={{
+                                    ml: 0.5,
+                                    width: 26,
+                                    height: 26,
+                                    color: isActive ? "primary.main" : "text.secondary",
+                                    bgcolor: "rgba(255,255,255,0.04)",
+                                    "&:hover": {
+                                      bgcolor: "rgba(255,255,255,0.08)",
+                                    },
+                                  }}
+                                >
+                                  {discordSubnavCollapsed ? (
+                                    <ExpandMoreRoundedIcon fontSize="small" />
+                                  ) : (
+                                    <ExpandLessRoundedIcon fontSize="small" />
+                                  )}
+                                </IconButton>
+                              ) : null}
+                          </ListItemButton>
+                        )}
+                      </NavLink>
+
+                        {item.key === "discord" && !discordSubnavCollapsed ? (
+                          <Stack spacing={0.35} sx={{ mx: 1, mb: 0.65, mt: 0.35 }}>
+                            {discordSidebarTabs.map((tab) => {
+                              const selected = activeDiscordTab === tab.key;
+                              return (
+                                <NavLink
+                                  key={tab.key}
+                                  to={tab.to}
+                                  style={{ textDecoration: "none", color: "inherit" }}
+                                >
+                                  <ListItemButton
+                                    selected={selected}
+                                    sx={{
+                                      borderRadius: 1,
+                                      minHeight: 36,
+                                      pl: 5.5,
+                                      pr: 1.25,
+                                      "&.Mui-selected": {
+                                        bgcolor: "rgba(74,137,255,0.10)",
+                                        color: "primary.main",
+                                      },
+                                      "&.Mui-selected:hover": {
+                                        bgcolor: "rgba(74,137,255,0.16)",
+                                      },
+                                    }}
+                                  >
+                                    <ListItemText
+                                      primary={tab.label}
+                                      primaryTypographyProps={{
+                                        fontSize: "0.9rem",
+                                        fontWeight: selected ? 700 : 500,
+                                      }}
+                                    />
+                                  </ListItemButton>
+                                </NavLink>
+                              );
+                            })}
+                          </Stack>
+                        ) : null}
+                      </Box>
+                    ))}
+                  </List>
+                </Collapse>
+              </Box>
+            );
+          })}
         </Box>
 
         <Box sx={{ mt: "auto", p: 2 }}>
@@ -299,6 +442,15 @@ export function ModeratorLayout() {
                 sx={{ color: "primary.light", borderColor: "divider" }}
               />
             </NavLink>
+            <Chip
+              component="a"
+              href="/d/docs"
+              icon={<SearchRoundedIcon />}
+              label="API Docs"
+              clickable
+              variant="outlined"
+              sx={{ color: "primary.light", borderColor: "divider" }}
+            />
             <Chip
               component="a"
               href="https://github.com/mr-cheeezz/dankbot"

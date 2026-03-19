@@ -1,6 +1,8 @@
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import PatternRoundedIcon from "@mui/icons-material/PatternRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import {
@@ -12,10 +14,15 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   FormControlLabel,
+  IconButton,
   InputAdornment,
   InputLabel,
+  List,
+  ListItemButton,
+  ListItemText,
   MenuItem,
   Paper,
   Select,
@@ -36,6 +43,8 @@ import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
 import type { BlockedTermEntry } from "../types";
 
 type BlockedTermDraft = {
+  name: string;
+  phraseGroups: string[][];
   pattern: string;
   isRegex: boolean;
   action: BlockedTermEntry["action"];
@@ -44,14 +53,187 @@ type BlockedTermDraft = {
   enabled: boolean;
 };
 
+type SectionKey = "general" | "conditions" | "advanced";
+
 const defaultDraft: BlockedTermDraft = {
+  name: "",
+  phraseGroups: [[]],
   pattern: "",
   isRegex: false,
-  action: "delete + timeout",
+  action: "timeout",
   timeoutSeconds: 600,
   reason: "Blocked term detected.",
   enabled: true,
 };
+
+const editorSections: Array<{ key: SectionKey; label: string }> = [
+  { key: "general", label: "General" },
+  { key: "conditions", label: "Conditions" },
+  { key: "advanced", label: "Advanced" },
+];
+
+const blockedTermActionOptions: Array<{
+  value: BlockedTermEntry["action"];
+  label: string;
+  helper: string;
+}> = [
+  {
+    value: "ban",
+    label: "Ban",
+    helper: "Permanently ban the user.",
+  },
+  { value: "delete", label: "Delete", helper: "Delete the chat message." },
+  {
+    value: "timeout",
+    label: "Timeout",
+    helper: "Temporarily time out the user.",
+  },
+  {
+    value: "delete + warn",
+    label: "Warn and Delete",
+    helper: "Use Twitch chat warnings and delete the message.",
+  },
+];
+
+function getBlockedTermActionMeta(action: string) {
+  return (
+    blockedTermActionOptions.find((entry) => entry.value === action) ??
+    blockedTermActionOptions[0]
+  );
+}
+
+function draftFromEntry(term: BlockedTermEntry | null): BlockedTermDraft {
+  if (term == null) {
+    return defaultDraft;
+  }
+
+  const phraseGroups =
+    term.phraseGroups.length > 0
+      ? term.phraseGroups
+      : term.isRegex || term.pattern.trim() === ""
+        ? [[]]
+        : [[term.pattern]];
+
+  return {
+    name: term.name,
+    phraseGroups,
+    pattern: term.pattern,
+    isRegex: term.isRegex,
+    action: getBlockedTermActionMeta(term.action).value,
+    timeoutSeconds: term.timeoutSeconds,
+    reason: term.reason,
+    enabled: term.enabled,
+  };
+}
+
+function normalizePhraseGroups(groups: string[][]): string[][] {
+  return groups
+    .map((group) =>
+      group.map((phrase) => phrase.trim()).filter((phrase) => phrase !== ""),
+    )
+    .filter((group) => group.length > 0);
+}
+
+function phraseGroupMatches(
+  groups: string[][],
+  preview: string,
+): { matches: boolean; explanation: string } {
+  const normalizedPreview = preview.trim().toLowerCase();
+  if (normalizedPreview === "") {
+    return { matches: false, explanation: "" };
+  }
+
+  const normalizedGroups = normalizePhraseGroups(groups);
+  if (normalizedGroups.length === 0) {
+    return { matches: false, explanation: "" };
+  }
+
+  for (const group of normalizedGroups) {
+    const matches = group.every((phrase) =>
+      normalizedPreview.includes(phrase.toLowerCase()),
+    );
+    if (matches) {
+      return {
+        matches: true,
+        explanation: `Matched phrase group: ${group.join(" + ")}`,
+      };
+    }
+  }
+
+  return {
+    matches: false,
+    explanation: "No phrase group fully matched this sample message.",
+  };
+}
+
+function previewMatchState(
+  draft: BlockedTermDraft,
+  preview: string,
+): {
+  matches: boolean;
+  error: string;
+  explanation: string;
+} {
+  if (preview.trim() === "") {
+    return { matches: false, error: "", explanation: "" };
+  }
+
+  if (draft.isRegex) {
+    if (draft.pattern.trim() === "") {
+      return {
+        matches: false,
+        error: "",
+        explanation: "Add a regex pattern to test advanced matching.",
+      };
+    }
+
+    try {
+      const regex = new RegExp(draft.pattern, "i");
+      return {
+        matches: regex.test(preview),
+        error: "",
+        explanation: regex.test(preview)
+          ? "This message would match the regex pattern."
+          : "This message would not match the regex pattern.",
+      };
+    } catch (error) {
+      return {
+        matches: false,
+        error: error instanceof Error ? error.message : "Invalid regex.",
+        explanation: "",
+      };
+    }
+  }
+
+  const phraseState = phraseGroupMatches(draft.phraseGroups, preview);
+  return {
+    matches: phraseState.matches,
+    error: "",
+    explanation:
+      phraseState.explanation ||
+      "Add at least one phrase group to test standard matching.",
+  };
+}
+
+function EditorSectionTitle({ label }: { label: string }) {
+  return (
+    <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.75 }}>
+      <Typography
+        sx={{
+          fontSize: "0.82rem",
+          fontWeight: 800,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "text.secondary",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </Typography>
+      <Box sx={{ flex: 1, height: 1, bgcolor: "divider" }} />
+    </Stack>
+  );
+}
 
 export function BlockedTermsPage() {
   const [terms, setTerms] = useState<BlockedTermEntry[]>([]);
@@ -61,6 +243,9 @@ export function BlockedTermsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<BlockedTermEntry | null>(null);
   const [draft, setDraft] = useState<BlockedTermDraft>(defaultDraft);
+  const [section, setSection] = useState<SectionKey>("general");
+  const [previewMessage, setPreviewMessage] = useState("");
+  const [phraseInputs, setPhraseInputs] = useState<Record<number, string>>({});
   const [pendingDelete, setPendingDelete] = useState<BlockedTermEntry | null>(
     null,
   );
@@ -92,6 +277,12 @@ export function BlockedTermsPage() {
   }, []);
 
   const normalizedSearch = search.trim().toLowerCase();
+  const timeoutEnabled = draft.action === "timeout";
+  const selectedActionMeta = getBlockedTermActionMeta(draft.action);
+  const matchPreview = useMemo(
+    () => previewMatchState(draft, previewMessage),
+    [draft, previewMessage],
+  );
   const visibleTerms = useMemo(() => {
     if (normalizedSearch === "") {
       return terms;
@@ -99,10 +290,12 @@ export function BlockedTermsPage() {
 
     return terms.filter((entry) =>
       [
+        entry.name,
         entry.pattern,
-        entry.action,
         entry.reason,
-        entry.isRegex ? "regex" : "plain",
+        entry.action,
+        entry.isRegex ? "regex" : "phrase groups",
+        ...entry.phraseGroups.flat(),
       ]
         .join(" ")
         .toLowerCase()
@@ -110,22 +303,25 @@ export function BlockedTermsPage() {
     );
   }, [normalizedSearch, terms]);
 
+  const setDraftField = (next: Partial<BlockedTermDraft>) => {
+    setDraft((current) => ({ ...current, ...next }));
+  };
+
   const openCreateDialog = () => {
     setEditingTerm(null);
     setDraft(defaultDraft);
+    setSection("general");
+    setPreviewMessage("");
+    setPhraseInputs({});
     setDialogOpen(true);
   };
 
   const openEditDialog = (term: BlockedTermEntry) => {
     setEditingTerm(term);
-    setDraft({
-      pattern: term.pattern,
-      isRegex: term.isRegex,
-      action: term.action,
-      timeoutSeconds: term.timeoutSeconds,
-      reason: term.reason,
-      enabled: term.enabled,
-    });
+    setDraft(draftFromEntry(term));
+    setSection("general");
+    setPreviewMessage("");
+    setPhraseInputs({});
     setDialogOpen(true);
   };
 
@@ -133,11 +329,70 @@ export function BlockedTermsPage() {
     setDialogOpen(false);
     setEditingTerm(null);
     setDraft(defaultDraft);
+    setSection("general");
+    setPreviewMessage("");
+    setPhraseInputs({});
+  };
+
+  const addPhraseGroup = () => {
+    setDraftField({ phraseGroups: [...draft.phraseGroups, []] });
+  };
+
+  const removePhraseGroup = (groupIndex: number) => {
+    setDraftField({
+      phraseGroups: draft.phraseGroups.filter(
+        (_, index) => index !== groupIndex,
+      ),
+    });
+    setPhraseInputs((current) => {
+      const next: Record<number, string> = {};
+      Object.entries(current).forEach(([key, value]) => {
+        const index = Number(key);
+        if (index < groupIndex) {
+          next[index] = value;
+        } else if (index > groupIndex) {
+          next[index - 1] = value;
+        }
+      });
+      return next;
+    });
+  };
+
+  const updatePhraseInput = (groupIndex: number, value: string) => {
+    setPhraseInputs((current) => ({
+      ...current,
+      [groupIndex]: value,
+    }));
+  };
+
+  const addPhraseToGroup = (groupIndex: number) => {
+    const value = (phraseInputs[groupIndex] ?? "").trim();
+    if (value === "") {
+      return;
+    }
+
+    const nextGroups = draft.phraseGroups.map((group, index) =>
+      index === groupIndex ? [...group, value] : group,
+    );
+    setDraftField({ phraseGroups: nextGroups });
+    updatePhraseInput(groupIndex, "");
+  };
+
+  const removePhraseFromGroup = (groupIndex: number, phraseIndex: number) => {
+    const nextGroups = draft.phraseGroups.map((group, index) =>
+      index === groupIndex
+        ? group.filter((_, itemIndex) => itemIndex !== phraseIndex)
+        : group,
+    );
+    setDraftField({ phraseGroups: nextGroups });
   };
 
   const saveDraft = () => {
+    const normalizedGroups = normalizePhraseGroups(draft.phraseGroups);
     const payload = {
-      pattern: draft.pattern.trim(),
+      name: draft.name.trim(),
+      phraseGroups: normalizedGroups,
+      pattern: draft.isRegex ? draft.pattern.trim() : "",
       isRegex: draft.isRegex,
       action: draft.action,
       timeoutSeconds: Math.max(0, Math.round(draft.timeoutSeconds || 0)),
@@ -145,7 +400,18 @@ export function BlockedTermsPage() {
       enabled: draft.enabled,
     };
 
-    if (payload.pattern === "") {
+    if (payload.name === "") {
+      setError("Blocked term name is required.");
+      return;
+    }
+
+    if (!payload.isRegex && payload.phraseGroups.length === 0) {
+      setError("Add at least one phrase group before saving.");
+      return;
+    }
+
+    if (payload.isRegex && payload.pattern === "") {
+      setError("Regex pattern is required when advanced matching is enabled.");
       return;
     }
 
@@ -208,9 +474,9 @@ export function BlockedTermsPage() {
               color="text.secondary"
               sx={{ mt: 0.5, maxWidth: 760 }}
             >
-              Bot-owned phrase blocking with optional regex matching and
-              per-term punishments. These stay in DankBot instead of syncing
-              with Twitch blocked terms.
+              DankBot-owned punishable terms with grouped matches, optional
+              regex, and per-term punishments. These do not read from, write
+              to, or sync with Twitch blocked terms.
             </Typography>
           </Box>
           <Button
@@ -291,7 +557,7 @@ export function BlockedTermsPage() {
                 color="text.secondary"
                 sx={{ mt: 0.5, fontSize: "0.9rem" }}
               >
-                Create your first blocked phrase or regex pattern here.
+                Create your first named blocked term here.
               </Typography>
             </Paper>
           ) : (
@@ -330,14 +596,14 @@ export function BlockedTermsPage() {
                               wordBreak: "break-word",
                             }}
                           >
-                            {entry.pattern}
+                            {entry.name}
                           </Typography>
                           <Chip
                             size="small"
                             icon={
                               entry.isRegex ? <PatternRoundedIcon /> : undefined
                             }
-                            label={entry.isRegex ? "regex" : "plain text"}
+                            label={entry.isRegex ? "regex" : "phrase groups"}
                             variant="outlined"
                           />
                           <Chip
@@ -381,7 +647,7 @@ export function BlockedTermsPage() {
                     >
                       <Chip
                         size="small"
-                        label={entry.action}
+                        label={getBlockedTermActionMeta(entry.action).label}
                         sx={{
                           backgroundColor: "rgba(74,137,255,0.14)",
                           color: "primary.main",
@@ -400,6 +666,62 @@ export function BlockedTermsPage() {
                         />
                       ) : null}
                     </Stack>
+
+                    {entry.isRegex ? (
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          px: 1.5,
+                          py: 1.2,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          backgroundColor: "rgba(255,255,255,0.03)",
+                        }}
+                      >
+                        <Typography
+                          component="code"
+                          sx={{
+                            fontFamily: "monospace",
+                            fontSize: "0.88rem",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {entry.pattern}
+                        </Typography>
+                      </Paper>
+                    ) : (
+                      <Stack spacing={0.9}>
+                        {entry.phraseGroups.map((group, index) => (
+                          <Stack
+                            key={`${entry.id}-${index}`}
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                            flexWrap="wrap"
+                            useFlexGap
+                          >
+                            <Typography
+                              color="text.secondary"
+                              sx={{ fontSize: "0.9rem", minWidth: 28 }}
+                            >
+                              #{index}
+                            </Typography>
+                            {group.map((phrase) => (
+                              <Chip
+                                key={`${entry.id}-${index}-${phrase}`}
+                                size="small"
+                                label={phrase}
+                                sx={{
+                                  backgroundColor: "rgba(255,255,255,0.05)",
+                                  color: "text.primary",
+                                  fontWeight: 700,
+                                }}
+                              />
+                            ))}
+                          </Stack>
+                        ))}
+                      </Stack>
+                    )}
                   </Stack>
                 </Paper>
               ))}
@@ -408,121 +730,511 @@ export function BlockedTermsPage() {
         </Box>
       </Paper>
 
-      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
-        <DialogTitle>
+      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="lg">
+        <DialogTitle sx={{ px: 3, py: 2 }}>
           {editingTerm == null ? "Create blocked term" : "Edit blocked term"}
+          <IconButton
+            onClick={closeDialog}
+            sx={{ position: "absolute", right: 12, top: 12 }}
+            aria-label="close blocked term editor"
+          >
+            <CloseRoundedIcon />
+          </IconButton>
         </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              fullWidth
-              label={draft.isRegex ? "Regex pattern" : "Blocked phrase"}
-              value={draft.pattern}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  pattern: event.target.value,
-                }))
-              }
-              helperText={
-                draft.isRegex
-                  ? "Regex is allowed here. The backend validates the pattern before saving."
-                  : "Case-insensitive phrase matching."
-              }
-            />
+        <Divider />
+        <DialogContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "240px minmax(0, 1fr)" },
+              minHeight: 620,
+            }}
+          >
+            <Box
+              sx={{
+                borderRight: { md: "1px solid" },
+                borderColor: "divider",
+                py: 1.5,
+              }}
+            >
+              <List disablePadding>
+                {editorSections.map((item) => (
+                  <ListItemButton
+                    key={item.key}
+                    selected={section === item.key}
+                    onClick={() => setSection(item.key)}
+                    sx={{ mx: 1.5, my: 0.5, borderRadius: 1 }}
+                  >
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{
+                        fontWeight: 700,
+                        fontSize: "0.96rem",
+                      }}
+                    />
+                  </ListItemButton>
+                ))}
+              </List>
+            </Box>
 
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={draft.isRegex}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        isRegex: event.target.checked,
-                      }))
-                    }
-                  />
-                }
-                label="Use regex"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={draft.enabled}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        enabled: event.target.checked,
-                      }))
-                    }
-                  />
-                }
-                label="Enabled"
-              />
-            </Stack>
+            <Box sx={{ p: 3 }}>
+              {section === "general" ? (
+                <Stack spacing={3}>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: {
+                        xs: "1fr",
+                        md: "minmax(0, 1fr) auto",
+                      },
+                      gap: 2,
+                      alignItems: "start",
+                    }}
+                  >
+                    <Stack spacing={2}>
+                      <TextField
+                        fullWidth
+                        label="Name"
+                        value={draft.name}
+                        onChange={(event) =>
+                          setDraftField({ name: event.target.value })
+                        }
+                        helperText="Required, used to organize and identify the blocked term."
+                      />
+                      <TextField
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        label="Reason"
+                        value={draft.reason}
+                        onChange={(event) =>
+                          setDraftField({ reason: event.target.value })
+                        }
+                        helperText="Shown in warnings, timeouts, and moderation notes."
+                      />
+                    </Stack>
 
-            <FormControl fullWidth>
-              <InputLabel id="blocked-term-action-label">Punishment</InputLabel>
-              <Select
-                labelId="blocked-term-action-label"
-                label="Punishment"
-                value={draft.action}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    action: event.target.value as BlockedTermEntry["action"],
-                  }))
-                }
-              >
-                <MenuItem value="delete">Delete only</MenuItem>
-                <MenuItem value="warn">Warn</MenuItem>
-                <MenuItem value="delete + warn">Delete + Warn</MenuItem>
-                <MenuItem value="timeout">Timeout</MenuItem>
-                <MenuItem value="delete + timeout">Delete + Timeout</MenuItem>
-                <MenuItem value="ban">Ban</MenuItem>
-                <MenuItem value="delete + ban">Delete + Ban</MenuItem>
-              </Select>
-            </FormControl>
+                    <Stack
+                      spacing={0.75}
+                      alignItems={{ xs: "flex-start", md: "flex-end" }}
+                    >
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={draft.enabled}
+                            onChange={(event) =>
+                              setDraftField({ enabled: event.target.checked })
+                            }
+                          />
+                        }
+                        label="Enabled"
+                      />
+                      <Chip
+                        size="small"
+                        icon={
+                          draft.isRegex ? <PatternRoundedIcon /> : undefined
+                        }
+                        label={draft.isRegex ? "regex" : "phrase groups"}
+                        variant="outlined"
+                      />
+                    </Stack>
+                  </Box>
 
-            {draft.action === "timeout" ||
-            draft.action === "delete + timeout" ? (
-              <TextField
-                type="number"
-                label="Timeout duration"
-                value={draft.timeoutSeconds}
-                inputProps={{ min: 1 }}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    timeoutSeconds: Math.max(
-                      1,
-                      Number(event.target.value) || 1,
-                    ),
-                  }))
-                }
-                helperText="Timeout length in seconds."
-              />
-            ) : null}
+                  <Box>
+                    <EditorSectionTitle label="Phrase Groups" />
+                    <Alert
+                      severity="info"
+                      icon={<InfoOutlinedIcon fontSize="inherit" />}
+                    >
+                      Standard blocked terms use phrase groups. If every phrase
+                      in one group appears in a message, the term triggers.
+                      Multiple groups act like alternative matches.
+                    </Alert>
 
-            <TextField
-              fullWidth
-              multiline
-              minRows={3}
-              label="Reason"
-              value={draft.reason}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  reason: event.target.value,
-                }))
-              }
-              helperText="Used for warn, timeout, or ban reasons."
-            />
-          </Stack>
+                    {draft.isRegex ? (
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          mt: 2,
+                          p: 2,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          backgroundColor: "background.default",
+                        }}
+                      >
+                        <Typography sx={{ fontWeight: 700 }}>
+                          Phrase groups are disabled while regex matching is on.
+                        </Typography>
+                        <Typography
+                          color="text.secondary"
+                          sx={{ mt: 0.6, fontSize: "0.9rem" }}
+                        >
+                          Turn off advanced matching in the Advanced tab to use
+                          grouped phrase detection instead.
+                        </Typography>
+                      </Paper>
+                    ) : (
+                      <Stack spacing={2} sx={{ mt: 2 }}>
+                        {draft.phraseGroups.map((group, groupIndex) => (
+                          <Paper
+                            key={`phrase-group-${groupIndex}`}
+                            elevation={0}
+                            sx={{
+                              p: 1.75,
+                              border: "1px solid",
+                              borderColor: "divider",
+                              backgroundColor: "background.default",
+                            }}
+                          >
+                            <Stack spacing={1.2}>
+                              <Stack
+                                direction="row"
+                                justifyContent="space-between"
+                                spacing={1}
+                                alignItems="center"
+                              >
+                                <Typography sx={{ fontWeight: 700 }}>
+                                  Phrase Group {groupIndex + 1}
+                                </Typography>
+                                {draft.phraseGroups.length > 1 ? (
+                                  <Button
+                                    color="error"
+                                    size="small"
+                                    startIcon={<DeleteOutlineRoundedIcon />}
+                                    onClick={() =>
+                                      removePhraseGroup(groupIndex)
+                                    }
+                                  >
+                                    Remove
+                                  </Button>
+                                ) : null}
+                              </Stack>
+
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                flexWrap="wrap"
+                                useFlexGap
+                              >
+                                {group.length > 0 ? (
+                                  group.map((phrase, phraseIndex) => (
+                                    <Chip
+                                      key={`${groupIndex}-${phrase}-${phraseIndex}`}
+                                      label={phrase}
+                                      onDelete={() =>
+                                        removePhraseFromGroup(
+                                          groupIndex,
+                                          phraseIndex,
+                                        )
+                                      }
+                                      sx={{
+                                        backgroundColor:
+                                          "rgba(74,137,255,0.14)",
+                                        color: "primary.main",
+                                        fontWeight: 700,
+                                      }}
+                                    />
+                                  ))
+                                ) : (
+                                  <Typography
+                                    color="text.secondary"
+                                    sx={{ fontSize: "0.9rem" }}
+                                  >
+                                    Add one or more phrases to this group.
+                                  </Typography>
+                                )}
+                              </Stack>
+
+                              <TextField
+                                fullWidth
+                                label="Add phrase"
+                                placeholder="slur or phrase fragment"
+                                value={phraseInputs[groupIndex] ?? ""}
+                                onChange={(event) =>
+                                  updatePhraseInput(
+                                    groupIndex,
+                                    event.target.value,
+                                  )
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    addPhraseToGroup(groupIndex);
+                                  }
+                                }}
+                                InputProps={{
+                                  endAdornment: (
+                                    <Button
+                                      size="small"
+                                      onClick={() =>
+                                        addPhraseToGroup(groupIndex)
+                                      }
+                                      sx={{ minWidth: 0, px: 1.2, mr: -0.5 }}
+                                    >
+                                      Add
+                                    </Button>
+                                  ),
+                                }}
+                              />
+                              <Typography
+                                color="text.secondary"
+                                sx={{ fontSize: "0.85rem" }}
+                              >
+                                Every phrase in a group must appear in the
+                                message for that group to match.
+                              </Typography>
+                            </Stack>
+                          </Paper>
+                        ))}
+
+                        <Button
+                          variant="outlined"
+                          startIcon={<AddRoundedIcon />}
+                          onClick={addPhraseGroup}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          Add Phrase Group
+                        </Button>
+                      </Stack>
+                    )}
+                  </Box>
+
+                  <Box>
+                    <EditorSectionTitle label="Action" />
+                    <Stack spacing={2}>
+                      <FormControl fullWidth>
+                        <InputLabel id="blocked-term-action-label">
+                          Punishment
+                        </InputLabel>
+                        <Select
+                          labelId="blocked-term-action-label"
+                          label="Punishment"
+                          value={draft.action}
+                          onChange={(event) =>
+                            setDraftField({
+                              action: event.target
+                                .value as BlockedTermEntry["action"],
+                            })
+                          }
+                        >
+                          {blockedTermActionOptions.map((option) => (
+                            <MenuItem key={option.value} value={option.value}>
+                              <Stack spacing={0.2}>
+                                <Typography sx={{ fontWeight: 700 }}>
+                                  {option.label}
+                                </Typography>
+                                <Typography
+                                  color="text.secondary"
+                                  sx={{ fontSize: "0.82rem" }}
+                                >
+                                  {option.helper}
+                                </Typography>
+                              </Stack>
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+
+                      <Paper
+                        elevation={0}
+                        sx={{
+                          p: 1.8,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          backgroundColor: "background.default",
+                        }}
+                      >
+                        <Typography sx={{ fontWeight: 700 }}>
+                          {selectedActionMeta.label}
+                        </Typography>
+                        <Typography
+                          color="text.secondary"
+                          sx={{ mt: 0.5, fontSize: "0.9rem" }}
+                        >
+                          {selectedActionMeta.helper}
+                        </Typography>
+                      </Paper>
+
+                      {timeoutEnabled ? (
+                        <TextField
+                          type="number"
+                          label="Timeout duration"
+                          value={draft.timeoutSeconds}
+                          inputProps={{ min: 1 }}
+                          onChange={(event) =>
+                            setDraftField({
+                              timeoutSeconds: Math.max(
+                                1,
+                                Number(event.target.value) || 1,
+                              ),
+                            })
+                          }
+                          helperText="Timeout length in seconds."
+                        />
+                      ) : null}
+                    </Stack>
+                  </Box>
+                </Stack>
+              ) : null}
+
+              {section === "conditions" ? (
+                <Stack spacing={3}>
+                  <Box>
+                    <EditorSectionTitle label="Enabled For" />
+                    <Stack
+                      direction={{ xs: "column", lg: "row" }}
+                      spacing={1}
+                      flexWrap="wrap"
+                      useFlexGap
+                    >
+                      <Chip
+                        label="Online chat"
+                        color="primary"
+                        variant="outlined"
+                      />
+                      <Chip
+                        label="Offline chat"
+                        color="primary"
+                        variant="outlined"
+                      />
+                      <Chip
+                        label="Resub messages"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    </Stack>
+                    <Typography
+                      color="text.secondary"
+                      sx={{ mt: 1.1, fontSize: "0.9rem" }}
+                    >
+                      DankBot blocked terms are currently global bot rules. If
+                      the term is enabled, it applies anywhere the bot is
+                      moderating Twitch chat.
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <EditorSectionTitle label="Scope" />
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        backgroundColor: "background.default",
+                      }}
+                    >
+                      <Stack spacing={1}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <InfoOutlinedIcon fontSize="small" color="primary" />
+                          <Typography sx={{ fontWeight: 700 }}>
+                            Bot-owned moderation
+                          </Typography>
+                        </Stack>
+                      <Typography
+                        color="text.secondary"
+                        sx={{ fontSize: "0.92rem", lineHeight: 1.7 }}
+                      >
+                          These terms live entirely inside DankBot. A matching
+                          message can still be sent, then the bot applies the
+                          punishment you configured. Nothing here is mirrored to
+                          Twitch blocked terms.
+                        </Typography>
+                      </Stack>
+                    </Paper>
+                  </Box>
+                </Stack>
+              ) : null}
+
+              {section === "advanced" ? (
+                <Stack spacing={3}>
+                  <Box>
+                    <EditorSectionTitle label="Advanced Matching" />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={draft.isRegex}
+                          onChange={(event) =>
+                            setDraftField({
+                              isRegex: event.target.checked,
+                              pattern: event.target.checked
+                                ? draft.pattern
+                                : "",
+                            })
+                          }
+                        />
+                      }
+                      label="Use regex instead of phrase groups"
+                    />
+
+                    {draft.isRegex ? (
+                      <TextField
+                        fullWidth
+                        sx={{ mt: 2 }}
+                        label="Regex pattern"
+                        value={draft.pattern}
+                        onChange={(event) =>
+                          setDraftField({ pattern: event.target.value })
+                        }
+                        helperText="Regex is validated before save and matched case-insensitively."
+                      />
+                    ) : (
+                      <Alert severity="info" sx={{ mt: 2 }}>
+                        Advanced matching is off. This term currently uses its
+                        phrase groups instead of regex.
+                      </Alert>
+                    )}
+                  </Box>
+
+                  <Box>
+                    <EditorSectionTitle label="Match Tester" />
+                    <Stack spacing={1.75}>
+                      <TextField
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        label="Preview message"
+                        value={previewMessage}
+                        onChange={(event) =>
+                          setPreviewMessage(event.target.value)
+                        }
+                        helperText="Paste a sample chat message and see whether the current blocked term would match it."
+                      />
+                      {matchPreview.error ? (
+                        <Alert severity="error">
+                          Regex error: {matchPreview.error}
+                        </Alert>
+                      ) : previewMessage.trim() !== "" ? (
+                        <Alert
+                          severity={
+                            matchPreview.matches ? "warning" : "success"
+                          }
+                        >
+                          {matchPreview.explanation}
+                        </Alert>
+                      ) : (
+                        <Alert severity="info">
+                          Paste a sample message here to test the current rule.
+                        </Alert>
+                      )}
+                    </Stack>
+                  </Box>
+                </Stack>
+              ) : null}
+            </Box>
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={closeDialog}>Cancel</Button>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            onClick={() => {
+              setDraft(draftFromEntry(editingTerm));
+              setSection("general");
+              setPreviewMessage("");
+              setPhraseInputs({});
+            }}
+          >
+            Reset
+          </Button>
           <Button variant="contained" onClick={saveDraft}>
             Save
           </Button>
@@ -535,7 +1247,7 @@ export function BlockedTermsPage() {
         description={
           pendingDelete == null
             ? ""
-            : `Delete "${pendingDelete.pattern}" from DankBot blocked terms?`
+            : `Delete "${pendingDelete.name}" from DankBot blocked terms?`
         }
         confirmLabel="Delete"
         onCancel={() => setPendingDelete(null)}
@@ -543,6 +1255,7 @@ export function BlockedTermsPage() {
           if (pendingDelete == null) {
             return;
           }
+
           const term = pendingDelete;
           setPendingDelete(null);
           setError("");

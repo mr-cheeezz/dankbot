@@ -1,6 +1,5 @@
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
-import GroupRoundedIcon from "@mui/icons-material/GroupRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import {
   Box,
@@ -19,8 +18,7 @@ import {
 import type { SvgIconComponent } from "@mui/icons-material";
 import { useEffect, useState } from "react";
 
-import { isAutoGiveawayStatus } from "../giveaways";
-import type { BotModeOption, GiveawayEntry } from "../types";
+import type { GiveawayEntry } from "../types";
 
 export type GiveawayEditorDraft = Omit<GiveawayEntry, "id">;
 
@@ -28,13 +26,12 @@ type GiveawayEditorDialogProps = {
   open: boolean;
   editing: boolean;
   draft: GiveawayEditorDraft;
-  availableModes: BotModeOption[];
   onChange: (next: GiveawayEditorDraft) => void;
   onClose: () => void;
   onSave: () => void;
 };
 
-type GiveawayEditorSection = "general" | "entry" | "eligibility";
+type GiveawayEditorSection = "general" | "entry";
 
 const editorSections: Array<{
   key: GiveawayEditorSection;
@@ -43,14 +40,12 @@ const editorSections: Array<{
 }> = [
   { key: "general", label: "General", icon: SettingsRoundedIcon },
   { key: "entry", label: "Entry", icon: ForumRoundedIcon },
-  { key: "eligibility", label: "Eligibility", icon: GroupRoundedIcon },
 ];
 
 export function GiveawayEditorDialog({
   open,
   editing,
   draft,
-  availableModes,
   onChange,
   onClose,
   onSave,
@@ -66,11 +61,7 @@ export function GiveawayEditorDialog({
   const setBoolean = (
     field: keyof Pick<
       GiveawayEditorDraft,
-      | "enabled"
-      | "chatAnnouncementsEnabled"
-      | "allowVips"
-      | "allowSubscribers"
-      | "allowModsBroadcaster"
+      "enabled" | "chatAnnouncementsEnabled"
     >,
     value: boolean,
   ) => {
@@ -81,7 +72,7 @@ export function GiveawayEditorDialog({
   };
 
   const setNumber = (
-    field: keyof Pick<GiveawayEditorDraft, "entryWindowSeconds" | "winnerCount" | "entrantCount">,
+    field: keyof Pick<GiveawayEditorDraft, "entryWindowSeconds" | "winnerCount">,
     value: number,
   ) => {
     onChange({
@@ -113,7 +104,7 @@ export function GiveawayEditorDialog({
           sx={{
             display: "grid",
             gridTemplateColumns: { xs: "1fr", md: "220px minmax(0, 1fr)" },
-            minHeight: 560,
+            minHeight: 520,
           }}
         >
           <Box
@@ -156,7 +147,7 @@ export function GiveawayEditorDialog({
               <>
                 <EditorSectionTitle
                   label="General"
-                  copy="Define the giveaway identity, whether it is active, and how it should behave when mods use it live."
+                  copy="Create a custom raffle without dragging in the built-in 1v1 picker rules. The 1v1 picker stays on its own dashboard."
                 />
 
                 <Box
@@ -177,7 +168,6 @@ export function GiveawayEditorDialog({
                         name: event.target.value,
                       })
                     }
-                    disabled={draft.protected}
                   />
                   <CheckboxRow
                     label="Enabled"
@@ -200,61 +190,13 @@ export function GiveawayEditorDialog({
                   minRows={2}
                 />
 
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
-                    gap: 2,
-                  }}
-                >
-                  <TextField
-                    select
-                    fullWidth
-                    label="Type"
-                    value={draft.type}
-                    onChange={(event) =>
-                      onChange({
-                        ...draft,
-                        type: event.target.value as GiveawayEditorDraft["type"],
-                      })
-                    }
-                    disabled={draft.protected}
-                  >
-                    <MenuItem value="raffle">Raffle</MenuItem>
-                    <MenuItem value="1v1">1v1 Picker</MenuItem>
-                    <MenuItem value="vip-pick">VIP Pick</MenuItem>
-                  </TextField>
-                  <TextField
-                    select
-                    fullWidth
-                    label="Status"
-                    value={draft.status}
-                    onChange={(event) =>
-                      onChange({
-                        ...draft,
-                        status: event.target.value as GiveawayEditorDraft["status"],
-                      })
-                    }
-                    disabled={isAutoGiveawayStatus(draft)}
-                    helperText={
-                      isAutoGiveawayStatus(draft)
-                        ? "1v1 giveaways automatically read live when 1v1 mode is active, otherwise they stay ready."
-                        : undefined
-                    }
-                  >
-                    <MenuItem value="draft">Draft</MenuItem>
-                    <MenuItem value="ready">Ready</MenuItem>
-                    <MenuItem value="live">Live</MenuItem>
-                    <MenuItem value="completed">Completed</MenuItem>
-                  </TextField>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Entrants visible"
-                    value={draft.entrantCount}
-                    onChange={(event) => setNumber("entrantCount", Number(event.target.value))}
-                  />
-                </Box>
+                <TextField
+                  fullWidth
+                  label="Type"
+                  value="Raffle"
+                  helperText="Custom giveaways use the raffle flow. The built-in 1v1 picker is edited from its dedicated dashboard instead."
+                  InputProps={{ readOnly: true }}
+                />
               </>
             ) : null}
 
@@ -262,7 +204,7 @@ export function GiveawayEditorDialog({
               <>
                 <EditorSectionTitle
                   label="Entry"
-                  copy="Decide how chat enters, how long the round stays open, and how winners are announced back to chat."
+                  copy="Choose how viewers join, how long the round stays open, and what chat should tell them."
                 />
 
                 <Box
@@ -297,6 +239,20 @@ export function GiveawayEditorDialog({
                         entryTrigger: event.target.value,
                       })
                     }
+                    disabled={draft.entryMethod !== "keyword"}
+                    helperText={
+                      draft.entryMethod === "keyword"
+                        ? "The chat keyword viewers type to enter."
+                        : "Active-user raffles do not need a manual keyword."
+                    }
+                    placeholder="!joinraffle"
+                  />
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Winner count"
+                    value={draft.winnerCount}
+                    onChange={(event) => setNumber("winnerCount", Number(event.target.value))}
                   />
                   <TextField
                     fullWidth
@@ -309,13 +265,6 @@ export function GiveawayEditorDialog({
                     InputProps={{
                       endAdornment: <Typography color="text.secondary">seconds</Typography>,
                     }}
-                  />
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Winner count"
-                    value={draft.winnerCount}
-                    onChange={(event) => setNumber("winnerCount", Number(event.target.value))}
                   />
                 </Box>
 
@@ -337,6 +286,7 @@ export function GiveawayEditorDialog({
                   }
                   multiline
                   minRows={2}
+                  placeholder="Type !joinraffle once to enter the current giveaway."
                 />
 
                 <TextField
@@ -351,54 +301,8 @@ export function GiveawayEditorDialog({
                   }
                   multiline
                   minRows={2}
+                  placeholder="{winner} won the giveaway."
                 />
-              </>
-            ) : null}
-
-            {section === "eligibility" ? (
-              <>
-                <EditorSectionTitle
-                  label="Eligibility"
-                  copy="Keep giveaway rules readable by deciding which groups can enter and whether a specific live mode is required."
-                />
-
-                <TextField
-                  select
-                  fullWidth
-                  label="Required mode"
-                  value={draft.requiredModeKey}
-                  onChange={(event) =>
-                    onChange({
-                      ...draft,
-                      requiredModeKey: event.target.value,
-                    })
-                  }
-                >
-                  <MenuItem value="">No mode requirement</MenuItem>
-                  {availableModes.map((mode) => (
-                    <MenuItem key={mode.key} value={mode.key}>
-                      {mode.title}
-                    </MenuItem>
-                  ))}
-                </TextField>
-
-                <Stack spacing={1.25}>
-                  <CheckboxRow
-                    label="Allow VIPs"
-                    checked={draft.allowVips}
-                    onChange={(checked) => setBoolean("allowVips", checked)}
-                  />
-                  <CheckboxRow
-                    label="Allow subscribers"
-                    checked={draft.allowSubscribers}
-                    onChange={(checked) => setBoolean("allowSubscribers", checked)}
-                  />
-                  <CheckboxRow
-                    label="Allow mods and broadcaster"
-                    checked={draft.allowModsBroadcaster}
-                    onChange={(checked) => setBoolean("allowModsBroadcaster", checked)}
-                  />
-                </Stack>
               </>
             ) : null}
           </Stack>

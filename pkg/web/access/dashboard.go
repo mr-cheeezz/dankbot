@@ -18,6 +18,8 @@ type DashboardAccess struct {
 	IsBroadcaster      bool
 	IsBotAccount       bool
 	IsModerator        bool
+	IsVIP              bool
+	IsLeadModerator    bool
 	IsEditor           bool
 	CanAccessDashboard bool
 }
@@ -32,7 +34,10 @@ func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID 
 	}
 
 	userID = strings.TrimSpace(userID)
-	streamerID := strings.TrimSpace(appState.Config.Main.StreamerID)
+	streamerID, err := ResolveStreamerID(ctx, appState)
+	if err != nil {
+		return access, err
+	}
 	adminID := strings.TrimSpace(appState.Config.Main.AdminID)
 	botID := strings.TrimSpace(appState.Config.Main.BotID)
 
@@ -60,7 +65,11 @@ func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID 
 		for _, role := range roles {
 			if role == postgres.DashboardRoleEditor {
 				access.IsEditor = true
-				break
+				continue
+			}
+			if role == postgres.DashboardRoleLeadMod {
+				access.IsLeadModerator = true
+				access.IsEditor = true
 			}
 		}
 	}
@@ -70,11 +79,19 @@ func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID 
 		return access, nil
 	}
 
-	isModerator, err := isChannelModerator(ctx, appState, userID)
+	isModerator, err := isChannelModerator(ctx, appState, streamerID, userID)
 	if err != nil {
 		return access, err
 	}
 	access.IsModerator = isModerator
+	if access.IsModerator && access.IsEditor {
+		access.IsLeadModerator = true
+	}
+	isVIP, err := isChannelVIP(ctx, appState, streamerID, userID)
+	if err != nil {
+		return access, err
+	}
+	access.IsVIP = isVIP
 	access.CanAccessDashboard = access.IsBroadcaster || access.IsAdmin || access.IsBotAccount || access.IsModerator || access.IsEditor
 
 	return access, nil
@@ -127,6 +144,8 @@ func LoadDashboardSession(
 
 	next := *userSession
 	next.IsModerator = access.IsModerator
+	next.IsVIP = access.IsVIP
+	next.IsLeadModerator = access.IsLeadModerator
 	next.IsBroadcaster = access.IsBroadcaster
 	next.IsBotAccount = access.IsBotAccount
 	next.IsEditor = access.IsEditor
@@ -215,6 +234,9 @@ func SearchTwitchUsers(ctx context.Context, appState *state.State, query string,
 
 	results, err := client.SearchChannels(ctx, query, limit, false)
 	if err != nil {
+		if len(out) > 0 {
+			return out, nil
+		}
 		return nil, err
 	}
 
@@ -272,30 +294,84 @@ func SearchTwitchUsers(ctx context.Context, appState *state.State, query string,
 	return out, nil
 }
 
-func isChannelModerator(ctx context.Context, appState *state.State, userID string) (bool, error) {
+func isChannelModerator(ctx context.Context, appState *state.State, streamerID, userID string) (bool, error) {
 	if appState == nil || appState.Config == nil {
 		return false, nil
 	}
 
-	streamerID := strings.TrimSpace(appState.Config.Main.StreamerID)
 	if streamerID == "" || strings.TrimSpace(userID) == "" {
 		return false, nil
 	}
 
-	client, err := dashboardBroadcasterHelixClient(ctx, appState)
-	if err != nil || client == nil {
-		return false, err
-	}
-
-	moderators, _, err := client.GetModerators(ctx, streamerID, []string{strings.TrimSpace(userID)}, 1, "")
+	clients := make([]*helix.Client, 0, 2)
+	broadcasterClient, err := dashboardBroadcasterHelixClient(ctx, appState)
 	if err != nil {
-		if isModeratorLookupScopeError(err) {
-			return false, nil
-		}
 		return false, err
 	}
+	if broadcasterClient != nil {
+		clients = append(clients, broadcasterClient)
+	}
 
-	return len(moderators) > 0, nil
+	generalClient, err := dashboardHelixClient(ctx, appState)
+	if err != nil {
+		return false, err
+	}
+	if generalClient != nil {
+		clients = append(clients, generalClient)
+	}
+
+	for _, client := range clients {
+		moderators, _, lookupErr := client.GetModerators(ctx, streamerID, []string{strings.TrimSpace(userID)}, 1, "")
+		if lookupErr != nil {
+			if isAuthorizationError(lookupErr) {
+				continue
+			}
+			return false, lookupErr
+		}
+		return len(moderators) > 0, nil
+	}
+
+	return false, nil
+}
+
+func isChannelVIP(ctx context.Context, appState *state.State, streamerID, userID string) (bool, error) {
+	if appState == nil || appState.Config == nil {
+		return false, nil
+	}
+
+	if streamerID == "" || strings.TrimSpace(userID) == "" {
+		return false, nil
+	}
+
+	clients := make([]*helix.Client, 0, 2)
+	broadcasterClient, err := dashboardBroadcasterHelixClient(ctx, appState)
+	if err != nil {
+		return false, err
+	}
+	if broadcasterClient != nil {
+		clients = append(clients, broadcasterClient)
+	}
+
+	generalClient, err := dashboardHelixClient(ctx, appState)
+	if err != nil {
+		return false, err
+	}
+	if generalClient != nil {
+		clients = append(clients, generalClient)
+	}
+
+	for _, client := range clients {
+		vips, _, lookupErr := client.GetVIPs(ctx, streamerID, []string{strings.TrimSpace(userID)}, 1, "")
+		if lookupErr != nil {
+			if isAuthorizationError(lookupErr) {
+				continue
+			}
+			return false, lookupErr
+		}
+		return len(vips) > 0, nil
+	}
+
+	return false, nil
 }
 
 func dashboardHelixClient(ctx context.Context, appState *state.State) (*helix.Client, error) {
@@ -383,6 +459,14 @@ func isModeratorLookupScopeError(err error) bool {
 	return strings.Contains(message, "missing scope")
 }
 
+func isAuthorizationError(err error) bool {
+	apiErr := &helix.APIError{}
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden
+}
+
 func ensureFreshTwitchAccessToken(
 	ctx context.Context,
 	appState *state.State,
@@ -418,4 +502,58 @@ func ensureFreshTwitchAccessToken(
 	_ = appState.TwitchAccounts.Save(ctx, *account)
 
 	return strings.TrimSpace(account.AccessToken), nil
+}
+
+func ResolveStreamerID(ctx context.Context, appState *state.State) (string, error) {
+	if appState == nil || appState.Config == nil {
+		return "", nil
+	}
+
+	if appState.TwitchAccounts != nil {
+		account, err := appState.TwitchAccounts.Get(ctx, postgres.TwitchAccountKindStreamer)
+		if err != nil {
+			return "", err
+		}
+		if account != nil {
+			if linkedID := strings.TrimSpace(account.TwitchUserID); linkedID != "" {
+				return linkedID, nil
+			}
+		}
+	}
+
+	return strings.TrimSpace(appState.Config.Main.StreamerID), nil
+}
+
+func ResolveChannelRole(ctx context.Context, appState *state.State, userID string) string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" || appState == nil || appState.Config == nil {
+		return "viewer"
+	}
+
+	streamerID, err := ResolveStreamerID(ctx, appState)
+	if err != nil {
+		streamerID = strings.TrimSpace(appState.Config.Main.StreamerID)
+	}
+	if streamerID != "" && streamerID == userID {
+		return "broadcaster"
+	}
+
+	if appState != nil && appState.DashboardRoles != nil {
+		leadModRole, roleErr := appState.DashboardRoles.Get(ctx, userID, postgres.DashboardRoleLeadMod)
+		if roleErr == nil && leadModRole != nil {
+			return "lead_mod"
+		}
+	}
+
+	isModerator, modErr := isChannelModerator(ctx, appState, streamerID, userID)
+	if modErr == nil && isModerator {
+		return "moderator"
+	}
+
+	isVIP, vipErr := isChannelVIP(ctx, appState, streamerID, userID)
+	if vipErr == nil && isVIP {
+		return "vip"
+	}
+
+	return "viewer"
 }

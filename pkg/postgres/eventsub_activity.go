@@ -31,6 +31,31 @@ type PollEventSnapshot struct {
 	Choices              []PollChoiceSnapshot
 }
 
+type PredictionOutcomeSnapshot struct {
+	OutcomeID     string
+	Title         string
+	Users         int
+	ChannelPoints int64
+	Color         string
+}
+
+type PredictionEventSnapshot struct {
+	TwitchSubscriptionID string
+	EventType            string
+	PredictionID         string
+	BroadcasterUserID    string
+	BroadcasterUserLogin string
+	BroadcasterUserName  string
+	Title                string
+	Status               string
+	WinningOutcomeID     string
+	StartedAt            time.Time
+	EndedAt              time.Time
+	LockedAt             time.Time
+	RawEvent             json.RawMessage
+	Outcomes             []PredictionOutcomeSnapshot
+}
+
 type ChannelPointRedemption struct {
 	RedemptionID         string
 	TwitchSubscriptionID string
@@ -74,6 +99,15 @@ type UserRedemptionStats struct {
 	LastRedeemedAt   time.Time
 	TopRewards       []UserRedemptionRewardSummary
 	RecentActivity   []UserRedemptionActivity
+}
+
+type BroadcasterActivityStats struct {
+	PollCount            int
+	PollEndedCount       int
+	LastPollAt           time.Time
+	PredictionCount      int
+	PredictionEndedCount int
+	LastPredictionAt     time.Time
 }
 
 func NewEventSubActivityStore(client *Client) *EventSubActivityStore {
@@ -228,6 +262,93 @@ ON CONFLICT (redemption_id) DO UPDATE SET
 	}
 
 	return nil
+}
+
+func (s *EventSubActivityStore) SavePredictionEvent(ctx context.Context, event PredictionEventSnapshot) error {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.ExecContext(
+		ctx,
+		`
+INSERT INTO twitch_prediction_events (
+	twitch_subscription_id,
+	event_type,
+	prediction_id,
+	broadcaster_user_id,
+	broadcaster_user_login,
+	broadcaster_user_name,
+	title,
+	status,
+	winning_outcome_id,
+	started_at,
+	ended_at,
+	locked_at,
+	raw_event,
+	created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW())
+`,
+		event.TwitchSubscriptionID,
+		event.EventType,
+		event.PredictionID,
+		event.BroadcasterUserID,
+		event.BroadcasterUserLogin,
+		event.BroadcasterUserName,
+		event.Title,
+		event.Status,
+		event.WinningOutcomeID,
+		nullTime(event.StartedAt),
+		nullTime(event.EndedAt),
+		nullTime(event.LockedAt),
+		string(event.RawEvent),
+	)
+	if err != nil {
+		return fmt.Errorf("insert prediction event snapshot: %w", err)
+	}
+
+	return nil
+}
+
+func (s *EventSubActivityStore) GetBroadcasterActivityStats(ctx context.Context, broadcasterUserID string) (BroadcasterActivityStats, error) {
+	var stats BroadcasterActivityStats
+
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return stats, err
+	}
+
+	var lastPollAt sql.NullTime
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*), COUNT(*) FILTER (WHERE event_type = 'channel.poll.end'), MAX(COALESCE(ended_at, started_at, created_at))
+		 FROM twitch_poll_events
+		 WHERE broadcaster_user_id = $1`,
+		broadcasterUserID,
+	).Scan(&stats.PollCount, &stats.PollEndedCount, &lastPollAt); err != nil {
+		return stats, fmt.Errorf("get poll activity stats %q: %w", broadcasterUserID, err)
+	}
+	if lastPollAt.Valid {
+		stats.LastPollAt = lastPollAt.Time
+	}
+
+	var lastPredictionAt sql.NullTime
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*), COUNT(*) FILTER (WHERE event_type = 'channel.prediction.end'), MAX(COALESCE(ended_at, locked_at, started_at, created_at))
+		 FROM twitch_prediction_events
+		 WHERE broadcaster_user_id = $1`,
+		broadcasterUserID,
+	).Scan(&stats.PredictionCount, &stats.PredictionEndedCount, &lastPredictionAt); err != nil {
+		return stats, fmt.Errorf("get prediction activity stats %q: %w", broadcasterUserID, err)
+	}
+	if lastPredictionAt.Valid {
+		stats.LastPredictionAt = lastPredictionAt.Time
+	}
+
+	return stats, nil
 }
 
 func (s *EventSubActivityStore) GetUserRedemptionStats(ctx context.Context, userID string, topLimit, recentLimit int) (UserRedemptionStats, error) {

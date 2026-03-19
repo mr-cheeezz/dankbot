@@ -199,7 +199,8 @@ func (m *Module) Start(ctx context.Context) error {
 }
 
 func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResult, error) {
-	if strings.HasPrefix(strings.TrimSpace(ctx.Message), "!") {
+	commandPrefix := normalizeCommandPrefix(ctx.CommandPrefix)
+	if strings.HasPrefix(strings.TrimSpace(ctx.Message), commandPrefix) {
 		return modules.MessageResult{}, nil
 	}
 	if !m.canManageModes(ctx) {
@@ -243,7 +244,7 @@ func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResul
 	m.logAction(ctx, fmt.Sprintf("detected Roblox private server link and enabled link mode for %s", strings.ToLower(link)))
 
 	return modules.MessageResult{
-		Reply:          strings.TrimSpace("Link mode enabled. !link now points to the posted private server. " + warning),
+		Reply:          strings.TrimSpace(fmt.Sprintf("Link mode enabled. %slink now points to the posted private server. %s", commandPrefix, warning)),
 		StopProcessing: true,
 	}, nil
 }
@@ -606,7 +607,8 @@ func (m *Module) tickTitleEnforcer(ctx context.Context) error {
 	}
 
 	desiredTitle := strings.TrimSpace(mode.CoordinatedTwitchTitle)
-	if desiredTitle == "" {
+	desiredCategoryID := strings.TrimSpace(mode.CoordinatedTwitchCategoryID)
+	if desiredTitle == "" && desiredCategoryID == "" {
 		return nil
 	}
 
@@ -639,13 +641,21 @@ func (m *Module) tickTitleEnforcer(ctx context.Context) error {
 	}
 
 	currentTitle := strings.TrimSpace(channels[0].Title)
-	if currentTitle == desiredTitle {
+	currentCategoryID := strings.TrimSpace(channels[0].GameID)
+
+	request := twitchhelix.UpdateChannelInformationRequest{}
+	if desiredTitle != "" && currentTitle != desiredTitle {
+		request.Title = &desiredTitle
+	}
+	if desiredCategoryID != "" && currentCategoryID != desiredCategoryID {
+		request.GameID = &desiredCategoryID
+	}
+
+	if request.Title == nil && request.GameID == nil {
 		return nil
 	}
 
-	return client.UpdateChannelInformation(requestCtx, account.TwitchUserID, twitchhelix.UpdateChannelInformationRequest{
-		Title: &desiredTitle,
-	})
+	return client.UpdateChannelInformation(requestCtx, account.TwitchUserID, request)
 }
 
 func (m *Module) output() (string, func(channel, message string) error) {
@@ -694,7 +704,7 @@ func (m *Module) logAction(ctx modules.CommandContext, detail string) {
 	if command == "" {
 		command = "mode"
 	}
-	command = "!" + strings.TrimPrefix(command, "!")
+	command = normalizeCommandPrefix(ctx.CommandPrefix) + strings.TrimPrefix(command, "!")
 
 	if _, err := m.auditStore.Create(context.Background(), postgres.AuditLog{
 		Platform:  ctx.Platform,
@@ -705,6 +715,15 @@ func (m *Module) logAction(ctx modules.CommandContext, detail string) {
 	}); err != nil {
 		fmt.Printf("audit log error: %v\n", err)
 	}
+}
+
+func normalizeCommandPrefix(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "!"
+	}
+
+	return trimmed
 }
 
 func formatModeAuditDetail(modeKey, modeParam string) string {

@@ -37,6 +37,7 @@ type Module struct {
 	twitchClientID string
 	streamerID     string
 	playtimeStore  *postgres.RobloxPlaytimeStore
+	settingsStore  *postgres.GameModuleSettingsStore
 	twitchOAuth    *twitchoauth.Service
 	twitchAccounts *postgres.TwitchAccountStore
 
@@ -44,14 +45,17 @@ type Module struct {
 	current            trackerState
 	lastChannel        *twitchhelix.Channel
 	lastChannelChecked time.Time
+	lastLive           bool
+	lastLiveChecked    time.Time
 }
 
-func New(cookie, twitchClientID, streamerID string, playtimeStore *postgres.RobloxPlaytimeStore, twitchOAuth *twitchoauth.Service, twitchAccounts *postgres.TwitchAccountStore) *Module {
+func New(cookie, twitchClientID, streamerID string, playtimeStore *postgres.RobloxPlaytimeStore, settingsStore *postgres.GameModuleSettingsStore, twitchOAuth *twitchoauth.Service, twitchAccounts *postgres.TwitchAccountStore) *Module {
 	return &Module{
 		configCookie:   strings.TrimSpace(cookie),
 		twitchClientID: strings.TrimSpace(twitchClientID),
 		streamerID:     strings.TrimSpace(streamerID),
 		playtimeStore:  playtimeStore,
+		settingsStore:  settingsStore,
 		twitchOAuth:    twitchOAuth,
 		twitchAccounts: twitchAccounts,
 	}
@@ -101,14 +105,17 @@ func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 		return "no Roblox experience is currently being tracked", nil
 	}
 
-	item, err := m.playtimeStore.Get(context.Background(), current.UniverseID)
-	if err != nil {
-		return "", err
-	}
-
 	total := time.Duration(0)
-	if item != nil {
-		total += time.Duration(item.TotalSeconds) * time.Second
+	var item *postgres.RobloxGamePlaytime
+	if strings.TrimSpace(current.StreamSessionID) != "" {
+		sessionItem, err := m.playtimeStore.GetByStreamSession(context.Background(), current.StreamSessionID, current.UniverseID)
+		if err != nil {
+			return "", err
+		}
+		item = sessionItem
+		if item != nil {
+			total += time.Duration(item.TotalSeconds) * time.Second
+		}
 	}
 	if !current.TrackedAt.IsZero() {
 		total += time.Since(current.TrackedAt)
@@ -122,11 +129,29 @@ func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 		gameName = "current Roblox experience"
 	}
 
-	return fmt.Sprintf("%s has been playing %s for %s.", m.streamerName(context.Background()), gameName, total.Round(time.Second)), nil
+	template := postgres.DefaultGameModuleSettings().PlaytimeTemplate
+	if m.settingsStore != nil {
+		if settings, err := m.settingsStore.Get(context.Background()); err != nil {
+			return "", err
+		} else if settings != nil && strings.TrimSpace(settings.PlaytimeTemplate) != "" {
+			template = settings.PlaytimeTemplate
+		}
+	}
+
+	replacer := strings.NewReplacer(
+		"{streamer}", m.streamerName(context.Background()),
+		"{game}", gameName,
+		"{duration}", total.Round(time.Second).String(),
+	)
+	return replacer.Replace(template), nil
 }
 
 func (m *Module) game(ctx modules.CommandContext) (string, error) {
 	_ = ctx
+
+	if live, err := m.streamIsLive(context.Background()); err == nil && !live {
+		return fmt.Sprintf("%s is offline.", m.streamerName(context.Background())), nil
+	}
 
 	channel, err := m.currentChannel(context.Background())
 	if err != nil {
@@ -152,6 +177,9 @@ func (m *Module) game(ctx modules.CommandContext) (string, error) {
 	if experienceName == "" {
 		return fmt.Sprintf("%s is currently playing a Roblox experience.", m.streamerName(context.Background())), nil
 	}
+	if strings.EqualFold(strings.TrimSpace(experienceName), "website") {
+		return fmt.Sprintf("%s is switching games.", m.streamerName(context.Background())), nil
+	}
 
 	return fmt.Sprintf("%s is currently playing %s.", m.streamerName(context.Background()), experienceName), nil
 }
@@ -162,7 +190,17 @@ func (m *Module) gamesPlayed(ctx modules.CommandContext) (string, error) {
 		scope = strings.ToLower(strings.TrimSpace(ctx.Args[0]))
 	}
 
-	items, label, err := m.gamesPlayedScope(context.Background(), scope)
+	settings := postgres.DefaultGameModuleSettings()
+	if m.settingsStore != nil {
+		if stored, err := m.settingsStore.Get(context.Background()); err != nil {
+			return "", err
+		} else if stored != nil {
+			settings = *stored
+		}
+	}
+
+	limit := settings.GamesPlayedLimit
+	items, label, err := m.gamesPlayedScope(context.Background(), scope, limit)
 	if err != nil {
 		return "", err
 	}
@@ -176,10 +214,20 @@ func (m *Module) gamesPlayed(ctx modules.CommandContext) (string, error) {
 		if name == "" {
 			name = fmt.Sprintf("Universe %d", item.UniverseID)
 		}
-		parts = append(parts, fmt.Sprintf("%s (%s)", name, (time.Duration(item.TotalSeconds)*time.Second).Round(time.Second)))
+		duration := (time.Duration(item.TotalSeconds) * time.Second).Round(time.Second).String()
+		itemReplacer := strings.NewReplacer(
+			"{game}", name,
+			"{duration}", duration,
+		)
+		parts = append(parts, itemReplacer.Replace(settings.GamesPlayedItemTemplate))
 	}
 
-	return label + ": " + strings.Join(parts, ", "), nil
+	itemsText := strings.Join(parts, ", ")
+	outReplacer := strings.NewReplacer(
+		"{label}", label,
+		"{items}", itemsText,
+	)
+	return outReplacer.Replace(settings.GamesPlayedTemplate), nil
 }
 
 func (m *Module) runTracker(ctx context.Context) {
@@ -319,6 +367,40 @@ func (m *Module) currentChannel(ctx context.Context) (*twitchhelix.Channel, erro
 	return &channels[0], nil
 }
 
+func (m *Module) streamIsLive(ctx context.Context) (bool, error) {
+	if strings.TrimSpace(m.twitchClientID) == "" || strings.TrimSpace(m.streamerID) == "" || m.twitchOAuth == nil {
+		// If we can't check, don't block the command output.
+		return true, nil
+	}
+
+	m.mu.RLock()
+	if !m.lastLiveChecked.IsZero() && time.Since(m.lastLiveChecked) < 30*time.Second {
+		cached := m.lastLive
+		m.mu.RUnlock()
+		return cached, nil
+	}
+	m.mu.RUnlock()
+
+	token, err := m.twitchOAuth.AppToken(ctx)
+	if err != nil {
+		return true, err
+	}
+
+	helixClient := twitchhelix.NewClient(m.twitchClientID, token.AccessToken)
+	streams, err := helixClient.GetStreamsByUserIDs(ctx, []string{m.streamerID})
+	if err != nil {
+		return true, err
+	}
+
+	live := len(streams) > 0
+	m.mu.Lock()
+	m.lastLive = live
+	m.lastLiveChecked = time.Now().UTC()
+	m.mu.Unlock()
+
+	return live, nil
+}
+
 func (m *Module) currentRobloxExperienceName(ctx context.Context) (string, error) {
 	current := m.currentState()
 	if strings.TrimSpace(current.GameName) != "" {
@@ -438,49 +520,52 @@ func cleanRobloxExperienceName(name string) string {
 	return cleaned
 }
 
-func (m *Module) gamesPlayedScope(ctx context.Context, scope string) ([]postgres.RobloxGamePlaytime, string, error) {
+func (m *Module) gamesPlayedScope(ctx context.Context, scope string, limit int) ([]postgres.RobloxGamePlaytime, string, error) {
 	now := time.Now().UTC()
+	if limit < 1 {
+		limit = postgres.DefaultGameModuleSettings().GamesPlayedLimit
+	}
 
 	switch scope {
 	case "", "stream":
 		current := m.currentState()
 		if current.StreamSessionID == "" {
-			return nil, "Top 5 games played this stream", nil
+			return nil, fmt.Sprintf("Top %d games played this stream", limit), nil
 		}
 
-		items, err := m.playtimeStore.ListTopByStreamSession(ctx, current.StreamSessionID, 5)
+		items, err := m.playtimeStore.ListTopByStreamSession(ctx, current.StreamSessionID, limit)
 		if err != nil {
 			return nil, "", err
 		}
-		items = applyCurrentPlaytime(items, current, now)
-		return items, "Top 5 games played this stream", nil
+		items = applyCurrentPlaytime(items, current, now, limit)
+		return items, fmt.Sprintf("Top %d games played this stream", limit), nil
 	case "all", "alltime":
-		items, err := m.playtimeStore.ListTop(ctx, 5)
+		items, err := m.playtimeStore.ListTop(ctx, limit)
 		if err != nil {
 			return nil, "", err
 		}
-		items = applyCurrentPlaytime(items, m.currentState(), now)
-		return items, "Top 5 games played all time", nil
+		items = applyCurrentPlaytime(items, m.currentState(), now, limit)
+		return items, fmt.Sprintf("Top %d games played all time", limit), nil
 	case "week":
-		items, err := m.playtimeStore.ListTopByRange(ctx, now.AddDate(0, 0, -7), now, 5)
-		return items, "Top 5 games played in the past week", err
+		items, err := m.playtimeStore.ListTopByRange(ctx, now.AddDate(0, 0, -7), now, limit)
+		return items, fmt.Sprintf("Top %d games played in the past week", limit), err
 	case "lastweek":
 		start := now.AddDate(0, 0, -14)
 		end := now.AddDate(0, 0, -7)
-		items, err := m.playtimeStore.ListTopByRange(ctx, start, end, 5)
-		return items, "Top 5 games played last week", err
+		items, err := m.playtimeStore.ListTopByRange(ctx, start, end, limit)
+		return items, fmt.Sprintf("Top %d games played last week", limit), err
 	case "month":
-		items, err := m.playtimeStore.ListTopByRange(ctx, now.AddDate(0, -1, 0), now, 5)
-		return items, "Top 5 games played in the past month", err
+		items, err := m.playtimeStore.ListTopByRange(ctx, now.AddDate(0, -1, 0), now, limit)
+		return items, fmt.Sprintf("Top %d games played in the past month", limit), err
 	case "laststream":
-		items, err := m.playtimeStore.ListTopByLastCompletedStream(ctx, 5)
-		return items, "Top 5 games played last stream", err
+		items, err := m.playtimeStore.ListTopByLastCompletedStream(ctx, limit)
+		return items, fmt.Sprintf("Top %d games played last stream", limit), err
 	default:
 		return nil, "", fmt.Errorf("unknown gamesplayed range %q", scope)
 	}
 }
 
-func applyCurrentPlaytime(items []postgres.RobloxGamePlaytime, current trackerState, now time.Time) []postgres.RobloxGamePlaytime {
+func applyCurrentPlaytime(items []postgres.RobloxGamePlaytime, current trackerState, now time.Time, limit int) []postgres.RobloxGamePlaytime {
 	if current.UniverseID == 0 || current.TrackedAt.IsZero() {
 		return items
 	}
@@ -514,8 +599,11 @@ func applyCurrentPlaytime(items []postgres.RobloxGamePlaytime, current trackerSt
 		}
 		return items[i].TotalSeconds > items[j].TotalSeconds
 	})
-	if len(items) > 5 {
-		items = items[:5]
+	if limit < 1 {
+		limit = postgres.DefaultGameModuleSettings().GamesPlayedLimit
+	}
+	if len(items) > limit {
+		items = items[:limit]
 	}
 
 	return items

@@ -2,7 +2,6 @@ import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CelebrationRoundedIcon from "@mui/icons-material/CelebrationRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
-import PersonSearchRoundedIcon from "@mui/icons-material/PersonSearchRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SportsEsportsRoundedIcon from "@mui/icons-material/SportsEsportsRounded";
 import {
@@ -26,45 +25,29 @@ import {
   type GiveawayEditorDraft,
 } from "../components/GiveawayEditorDialog";
 import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
-import { resolveGiveawayStatus } from "../giveaways";
 import { useModerator } from "../ModeratorContext";
 import type { GiveawayEntry } from "../types";
 
-type GiveawayTab = "all" | "active" | "completed";
+type GiveawayTab = "all" | "builtIn" | "custom";
 
 const defaultDraft: GiveawayEditorDraft = {
   name: "",
   type: "raffle",
-  status: "draft",
   entryMethod: "keyword",
   description: "",
   enabled: true,
   chatAnnouncementsEnabled: true,
-  entryTrigger: "!joinraffle",
+  entryTrigger: "",
   entryWindowSeconds: 180,
-  inactivityTimeoutSeconds: 0,
-  subscriberLuckMultiplier: 1,
   winnerCount: 1,
-  allowVips: true,
-  allowSubscribers: true,
-  allowModsBroadcaster: false,
-  requiredModeKey: "",
-  chatPrompt: "Type !joinraffle once to enter the current giveaway.",
-  winnerMessage: "{winner} won the giveaway.",
-  entrantCount: 0,
+  chatPrompt: "",
+  winnerMessage: "",
   protected: false,
 };
 
 export function GiveawaysPage() {
   const navigate = useNavigate();
-  const {
-    giveaways,
-    availableBotModes,
-    currentBotModeKey,
-    createGiveaway,
-    deleteGiveaway,
-    toggleGiveaway,
-  } = useModerator();
+  const { giveaways, createGiveaway, deleteGiveaway, toggleGiveaway } = useModerator();
   const [tab, setTab] = useState<GiveawayTab>("all");
   const [search, setSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -73,14 +56,16 @@ export function GiveawaysPage() {
 
   const normalizedSearch = search.trim().toLowerCase();
 
+  const builtInCount = giveaways.filter((entry) => entry.protected).length;
+  const customCount = giveaways.filter((entry) => !entry.protected).length;
+  const enabledCount = giveaways.filter((entry) => entry.enabled).length;
+
   const visibleGiveaways = useMemo(() => {
     return giveaways.filter((entry) => {
-      const resolvedStatus = resolveGiveawayStatus(entry, currentBotModeKey);
-
-      if (tab === "active" && !["ready", "live"].includes(resolvedStatus)) {
+      if (tab === "builtIn" && !entry.protected) {
         return false;
       }
-      if (tab === "completed" && resolvedStatus !== "completed") {
+      if (tab === "custom" && entry.protected) {
         return false;
       }
       if (normalizedSearch === "") {
@@ -90,10 +75,9 @@ export function GiveawaysPage() {
       return [
         entry.name,
         entry.type,
-        resolvedStatus,
+        entry.entryMethod,
         entry.description,
         entry.entryTrigger,
-        entry.requiredModeKey,
         entry.chatPrompt,
         entry.winnerMessage,
       ]
@@ -101,15 +85,7 @@ export function GiveawaysPage() {
         .toLowerCase()
         .includes(normalizedSearch);
     });
-  }, [currentBotModeKey, giveaways, normalizedSearch, tab]);
-
-  const activeCount = giveaways.filter((entry) =>
-    ["ready", "live"].includes(resolveGiveawayStatus(entry, currentBotModeKey)),
-  ).length;
-  const completedCount = giveaways.filter(
-    (entry) => resolveGiveawayStatus(entry, currentBotModeKey) === "completed",
-  ).length;
-  const entrantCount = giveaways.reduce((total, entry) => total + entry.entrantCount, 0);
+  }, [giveaways, normalizedSearch, tab]);
 
   const openCreateDialog = () => {
     setDraft(defaultDraft);
@@ -124,25 +100,27 @@ export function GiveawaysPage() {
   const saveDraft = () => {
     const cleanedDraft: GiveawayEditorDraft = {
       ...draft,
-      status: draft.type === "1v1" ? "ready" : draft.status,
       name: draft.name.trim(),
       description: draft.description.trim(),
-      entryTrigger: draft.entryTrigger.trim(),
-      requiredModeKey: draft.requiredModeKey.trim(),
+      entryTrigger: draft.entryMethod === "keyword" ? draft.entryTrigger.trim() : "",
       chatPrompt: draft.chatPrompt.trim(),
       winnerMessage: draft.winnerMessage.trim(),
       entryWindowSeconds: Math.max(10, Math.round(draft.entryWindowSeconds || 0)),
       winnerCount: Math.max(1, Math.round(draft.winnerCount || 0)),
-      entrantCount: Math.max(0, Math.round(draft.entrantCount || 0)),
     };
 
-    if (cleanedDraft.name === "" || cleanedDraft.entryTrigger === "") {
+    if (cleanedDraft.name === "") {
+      return;
+    }
+    if (
+      cleanedDraft.entryMethod === "keyword" &&
+      cleanedDraft.entryTrigger === ""
+    ) {
       return;
     }
 
     createGiveaway(cleanedDraft);
     setTab("all");
-
     closeDialog();
   };
 
@@ -170,8 +148,8 @@ export function GiveawaysPage() {
         <Box>
           <Typography variant="h5">Giveaways</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 760 }}>
-            Keep viewer raffles, 1v1 picks, and quick community draws in one place so mods are not
-            juggling them through scattered commands.
+            Keep the built-in 1v1 picker here, add custom raffles when you need them, and leave
+            live entrant tracking to the bot instead of hardcoding it into the dashboard.
           </Typography>
         </Box>
         <Button
@@ -181,7 +159,7 @@ export function GiveawaysPage() {
           onClick={openCreateDialog}
           sx={{ minHeight: 42, px: 2.25 }}
         >
-          Create
+          Create raffle
         </Button>
       </Box>
 
@@ -196,9 +174,9 @@ export function GiveawaysPage() {
           borderColor: "divider",
         }}
       >
-        <StatCard label="Live or ready" value={activeCount.toString()} />
-        <StatCard label="Tracked entrants" value={entrantCount.toString()} />
-        <StatCard label="Completed rounds" value={completedCount.toString()} />
+        <StatCard label="Built-in" value={builtInCount.toString()} />
+        <StatCard label="Custom" value={customCount.toString()} />
+        <StatCard label="Enabled" value={enabledCount.toString()} />
       </Box>
 
       <Tabs
@@ -217,8 +195,8 @@ export function GiveawaysPage() {
         }}
       >
         <Tab value="all" label="All Giveaways" disableRipple />
-        <Tab value="active" label={`Live & Ready (${activeCount})`} disableRipple />
-        <Tab value="completed" label={`History (${completedCount})`} disableRipple />
+        <Tab value="builtIn" label={`Built-in (${builtInCount})`} disableRipple />
+        <Tab value="custom" label={`Custom (${customCount})`} disableRipple />
       </Tabs>
 
       <Box
@@ -272,7 +250,8 @@ export function GiveawaysPage() {
               No giveaways here yet
             </Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
-              Create one for raffles, 1v1 picks, or quick mod-run viewer draws.
+              The built-in 1v1 picker should stay here by default, and any extra raffle flows can
+              be created as custom giveaways.
             </Typography>
           </Paper>
         ) : (
@@ -282,10 +261,8 @@ export function GiveawaysPage() {
               gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" },
               gap: 1.5,
             }}
-            >
+          >
             {visibleGiveaways.map((entry) => {
-              const resolvedStatus = resolveGiveawayStatus(entry, currentBotModeKey);
-
               return (
                 <Paper
                   key={entry.id}
@@ -315,7 +292,9 @@ export function GiveawaysPage() {
                         spacing={1}
                         alignItems={{ xs: "flex-start", sm: "center" }}
                       >
-                        <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>{entry.name}</Typography>
+                        <Typography sx={{ fontSize: "1rem", fontWeight: 800 }}>
+                          {entry.name}
+                        </Typography>
                         <Stack direction="row" spacing={0.75} flexWrap="wrap">
                           <Chip
                             size="small"
@@ -328,16 +307,10 @@ export function GiveawaysPage() {
                               fontWeight: 700,
                             }}
                           />
-                          <Chip
-                            size="small"
-                            label={resolvedStatus}
-                            color={statusColor(resolvedStatus)}
-                            sx={{ height: 24, fontWeight: 700 }}
-                          />
-                          {entry.requiredModeKey !== "" ? (
+                          {entry.protected ? (
                             <Chip
                               size="small"
-                              label={`mode: ${entry.requiredModeKey}`}
+                              label="Built-in"
                               sx={{
                                 height: 24,
                                 backgroundColor: "rgba(255,255,255,0.04)",
@@ -356,30 +329,28 @@ export function GiveawaysPage() {
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
                         <SummaryPill
                           icon={<ForumRoundedIcon sx={{ fontSize: "1rem" }} />}
-                          label={`Trigger: ${entry.entryTrigger}`}
+                          label={
+                            entry.entryMethod === "keyword"
+                              ? `Trigger: ${entry.entryTrigger}`
+                              : "Entry: active chatters"
+                          }
                         />
                         <SummaryPill
                           icon={<CelebrationRoundedIcon sx={{ fontSize: "1rem" }} />}
                           label={`${entry.winnerCount} winner${entry.winnerCount === 1 ? "" : "s"}`}
                         />
-                        <SummaryPill
-                          icon={<PersonSearchRoundedIcon sx={{ fontSize: "1rem" }} />}
-                          label={`${entry.entrantCount} entrants`}
-                        />
                       </Stack>
 
-                    </Box>
-
-                    <Stack direction="row" spacing={1}>
                       <Box sx={{ mt: 1.75 }}>
                         <Typography sx={{ fontSize: "0.86rem", fontWeight: 700 }}>
                           Chat prompt
                         </Typography>
                         <Typography color="text.secondary" sx={{ mt: 0.45, fontSize: "0.88rem" }}>
-                          {entry.chatPrompt}
+                          {entry.chatPrompt || "No chat prompt configured yet."}
                         </Typography>
                       </Box>
-                    </Stack>
+                    </Box>
+
                     <Stack
                       direction={{ xs: "row", lg: "column" }}
                       spacing={1}
@@ -401,7 +372,7 @@ export function GiveawaysPage() {
                           variant="outlined"
                           size="small"
                           onClick={() =>
-                            navigate(`/dashboard/giveaways/${encodeURIComponent(entry.id)}`)
+                            navigate(`/d/giveaways/${encodeURIComponent(entry.id)}`)
                           }
                           sx={{
                             minHeight: 34,
@@ -441,7 +412,6 @@ export function GiveawaysPage() {
         open={editorOpen}
         editing={false}
         draft={draft}
-        availableModes={availableBotModes}
         onChange={setDraft}
         onClose={closeDialog}
         onSave={saveDraft}
@@ -450,7 +420,7 @@ export function GiveawaysPage() {
       <ConfirmActionDialog
         open={pendingDelete != null}
         title={`Delete ${pendingDelete?.name ?? "giveaway"}?`}
-        description="This removes the giveaway setup from the dashboard list. Protected entries like the 1v1 picker stay pinned here."
+        description="This removes the giveaway setup from the dashboard list. Built-in entries like the 1v1 picker stay pinned here."
         confirmLabel="Delete giveaway"
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {
@@ -474,10 +444,20 @@ function StatCard({ label, value }: { label: string; value: string }) {
         backgroundColor: "background.default",
       }}
     >
-      <Typography sx={{ fontSize: "0.8rem", fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+      <Typography
+        sx={{
+          fontSize: "0.8rem",
+          fontWeight: 800,
+          color: "text.secondary",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+        }}
+      >
         {label}
       </Typography>
-      <Typography sx={{ mt: 0.65, fontSize: "1.5rem", fontWeight: 800 }}>{value}</Typography>
+      <Typography sx={{ mt: 0.65, fontSize: "1.5rem", fontWeight: 800 }}>
+        {value}
+      </Typography>
     </Paper>
   );
 }
@@ -508,8 +488,6 @@ function typeLabel(type: GiveawayEntry["type"]) {
   switch (type) {
     case "1v1":
       return "1v1 picker";
-    case "vip-pick":
-      return "vip pick";
     default:
       return "raffle";
   }
@@ -519,20 +497,7 @@ function typeIcon(type: GiveawayEntry["type"]) {
   switch (type) {
     case "1v1":
       return <SportsEsportsRoundedIcon sx={{ fontSize: "1rem !important" }} />;
-    case "vip-pick":
-      return <PersonSearchRoundedIcon sx={{ fontSize: "1rem !important" }} />;
     default:
       return <CelebrationRoundedIcon sx={{ fontSize: "1rem !important" }} />;
-  }
-}
-
-function statusColor(status: GiveawayEntry["status"]): "default" | "success" | "warning" {
-  switch (status) {
-    case "live":
-      return "success";
-    case "ready":
-      return "warning";
-    default:
-      return "default";
   }
 }

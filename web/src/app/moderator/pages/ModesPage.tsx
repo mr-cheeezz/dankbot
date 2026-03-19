@@ -6,11 +6,13 @@ import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import {
+  Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
   Checkbox,
+  CircularProgress,
   Chip,
   Dialog,
   DialogActions,
@@ -29,12 +31,13 @@ import {
   Typography,
 } from "@mui/material";
 import type { SvgIconComponent } from "@mui/icons-material";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
+import { searchDashboardTwitchCategories } from "../api";
 import { useModerator } from "../ModeratorContext";
-import type { ModeEntry } from "../types";
+import type { ModeEntry, TwitchCategorySearchEntry } from "../types";
 
 type ModeEditorDraft = Omit<ModeEntry, "id">;
 type ModeEditorSection = "general" | "keyword" | "timer";
@@ -47,6 +50,8 @@ const defaultDraft: ModeEditorDraft = {
   keywordDescription: "",
   keywordResponse: "",
   coordinatedTwitchTitle: "",
+  coordinatedTwitchCategoryID: "",
+  coordinatedTwitchCategoryName: "",
   timerEnabled: true,
   timerMessage: "",
   timerIntervalSeconds: 180,
@@ -71,6 +76,11 @@ export function ModesPage() {
   const [draft, setDraft] = useState<ModeEditorDraft>(defaultDraft);
   const [editorSection, setEditorSection] = useState<ModeEditorSection>("general");
   const [pendingDelete, setPendingDelete] = useState<ModeEntry | null>(null);
+  const [categorySearchTerm, setCategorySearchTerm] = useState("");
+  const [categorySearchLoading, setCategorySearchLoading] = useState(false);
+  const [categorySearchResults, setCategorySearchResults] = useState<
+    TwitchCategorySearchEntry[]
+  >([]);
 
   useEffect(() => {
     const modeKey = searchParams.get("mode");
@@ -87,6 +97,9 @@ export function ModesPage() {
     setEditingModeID(match.id);
     setDraft(nextDraft);
     setEditorSection("general");
+    setCategorySearchTerm(nextDraft.coordinatedTwitchCategoryName);
+    setCategorySearchResults([]);
+    setCategorySearchLoading(false);
     setEditorOpen(true);
   }, [editorOpen, filteredModes, searchParams]);
 
@@ -94,6 +107,9 @@ export function ModesPage() {
     setEditingModeID(null);
     setDraft(defaultDraft);
     setEditorSection("general");
+    setCategorySearchTerm("");
+    setCategorySearchResults([]);
+    setCategorySearchLoading(false);
     setEditorOpen(true);
   };
 
@@ -102,6 +118,9 @@ export function ModesPage() {
     setEditingModeID(entry.id);
     setDraft(nextDraft);
     setEditorSection("general");
+    setCategorySearchTerm(nextDraft.coordinatedTwitchCategoryName);
+    setCategorySearchResults([]);
+    setCategorySearchLoading(false);
     setEditorOpen(true);
     setSearchParams({ mode: entry.key });
   };
@@ -111,6 +130,9 @@ export function ModesPage() {
     setEditingModeID(null);
     setDraft(defaultDraft);
     setEditorSection("general");
+    setCategorySearchTerm("");
+    setCategorySearchResults([]);
+    setCategorySearchLoading(false);
     setSearchParams({}, { replace: true });
   };
 
@@ -130,9 +152,14 @@ export function ModesPage() {
       keywordDescription: draft.keywordDescription.trim(),
       keywordResponse: draft.keywordResponse.trim(),
       coordinatedTwitchTitle: draft.coordinatedTwitchTitle.trim(),
+      coordinatedTwitchCategoryID: draft.coordinatedTwitchCategoryID.trim(),
+      coordinatedTwitchCategoryName: draft.coordinatedTwitchCategoryName.trim(),
       timerMessage: draft.timerMessage.trim(),
       timerIntervalSeconds: Math.max(5, draft.timerIntervalSeconds || 0),
     };
+    if (cleanedDraft.coordinatedTwitchCategoryID === "") {
+      cleanedDraft.coordinatedTwitchCategoryName = "";
+    }
 
     if (editingModeID != null) {
       await updateMode(editingModeID, cleanedDraft);
@@ -142,6 +169,72 @@ export function ModesPage() {
 
     closeDialog();
   };
+
+  useEffect(() => {
+    if (!editorOpen || editorSection !== "general") {
+      return;
+    }
+
+    const query = categorySearchTerm.trim();
+    if (query.length < 2) {
+      setCategorySearchResults([]);
+      setCategorySearchLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutID = window.setTimeout(() => {
+      setCategorySearchLoading(true);
+      searchDashboardTwitchCategories(query, controller.signal)
+        .then((results) => {
+          setCategorySearchResults(results);
+        })
+        .catch(() => {
+          setCategorySearchResults([]);
+        })
+        .finally(() => {
+          setCategorySearchLoading(false);
+        });
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutID);
+    };
+  }, [categorySearchTerm, editorOpen, editorSection]);
+
+  const selectedCategoryOption: TwitchCategorySearchEntry | null =
+    draft.coordinatedTwitchCategoryID.trim() === ""
+      ? null
+      : {
+          id: draft.coordinatedTwitchCategoryID.trim(),
+          name:
+            draft.coordinatedTwitchCategoryName.trim() ||
+            draft.coordinatedTwitchCategoryID.trim(),
+          boxArtURL: "",
+        };
+
+  const categoryOptions = useMemo(() => {
+    const selectedID = draft.coordinatedTwitchCategoryID.trim();
+    if (selectedID === "") {
+      return categorySearchResults;
+    }
+    if (categorySearchResults.some((entry) => entry.id === selectedID)) {
+      return categorySearchResults;
+    }
+    return [
+      {
+        id: selectedID,
+        name: draft.coordinatedTwitchCategoryName.trim() || selectedID,
+        boxArtURL: "",
+      },
+      ...categorySearchResults,
+    ];
+  }, [
+    categorySearchResults,
+    draft.coordinatedTwitchCategoryID,
+    draft.coordinatedTwitchCategoryName,
+  ]);
 
   return (
     <Paper
@@ -427,6 +520,55 @@ export function ModesPage() {
                       }))
                     }
                     helperText="Leave blank if this mode should not enforce a Twitch stream title. If set, the bot will push this title back when the active mode drifts."
+                  />
+
+                  <Autocomplete
+                    options={categoryOptions}
+                    value={selectedCategoryOption}
+                    loading={categorySearchLoading}
+                    onChange={(_, value) => {
+                      if (value == null) {
+                        setDraft((current) => ({
+                          ...current,
+                          coordinatedTwitchCategoryID: "",
+                          coordinatedTwitchCategoryName: "",
+                        }));
+                        setCategorySearchTerm("");
+                        return;
+                      }
+                      setDraft((current) => ({
+                        ...current,
+                        coordinatedTwitchCategoryID: value.id,
+                        coordinatedTwitchCategoryName: value.name,
+                      }));
+                      setCategorySearchTerm(value.name);
+                    }}
+                    onInputChange={(_, value, reason) => {
+                      if (reason === "reset") {
+                        return;
+                      }
+                      setCategorySearchTerm(value);
+                    }}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    getOptionLabel={(option) => option.name || option.id}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Coordinated Twitch category"
+                        helperText="Search and select the exact Twitch category to enforce for this mode."
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {categorySearchLoading ? (
+                                <CircularProgress color="inherit" size={16} />
+                              ) : null}
+                              {params.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
                   />
                 </>
               ) : null}

@@ -38,7 +38,13 @@ type State struct {
 	DashboardRoles         *postgres.DashboardRoleStore
 	DefaultKeywords        *postgres.DefaultKeywordSettingStore
 	FollowersOnlyModule    *postgres.FollowersOnlyModuleSettingsStore
+	NewChatterGreeting     *postgres.NewChatterGreetingModuleSettingsStore
 	GameModule             *postgres.GameModuleSettingsStore
+	NowPlayingModule       *postgres.NowPlayingModuleSettingsStore
+	QuoteModule            *postgres.QuoteModuleSettingsStore
+	TabsModule             *postgres.TabsModuleSettingsStore
+	UserProfileModule      *postgres.UserProfileModuleSettingsStore
+	ModuleCatalog          *postgres.ModuleCatalogStore
 	PublicHomeSettings     *postgres.PublicHomeSettingsStore
 	SpamFilters            *postgres.SpamFilterStore
 	BlockedTerms           *postgres.BlockedTermStore
@@ -52,22 +58,22 @@ type State struct {
 func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redispkg.Client) *State {
 	siteLoginRedirectURI := strings.TrimSpace(cfg.Twitch.RedirectURI)
 	if siteLoginRedirectURI == "" {
-		siteLoginRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/authorized"
+		siteLoginRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/connected"
 	}
 
 	twitchConnectRedirectURI := strings.TrimSpace(cfg.Twitch.ConnectRedirectURI)
 	if twitchConnectRedirectURI == "" {
-		twitchConnectRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/connected"
+		twitchConnectRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/d/authorized"
 	}
 
 	robloxRedirectURI := strings.TrimSpace(cfg.Roblox.RedirectURI)
 	if robloxRedirectURI == "" {
-		robloxRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/connected"
+		robloxRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/d/authorized"
 	}
 
 	spotifyRedirectURI := strings.TrimSpace(cfg.Spotify.RedirectURI)
 	if spotifyRedirectURI == "" {
-		spotifyRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/connected"
+		spotifyRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/d/authorized"
 	}
 
 	discordRedirectURI := strings.TrimSpace(cfg.Discord.RedirectURI)
@@ -77,12 +83,12 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 
 	streamlabsRedirectURI := strings.TrimSpace(cfg.Streamlabs.RedirectURI)
 	if streamlabsRedirectURI == "" {
-		streamlabsRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/connected"
+		streamlabsRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/d/authorized"
 	}
 
 	streamElementsRedirectURI := strings.TrimSpace(cfg.StreamElements.RedirectURI)
 	if streamElementsRedirectURI == "" {
-		streamElementsRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/connected"
+		streamElementsRedirectURI = strings.TrimRight(cfg.Web.PublicURL, "/") + "/d/authorized"
 	}
 
 	eventSubCallbackURL := strings.TrimSpace(cfg.TwitchEventSub.CallbackURL)
@@ -114,7 +120,13 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 	dashboardRoleStore := postgres.NewDashboardRoleStore(postgresClient)
 	defaultKeywordStore := postgres.NewDefaultKeywordSettingStore(postgresClient)
 	followersOnlyModuleStore := postgres.NewFollowersOnlyModuleSettingsStore(postgresClient)
+	newChatterGreetingStore := postgres.NewNewChatterGreetingModuleSettingsStore(postgresClient)
 	gameModuleStore := postgres.NewGameModuleSettingsStore(postgresClient)
+	nowPlayingModuleStore := postgres.NewNowPlayingModuleSettingsStore(postgresClient)
+	quoteModuleStore := postgres.NewQuoteModuleSettingsStore(postgresClient)
+	tabsModuleStore := postgres.NewTabsModuleSettingsStore(postgresClient)
+	userProfileModuleStore := postgres.NewUserProfileModuleSettingsStore(postgresClient)
+	moduleCatalogStore := postgres.NewModuleCatalogStore(postgresClient)
 	publicHomeSettingsStore := postgres.NewPublicHomeSettingsStore(postgresClient)
 	spamFilterStore := postgres.NewSpamFilterStore(postgresClient)
 	blockedTermStore := postgres.NewBlockedTermStore(postgresClient)
@@ -143,7 +155,13 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 		DashboardRoles:         dashboardRoleStore,
 		DefaultKeywords:        defaultKeywordStore,
 		FollowersOnlyModule:    followersOnlyModuleStore,
+		NewChatterGreeting:     newChatterGreetingStore,
 		GameModule:             gameModuleStore,
+		NowPlayingModule:       nowPlayingModuleStore,
+		QuoteModule:            quoteModuleStore,
+		TabsModule:             tabsModuleStore,
+		UserProfileModule:      userProfileModuleStore,
+		ModuleCatalog:          moduleCatalogStore,
 		PublicHomeSettings:     publicHomeSettingsStore,
 		SpamFilters:            spamFilterStore,
 		BlockedTerms:           blockedTermStore,

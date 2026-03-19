@@ -6,15 +6,24 @@ import type {
   DiscordBotSettings,
   FollowersOnlyModuleSettings,
   GameModuleSettings,
+  NewChatterGreetingModuleSettings,
+  NowPlayingModuleSettings,
+  QuoteModuleEntry,
+  QuoteModuleSettings,
+  TabsModuleSettings,
+  UserProfileModuleSettings,
   DashboardSpotifyState,
   DashboardSpotifyTrack,
   DefaultKeywordSetting,
   DashboardSummary,
   IntegrationEntry,
   MassModerationActionResult,
+  MassModerationFollowerImportEntry,
   ModeEntry,
+  ModuleCatalogEntry,
   PublicHomeSettings,
   SpamFilterEntry,
+  TwitchCategorySearchEntry,
   TwitchUserSearchEntry,
 } from "./types";
 
@@ -67,6 +76,7 @@ type PublicHomeSettingsResponse = {
   show_now_playing_album_art: boolean;
   show_now_playing_progress: boolean;
   show_now_playing_links: boolean;
+  command_prefix: string;
   promo_links: Array<{
     label: string;
     href: string;
@@ -90,10 +100,20 @@ type ModesResponse = {
     keyword_description: string;
     keyword_response: string;
     coordinated_twitch_title: string;
+    coordinated_twitch_category_id: string;
+    coordinated_twitch_category_name: string;
     timer_enabled: boolean;
     timer_message: string;
     timer_interval_seconds: number;
     builtin: boolean;
+  }>;
+};
+
+type TwitchCategorySearchResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    box_art_url: string;
   }>;
 };
 
@@ -102,10 +122,74 @@ type FollowersOnlyModuleResponse = {
   auto_disable_after_minutes: number;
 };
 
+type ModulesCatalogResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    state: string;
+    detail: string;
+    commands: string[];
+    settings: Array<{
+      id: string;
+      label: string;
+      type: "text" | "textarea" | "number" | "select" | "boolean";
+      helper_text?: string;
+      options?: string[];
+    }>;
+  }>;
+};
+
+type NewChatterGreetingModuleResponse = {
+  enabled: boolean;
+  messages: string[];
+};
+
 type GameModuleResponse = {
   enabled: boolean;
   ai_detection_enabled: boolean;
   keyword_response: string;
+  playtime_template: string;
+  gamesplayed_template: string;
+  gamesplayed_item_template: string;
+  gamesplayed_limit: number;
+};
+
+type NowPlayingModuleResponse = {
+  enabled: boolean;
+  ai_detection_enabled: boolean;
+  keyword_response: string;
+};
+
+type QuoteModuleResponse = {
+  enabled: boolean;
+};
+
+type TabsModuleResponse = {
+  enabled: boolean;
+  interest_rate_percent: number;
+  interest_every_days: number;
+};
+
+type UserProfileModuleResponse = {
+  enabled: boolean;
+  show_tab_section: boolean;
+  show_tab_history: boolean;
+  show_redemption_activity: boolean;
+  show_poll_stats: boolean;
+  show_prediction_stats: boolean;
+  show_last_seen: boolean;
+  show_last_chat_activity: boolean;
+};
+
+type QuoteEntriesResponse = {
+  items: Array<{
+    id: number;
+    message: string;
+    created_by: string;
+    updated_by: string;
+    created_at: string;
+    updated_at: string;
+  }>;
 };
 
 type DiscordBotSettingsResponse = {
@@ -127,6 +211,16 @@ type DiscordBotSettingsResponse = {
     mentionable: boolean;
   }>;
   command_name: string;
+  game_ping_command_name: string;
+  game_ping: {
+    enabled: boolean;
+    channel_id: string;
+    role_id: string;
+    role_name: string;
+    message_template: string;
+    include_watch_link: boolean;
+    include_join_link: boolean;
+  };
 };
 
 type DashboardRolesResponse = {
@@ -177,7 +271,9 @@ type TwitchUserSearchResponse = {
 type BlockedTermsResponse = {
   items: Array<{
     id: string;
+    name: string;
     pattern: string;
+    phrase_groups: string[][];
     is_regex: boolean;
     action: BlockedTermEntry["action"];
     timeout_seconds: number;
@@ -195,6 +291,15 @@ type MassModerationResponse = {
     error?: string;
   }>;
   unresolved: string[];
+};
+
+type MassModerationRecentFollowersResponse = {
+  total: number;
+  items: Array<{
+    username: string;
+    display_name: string;
+    followed_at: string;
+  }>;
 };
 
 export async function fetchDashboardSummary(
@@ -376,6 +481,38 @@ export async function fetchDefaultKeywordSettings(
   }));
 }
 
+export async function fetchModuleCatalog(
+  signal?: AbortSignal,
+): Promise<ModuleCatalogEntry[]> {
+  const response = await fetch("/api/dashboard/modules", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load module catalog: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as ModulesCatalogResponse;
+  return (payload.items ?? []).map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    state: entry.state,
+    detail: entry.detail,
+    commands: Array.isArray(entry.commands) ? entry.commands : [],
+    settings: (entry.settings ?? []).map((setting) => ({
+      id: setting.id,
+      label: setting.label,
+      type: setting.type,
+      helperText: setting.helper_text,
+      options: Array.isArray(setting.options) ? setting.options : [],
+    })),
+  }));
+}
+
 export async function fetchFollowersOnlyModuleSettings(
   signal?: AbortSignal,
 ): Promise<FollowersOnlyModuleSettings> {
@@ -429,6 +566,59 @@ export async function saveFollowersOnlyModuleSettings(
   };
 }
 
+export async function fetchNewChatterGreetingModuleSettings(
+  signal?: AbortSignal,
+): Promise<NewChatterGreetingModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/new-chatter-greeting", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to load new chatter greeting module settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as NewChatterGreetingModuleResponse;
+  return {
+    enabled: payload.enabled,
+    messages: Array.isArray(payload.messages) ? payload.messages : [],
+  };
+}
+
+export async function saveNewChatterGreetingModuleSettings(
+  settings: NewChatterGreetingModuleSettings,
+): Promise<NewChatterGreetingModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/new-chatter-greeting", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enabled: settings.enabled,
+      messages: settings.messages,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to save new chatter greeting module settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as NewChatterGreetingModuleResponse;
+  return {
+    enabled: payload.enabled,
+    messages: Array.isArray(payload.messages) ? payload.messages : [],
+  };
+}
+
 export async function fetchGameModuleSettings(
   signal?: AbortSignal,
 ): Promise<GameModuleSettings> {
@@ -449,6 +639,13 @@ export async function fetchGameModuleSettings(
     enabled: payload.enabled,
     aiDetectionEnabled: payload.ai_detection_enabled,
     keywordResponse: payload.keyword_response,
+    playtimeTemplate: payload.playtime_template ?? "",
+    gamesPlayedTemplate: payload.gamesplayed_template ?? "",
+    gamesPlayedItemTemplate: payload.gamesplayed_item_template ?? "",
+    gamesPlayedLimit:
+      Number.isFinite(payload.gamesplayed_limit) && payload.gamesplayed_limit > 0
+        ? payload.gamesplayed_limit
+        : 5,
   };
 }
 
@@ -466,6 +663,10 @@ export async function saveGameModuleSettings(
       enabled: settings.enabled,
       ai_detection_enabled: settings.aiDetectionEnabled,
       keyword_response: settings.keywordResponse,
+      playtime_template: settings.playtimeTemplate,
+      gamesplayed_template: settings.gamesPlayedTemplate,
+      gamesplayed_item_template: settings.gamesPlayedItemTemplate,
+      gamesplayed_limit: settings.gamesPlayedLimit,
     }),
   });
 
@@ -478,7 +679,363 @@ export async function saveGameModuleSettings(
     enabled: payload.enabled,
     aiDetectionEnabled: payload.ai_detection_enabled,
     keywordResponse: payload.keyword_response,
+    playtimeTemplate: payload.playtime_template ?? "",
+    gamesPlayedTemplate: payload.gamesplayed_template ?? "",
+    gamesPlayedItemTemplate: payload.gamesplayed_item_template ?? "",
+    gamesPlayedLimit:
+      Number.isFinite(payload.gamesplayed_limit) && payload.gamesplayed_limit > 0
+        ? payload.gamesplayed_limit
+        : 5,
   };
+}
+
+export async function fetchNowPlayingModuleSettings(
+  signal?: AbortSignal,
+): Promise<NowPlayingModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/now-playing", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to load now playing module settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as NowPlayingModuleResponse;
+  return {
+    enabled: payload.enabled,
+    aiDetectionEnabled: payload.ai_detection_enabled,
+    keywordResponse: payload.keyword_response,
+  };
+}
+
+export async function saveNowPlayingModuleSettings(
+  settings: NowPlayingModuleSettings,
+): Promise<NowPlayingModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/now-playing", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enabled: settings.enabled,
+      ai_detection_enabled: settings.aiDetectionEnabled,
+      keyword_response: settings.keywordResponse,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to save now playing module settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as NowPlayingModuleResponse;
+  return {
+    enabled: payload.enabled,
+    aiDetectionEnabled: payload.ai_detection_enabled,
+    keywordResponse: payload.keyword_response,
+  };
+}
+
+export async function fetchQuoteModuleSettings(
+  signal?: AbortSignal,
+): Promise<QuoteModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/quotes", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load quote module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as QuoteModuleResponse;
+  return {
+    enabled: payload.enabled,
+  };
+}
+
+export async function fetchTabsModuleSettings(
+  signal?: AbortSignal,
+): Promise<TabsModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/tabs", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load tabs module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as TabsModuleResponse;
+  return {
+    enabled: payload.enabled,
+    interestRatePercent:
+      Number.isFinite(payload.interest_rate_percent) &&
+      payload.interest_rate_percent >= 0
+        ? payload.interest_rate_percent
+        : 0,
+    interestEveryDays:
+      Number.isFinite(payload.interest_every_days) &&
+      payload.interest_every_days > 0
+        ? payload.interest_every_days
+        : 7,
+  };
+}
+
+export async function saveTabsModuleSettings(
+  settings: TabsModuleSettings,
+): Promise<TabsModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/tabs", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enabled: settings.enabled,
+      interest_rate_percent: settings.interestRatePercent,
+      interest_every_days: settings.interestEveryDays,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to save tabs module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as TabsModuleResponse;
+  return {
+    enabled: payload.enabled,
+    interestRatePercent:
+      Number.isFinite(payload.interest_rate_percent) &&
+      payload.interest_rate_percent >= 0
+        ? payload.interest_rate_percent
+        : 0,
+    interestEveryDays:
+      Number.isFinite(payload.interest_every_days) &&
+      payload.interest_every_days > 0
+        ? payload.interest_every_days
+        : 7,
+  };
+}
+
+export async function fetchUserProfileModuleSettings(
+  signal?: AbortSignal,
+): Promise<UserProfileModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/user-profile", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to load user profile module settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as UserProfileModuleResponse;
+  return {
+    enabled: payload.enabled,
+    showTabSection: payload.show_tab_section,
+    showTabHistory: payload.show_tab_history,
+    showRedemptionActivity: payload.show_redemption_activity,
+    showPollStats: payload.show_poll_stats,
+    showPredictionStats: payload.show_prediction_stats,
+    showLastSeen: payload.show_last_seen,
+    showLastChatActivity: payload.show_last_chat_activity,
+  };
+}
+
+export async function saveUserProfileModuleSettings(
+  settings: UserProfileModuleSettings,
+): Promise<UserProfileModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/user-profile", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enabled: settings.enabled,
+      show_tab_section: settings.showTabSection,
+      show_tab_history: settings.showTabHistory,
+      show_redemption_activity: settings.showRedemptionActivity,
+      show_poll_stats: settings.showPollStats,
+      show_prediction_stats: settings.showPredictionStats,
+      show_last_seen: settings.showLastSeen,
+      show_last_chat_activity: settings.showLastChatActivity,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to save user profile module settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as UserProfileModuleResponse;
+  return {
+    enabled: payload.enabled,
+    showTabSection: payload.show_tab_section,
+    showTabHistory: payload.show_tab_history,
+    showRedemptionActivity: payload.show_redemption_activity,
+    showPollStats: payload.show_poll_stats,
+    showPredictionStats: payload.show_prediction_stats,
+    showLastSeen: payload.show_last_seen,
+    showLastChatActivity: payload.show_last_chat_activity,
+  };
+}
+
+export async function saveQuoteModuleSettings(
+  settings: QuoteModuleSettings,
+): Promise<QuoteModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/quotes", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enabled: settings.enabled,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to save quote module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as QuoteModuleResponse;
+  return {
+    enabled: payload.enabled,
+  };
+}
+
+export async function fetchQuoteModuleEntries(
+  signal?: AbortSignal,
+): Promise<QuoteModuleEntry[]> {
+  const response = await fetch("/api/dashboard/modules/quotes/items", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load quotes: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as QuoteEntriesResponse;
+  return (payload.items ?? []).map((entry) => ({
+    id: entry.id,
+    message: entry.message,
+    createdBy: entry.created_by,
+    updatedBy: entry.updated_by,
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+  }));
+}
+
+export async function createQuoteModuleEntry(
+  message: string,
+): Promise<QuoteModuleEntry> {
+  const response = await fetch("/api/dashboard/modules/quotes/items", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to create quote: ${response.status}`);
+  }
+
+  const payload =
+    (await response.json()) as QuoteEntriesResponse["items"][number];
+  return {
+    id: payload.id,
+    message: payload.message,
+    createdBy: payload.created_by,
+    updatedBy: payload.updated_by,
+    createdAt: payload.created_at,
+    updatedAt: payload.updated_at,
+  };
+}
+
+export async function updateQuoteModuleEntry(
+  id: number,
+  message: string,
+): Promise<QuoteModuleEntry> {
+  const response = await fetch("/api/dashboard/modules/quotes/items", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id,
+      message,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to update quote: ${response.status}`);
+  }
+
+  const payload =
+    (await response.json()) as QuoteEntriesResponse["items"][number];
+  return {
+    id: payload.id,
+    message: payload.message,
+    createdBy: payload.created_by,
+    updatedBy: payload.updated_by,
+    createdAt: payload.created_at,
+    updatedAt: payload.updated_at,
+  };
+}
+
+export async function deleteQuoteModuleEntry(id: number): Promise<void> {
+  const response = await fetch("/api/dashboard/modules/quotes/items", {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to delete quote: ${response.status}`);
+  }
 }
 
 export async function fetchDiscordBotSettings(
@@ -511,11 +1068,21 @@ export async function fetchDiscordBotSettings(
     channels: Array.isArray(payload.channels) ? payload.channels : [],
     roles: Array.isArray(payload.roles) ? payload.roles : [],
     commandName: payload.command_name || "!dping",
+    gamePingCommandName: payload.game_ping_command_name || "!gameping",
+    gamePing: {
+      enabled: payload.game_ping?.enabled ?? false,
+      channelID: payload.game_ping?.channel_id ?? "",
+      roleID: payload.game_ping?.role_id ?? "",
+      roleName: payload.game_ping?.role_name ?? "",
+      messageTemplate: payload.game_ping?.message_template ?? "NEW GAME: {game}",
+      includeWatchLink: payload.game_ping?.include_watch_link ?? true,
+      includeJoinLink: payload.game_ping?.include_join_link ?? true,
+    },
   };
 }
 
 export async function saveDiscordBotSettings(
-  settings: Pick<DiscordBotSettings, "defaultChannelID" | "pingRoles">,
+  settings: Pick<DiscordBotSettings, "defaultChannelID" | "pingRoles" | "gamePing">,
 ): Promise<DiscordBotSettings> {
   const response = await fetch("/api/dashboard/discord-bot", {
     method: "PUT",
@@ -532,6 +1099,15 @@ export async function saveDiscordBotSettings(
         role_name: entry.roleName,
         enabled: entry.enabled,
       })),
+      game_ping: {
+        enabled: settings.gamePing.enabled,
+        channel_id: settings.gamePing.channelID,
+        role_id: settings.gamePing.roleID,
+        role_name: settings.gamePing.roleName,
+        message_template: settings.gamePing.messageTemplate,
+        include_watch_link: settings.gamePing.includeWatchLink,
+        include_join_link: settings.gamePing.includeJoinLink,
+      },
     }),
   });
 
@@ -554,6 +1130,16 @@ export async function saveDiscordBotSettings(
     channels: Array.isArray(payload.channels) ? payload.channels : [],
     roles: Array.isArray(payload.roles) ? payload.roles : [],
     commandName: payload.command_name || "!dping",
+    gamePingCommandName: payload.game_ping_command_name || "!gameping",
+    gamePing: {
+      enabled: payload.game_ping?.enabled ?? false,
+      channelID: payload.game_ping?.channel_id ?? "",
+      roleID: payload.game_ping?.role_id ?? "",
+      roleName: payload.game_ping?.role_name ?? "",
+      messageTemplate: payload.game_ping?.message_template ?? "NEW GAME: {game}",
+      includeWatchLink: payload.game_ping?.include_watch_link ?? true,
+      includeJoinLink: payload.game_ping?.include_join_link ?? true,
+    },
   };
 }
 
@@ -643,6 +1229,8 @@ export async function fetchModes(signal?: AbortSignal): Promise<ModeEntry[]> {
     keywordDescription: entry.keyword_description,
     keywordResponse: entry.keyword_response,
     coordinatedTwitchTitle: entry.coordinated_twitch_title,
+    coordinatedTwitchCategoryID: entry.coordinated_twitch_category_id,
+    coordinatedTwitchCategoryName: entry.coordinated_twitch_category_name,
     timerEnabled: entry.timer_enabled,
     timerMessage: entry.timer_message,
     timerIntervalSeconds: entry.timer_interval_seconds,
@@ -659,6 +1247,8 @@ function modeRequestBody(entry: Omit<ModeEntry, "id">, originalKey?: string) {
     keyword_description: entry.keywordDescription,
     keyword_response: entry.keywordResponse,
     coordinated_twitch_title: entry.coordinatedTwitchTitle,
+    coordinated_twitch_category_id: entry.coordinatedTwitchCategoryID,
+    coordinated_twitch_category_name: entry.coordinatedTwitchCategoryName,
     timer_enabled: entry.timerEnabled,
     timer_message: entry.timerMessage,
     timer_interval_seconds: entry.timerIntervalSeconds,
@@ -693,6 +1283,8 @@ export async function createMode(
     keywordDescription: item.keyword_description,
     keywordResponse: item.keyword_response,
     coordinatedTwitchTitle: item.coordinated_twitch_title,
+    coordinatedTwitchCategoryID: item.coordinated_twitch_category_id,
+    coordinatedTwitchCategoryName: item.coordinated_twitch_category_name,
     timerEnabled: item.timer_enabled,
     timerMessage: item.timer_message,
     timerIntervalSeconds: item.timer_interval_seconds,
@@ -728,6 +1320,8 @@ export async function updateMode(
     keywordDescription: item.keyword_description,
     keywordResponse: item.keyword_response,
     coordinatedTwitchTitle: item.coordinated_twitch_title,
+    coordinatedTwitchCategoryID: item.coordinated_twitch_category_id,
+    coordinatedTwitchCategoryName: item.coordinated_twitch_category_name,
     timerEnabled: item.timer_enabled,
     timerMessage: item.timer_message,
     timerIntervalSeconds: item.timer_interval_seconds,
@@ -761,6 +1355,8 @@ export async function deleteMode(modeKey: string): Promise<ModeEntry[]> {
     keywordDescription: item.keyword_description,
     keywordResponse: item.keyword_response,
     coordinatedTwitchTitle: item.coordinated_twitch_title,
+    coordinatedTwitchCategoryID: item.coordinated_twitch_category_id,
+    coordinatedTwitchCategoryName: item.coordinated_twitch_category_name,
     timerEnabled: item.timer_enabled,
     timerMessage: item.timer_message,
     timerIntervalSeconds: item.timer_interval_seconds,
@@ -830,7 +1426,9 @@ export async function fetchBlockedTerms(
   const payload = (await response.json()) as BlockedTermsResponse;
   return (payload.items ?? []).map((entry) => ({
     id: entry.id,
+    name: entry.name,
     pattern: entry.pattern,
+    phraseGroups: Array.isArray(entry.phrase_groups) ? entry.phrase_groups : [],
     isRegex: entry.is_regex,
     action: entry.action,
     timeoutSeconds: entry.timeout_seconds,
@@ -850,7 +1448,9 @@ export async function addBlockedTerm(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      name: input.name,
       pattern: input.pattern,
+      phrase_groups: input.phraseGroups,
       is_regex: input.isRegex,
       action: input.action,
       timeout_seconds: input.timeoutSeconds,
@@ -867,7 +1467,11 @@ export async function addBlockedTerm(
     (await response.json()) as BlockedTermsResponse["items"][number];
   return {
     id: payload.id,
+    name: payload.name,
     pattern: payload.pattern,
+    phraseGroups: Array.isArray(payload.phrase_groups)
+      ? payload.phrase_groups
+      : [],
     isRegex: payload.is_regex,
     action: payload.action,
     timeoutSeconds: payload.timeout_seconds,
@@ -888,7 +1492,9 @@ export async function saveBlockedTerm(
     },
     body: JSON.stringify({
       id: input.id,
+      name: input.name,
       pattern: input.pattern,
+      phrase_groups: input.phraseGroups,
       is_regex: input.isRegex,
       action: input.action,
       timeout_seconds: input.timeoutSeconds,
@@ -905,7 +1511,11 @@ export async function saveBlockedTerm(
     (await response.json()) as BlockedTermsResponse["items"][number];
   return {
     id: payload.id,
+    name: payload.name,
     pattern: payload.pattern,
+    phraseGroups: Array.isArray(payload.phrase_groups)
+      ? payload.phrase_groups
+      : [],
     isRegex: payload.is_regex,
     action: payload.action,
     timeoutSeconds: payload.timeout_seconds,
@@ -971,6 +1581,37 @@ export async function runMassModerationAction(input: {
   };
 }
 
+export async function fetchMassModerationRecentFollowers(
+  limit: number,
+): Promise<{
+  total: number;
+  items: MassModerationFollowerImportEntry[];
+}> {
+  const response = await fetch(
+    `/api/dashboard/moderation/recent-followers?limit=${encodeURIComponent(String(limit))}`,
+    {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`failed to load recent followers: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as MassModerationRecentFollowersResponse;
+  return {
+    total: payload.total ?? 0,
+    items: (payload.items ?? []).map((entry) => ({
+      username: entry.username,
+      displayName: entry.display_name,
+      followedAt: entry.followed_at,
+    })),
+  };
+}
+
 export async function fetchPublicHomeSettings(
   signal?: AbortSignal,
 ): Promise<PublicHomeSettings> {
@@ -992,6 +1633,7 @@ export async function fetchPublicHomeSettings(
     showNowPlayingAlbumArt: payload.show_now_playing_album_art,
     showNowPlayingProgress: payload.show_now_playing_progress,
     showNowPlayingLinks: payload.show_now_playing_links,
+    commandPrefix: payload.command_prefix ?? "!",
     promoLinks: Array.isArray(payload.promo_links) ? payload.promo_links : [],
     robloxLinkCommandTarget: payload.roblox_link_command_target ?? "dankbot",
     robloxLinkCommandTemplate: payload.roblox_link_command_template ?? "",
@@ -1013,6 +1655,7 @@ export async function savePublicHomeSettings(
       show_now_playing_album_art: settings.showNowPlayingAlbumArt,
       show_now_playing_progress: settings.showNowPlayingProgress,
       show_now_playing_links: settings.showNowPlayingLinks,
+      command_prefix: settings.commandPrefix,
       promo_links: settings.promoLinks,
       roblox_link_command_target: settings.robloxLinkCommandTarget,
       roblox_link_command_template: settings.robloxLinkCommandTemplate,
@@ -1029,6 +1672,7 @@ export async function savePublicHomeSettings(
     showNowPlayingAlbumArt: payload.show_now_playing_album_art,
     showNowPlayingProgress: payload.show_now_playing_progress,
     showNowPlayingLinks: payload.show_now_playing_links,
+    commandPrefix: payload.command_prefix ?? "!",
     promoLinks: Array.isArray(payload.promo_links) ? payload.promo_links : [],
     robloxLinkCommandTarget: payload.roblox_link_command_target ?? "dankbot",
     robloxLinkCommandTemplate: payload.roblox_link_command_template ?? "",
@@ -1143,6 +1787,33 @@ export async function searchDashboardTwitchUsers(
     login: entry.login,
     displayName: entry.display_name,
     avatarURL: entry.avatar_url,
+  }));
+}
+
+export async function searchDashboardTwitchCategories(
+  query: string,
+  signal?: AbortSignal,
+): Promise<TwitchCategorySearchEntry[]> {
+  const response = await fetch(
+    `/api/dashboard/twitch-category-search?q=${encodeURIComponent(query)}`,
+    {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`failed to search twitch categories: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as TwitchCategorySearchResponse;
+  return (payload.items ?? []).map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    boxArtURL: entry.box_art_url,
   }));
 }
 

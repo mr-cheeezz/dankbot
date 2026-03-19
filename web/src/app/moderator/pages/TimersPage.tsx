@@ -12,8 +12,6 @@ import {
   Paper,
   Stack,
   Switch,
-  Tab,
-  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
@@ -26,8 +24,6 @@ import {
 import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
 import { useModerator } from "../ModeratorContext";
 import type { TimerEntry } from "../types";
-
-type TimerTab = "all" | "default" | "custom";
 
 const defaultDraft: TimerEditorDraft = {
   name: "",
@@ -48,7 +44,6 @@ const defaultDraft: TimerEditorDraft = {
 
 export function TimersPage() {
   const { timers, commands, createTimer, updateTimer, deleteTimer } = useModerator();
-  const [tab, setTab] = useState<TimerTab>("all");
   const [search, setSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTimerId, setEditingTimerId] = useState<string | null>(null);
@@ -68,12 +63,6 @@ export function TimersPage() {
 
   const visibleTimers = useMemo(() => {
     return timers.filter((entry) => {
-      if (tab === "default" && entry.source !== "default") {
-        return false;
-      }
-      if (tab === "custom" && entry.source !== "custom") {
-        return false;
-      }
       if (normalizedSearch === "") {
         return true;
       }
@@ -91,10 +80,7 @@ export function TimersPage() {
         .toLowerCase()
         .includes(normalizedSearch);
     });
-  }, [normalizedSearch, tab, timers]);
-
-  const defaultTimerCount = timers.filter((entry) => entry.source === "default").length;
-  const customTimerCount = timers.filter((entry) => entry.source === "custom").length;
+  }, [normalizedSearch, timers]);
 
   const openCreateDialog = () => {
     setEditingTimerId(null);
@@ -148,7 +134,6 @@ export function TimersPage() {
       await updateTimer(editingTimerId, cleanedDraft);
     } else {
       createTimer(cleanedDraft);
-      setTab("custom");
     }
 
     closeDialog();
@@ -178,8 +163,8 @@ export function TimersPage() {
         <Box>
           <Typography variant="h5">Timers</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 760 }}>
-            Manage the built-in social timer plus any custom reminder or promo timers you want to
-            rotate in chat.
+            Create and manage custom reminder or promo timers without relying on seeded built-in
+            timer placeholders.
           </Typography>
         </Box>
         <Button
@@ -192,26 +177,6 @@ export function TimersPage() {
           Create
         </Button>
       </Box>
-
-      <Tabs
-        value={tab}
-        onChange={(_, next: TimerTab) => setTab(next)}
-        textColor="primary"
-        indicatorColor="primary"
-        sx={{
-          px: 3,
-          borderBottom: "1px solid",
-          borderColor: "divider",
-          minHeight: 52,
-          "& .MuiTabs-indicator": {
-            height: 2,
-          },
-        }}
-      >
-        <Tab value="all" label="All Timers" disableRipple />
-        <Tab value="default" label={`Default Timers (${defaultTimerCount})`} disableRipple />
-        <Tab value="custom" label={`Custom Timers (${customTimerCount})`} disableRipple />
-      </Tabs>
 
       <Box
         sx={{
@@ -262,9 +227,9 @@ export function TimersPage() {
           >
             <Typography sx={{ fontSize: "0.95rem", fontWeight: 700 }}>No timers here yet</Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
-              {tab === "custom"
-                ? "Create a custom timer to start rotating reminders and viewer prompts."
-                : "No timers matched that filter."}
+              {normalizedSearch === ""
+                ? "Create a timer to start rotating reminders and viewer prompts."
+                : "No timers matched that search."}
             </Typography>
           </Paper>
         ) : (
@@ -302,14 +267,11 @@ export function TimersPage() {
                       <Stack direction="row" spacing={0.75} flexWrap="wrap">
                         <Chip
                           size="small"
-                          label={entry.source === "default" ? "default timer" : "custom timer"}
+                          label="custom timer"
                           sx={{
                             height: 24,
-                            backgroundColor:
-                              entry.source === "default"
-                                ? "rgba(74,137,255,0.14)"
-                                : "rgba(255,255,255,0.04)",
-                            color: entry.source === "default" ? "primary.main" : "text.secondary",
+                            backgroundColor: "rgba(255,255,255,0.04)",
+                            color: "text.secondary",
                             fontWeight: 700,
                           }}
                         />
@@ -329,13 +291,6 @@ export function TimersPage() {
                     ) : null}
 
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
-                      {entry.source === "default" ? (
-                        <Chip
-                          size="small"
-                          label="Built-in editable"
-                          sx={{ height: 24, fontWeight: 700 }}
-                        />
-                      ) : null}
                       <SummaryPill
                         icon={<ScheduleRoundedIcon sx={{ fontSize: "1rem" }} />}
                         label={`Online every ${entry.intervalOnlineMinutes}m`}
@@ -412,22 +367,20 @@ export function TimersPage() {
                       >
                         Edit
                       </Button>
-                      {entry.source === "custom" ? (
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<DeleteOutlineRoundedIcon fontSize="small" />}
-                          onClick={() => setPendingDelete(entry)}
-                          sx={{
-                            minHeight: 34,
-                            px: 1.4,
-                            borderColor: "rgba(74,137,255,0.2)",
-                            color: "primary.main",
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      ) : null}
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DeleteOutlineRoundedIcon fontSize="small" />}
+                        onClick={() => setPendingDelete(entry)}
+                        sx={{
+                          minHeight: 34,
+                          px: 1.4,
+                          borderColor: "rgba(74,137,255,0.2)",
+                          color: "primary.main",
+                        }}
+                      >
+                        Delete
+                      </Button>
                     </Stack>
                   </Stack>
                 </Box>
@@ -452,7 +405,7 @@ export function TimersPage() {
       <ConfirmActionDialog
         open={pendingDelete != null}
         title={`Delete ${pendingDelete?.name ?? "timer"}?`}
-        description="This removes the custom timer from the dashboard list. Default timers can be edited, but they stay part of the built-in timer set."
+        description="This removes the timer from the dashboard list."
         confirmLabel="Delete timer"
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {

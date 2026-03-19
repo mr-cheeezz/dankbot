@@ -289,6 +289,49 @@ LIMIT $2
 	return scanPlaytimeRows(rows)
 }
 
+func (s *RobloxPlaytimeStore) GetByStreamSession(ctx context.Context, streamSessionID string, universeID int64) (*RobloxGamePlaytime, error) {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var item RobloxGamePlaytime
+	err = db.QueryRowContext(
+		ctx,
+		`
+SELECT
+	universe_id,
+	MAX(root_place_id) AS root_place_id,
+	MAX(game_name) AS game_name,
+	SUM(duration_seconds) AS total_seconds,
+	MAX(ended_at) AS last_seen_at,
+	MIN(started_at) AS created_at,
+	MAX(ended_at) AS updated_at
+FROM roblox_game_playtime_sessions
+WHERE stream_session_id = $1 AND universe_id = $2
+GROUP BY universe_id
+`,
+		strings.TrimSpace(streamSessionID),
+		universeID,
+	).Scan(
+		&item.UniverseID,
+		&item.RootPlaceID,
+		&item.GameName,
+		&item.TotalSeconds,
+		&item.LastSeenAt,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get roblox playtime stream session %q universe %d: %w", strings.TrimSpace(streamSessionID), universeID, err)
+	}
+
+	return &item, nil
+}
+
 func (s *RobloxPlaytimeStore) ListTopByLastCompletedStream(ctx context.Context, limit int) ([]RobloxGamePlaytime, error) {
 	db, err := s.client.DB(ctx)
 	if err != nil {

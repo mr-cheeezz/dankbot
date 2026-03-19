@@ -37,7 +37,7 @@ func NewService(client *Client, stateStore StateStore) *Service {
 }
 
 func (s *Service) SiteLoginURL(ctx context.Context) (string, error) {
-	return s.startFlow(ctx, FlowSiteLogin, SiteLoginScopes, false, SiteLoginClaims, true)
+	return s.startFlow(ctx, FlowSiteLogin, SiteLoginScopes, false, SiteLoginClaims, false)
 }
 
 func (s *Service) StreamerConnectURL(ctx context.Context) (string, error) {
@@ -72,11 +72,18 @@ func (s *Service) HandleCallback(ctx context.Context, stateKey, code string) (*C
 	}
 
 	if state.Flow == FlowSiteLogin {
-		userInfo, err := s.client.UserInfo(ctx, token.AccessToken)
-		if err != nil {
-			return nil, err
+		// Only call the OIDC userinfo endpoint when openid was requested.
+		// (We avoid this by default to keep consent screen minimal and not request email.)
+		for _, scope := range state.Scopes {
+			if strings.EqualFold(strings.TrimSpace(scope), "openid") {
+				userInfo, err := s.client.UserInfo(ctx, token.AccessToken)
+				if err != nil {
+					return nil, err
+				}
+				result.UserInfo = userInfo
+				break
+			}
 		}
-		result.UserInfo = userInfo
 	}
 
 	return result, nil

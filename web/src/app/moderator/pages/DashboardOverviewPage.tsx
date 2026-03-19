@@ -93,6 +93,7 @@ export function DashboardOverviewPage() {
     hidePanel,
     restorePanels,
     summary,
+    summaryLoading,
     currentBotModeKey,
     availableBotModes,
     setCurrentBotMode,
@@ -305,219 +306,221 @@ export function DashboardOverviewPage() {
           gap: 2,
         }}
       >
-        {!hiddenPanels.includes("audit") ? (
-          <Box>
-            <Paper>
-              <Stack
-                direction="row"
-                alignItems="center"
-                justifyContent="space-between"
-                sx={{
-                  px: 2.5,
-                  py: 1.75,
-                  borderBottom: "1px solid",
-                  borderColor: "divider",
-                }}
-              >
-                <Box>
-                  <Typography variant="h6">Audit logs</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    latest moderator actions and control changes
-                  </Typography>
-                </Box>
-                <IconButton size="small" onClick={() => hidePanel("audit")}>
-                  <CloseRoundedIcon fontSize="small" />
-                </IconButton>
-              </Stack>
-              <Box
-                ref={auditScrollRef}
-                sx={{
-                  maxHeight: { xs: 460, xl: 620 },
-                  overflowY: "auto",
-                  backgroundColor: "rgba(0,0,0,0.18)",
-                }}
-              >
-                {orderedAuditEntries.length === 0 ? (
-                  <Box sx={{ px: 2.5, py: 3 }}>
-                    <Typography sx={{ fontSize: "0.95rem", fontWeight: 700 }}>
-                      No audit entries yet
-                    </Typography>
-                    <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
-                      Moderator actions will show up here once the bot starts logging them.
-                    </Typography>
-                  </Box>
-                ) : (
-                  <Stack
-                    spacing={1.25}
-                    sx={{
-                      p: 1.5,
-                    }}
-                  >
-                    {orderedAuditEntries.map((entry) => (
-                      <Box
-                        key={entry.id}
-                        data-fresh={freshAuditIDs.includes(entry.id) ? "true" : "false"}
-                        sx={{
-                          display: "grid",
-                          gridTemplateColumns: { xs: "1fr", md: "minmax(0,1fr) auto" },
-                          gap: 1.5,
-                          alignItems: "start",
-                          px: 1.5,
-                          py: 1.35,
-                          border: "1px solid",
-                          borderColor: "divider",
-                          borderRadius: 1.5,
-                          backgroundColor: "rgba(255,255,255,0.03)",
-                          transition: "background-color 180ms ease, border-color 180ms ease",
-                          animation: freshAuditIDs.includes(entry.id)
-                            ? `${auditEntryAppear} 600ms ease`
-                            : "none",
-                        }}
-                      >
-                        <Stack spacing={1.1}>
-                          <Stack
-                            direction="row"
-                            spacing={1.25}
-                            alignItems="center"
-                            flexWrap="wrap"
-                            useFlexGap
-                          >
-                            <Avatar
-                              src={entry.actorAvatarURL || undefined}
-                              sx={{
-                                width: 32,
-                                height: 32,
-                                bgcolor: "primary.dark",
-                                color: "#f0f0f0",
-                                fontSize: "0.72rem",
-                                fontWeight: 800,
-                              }}
-                            >
-                              {entry.actor.slice(0, 2).toUpperCase()}
-                            </Avatar>
-                            <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>
-                              {entry.actor}
-                            </Typography>
-                            <Chip
-                              size="small"
-                              label={entry.command}
-                              sx={{
-                                height: 24,
-                                backgroundColor: "rgba(74,137,255,0.14)",
-                                color: "primary.main",
-                                fontWeight: 700,
-                              }}
-                            />
-                          </Stack>
-
-                          <Typography
-                            sx={{
-                              fontSize: "0.93rem",
-                              lineHeight: 1.6,
-                              color: "text.primary",
-                              pl: { xs: 0, sm: 5.25 },
-                            }}
-                          >
-                            {entry.detail}
-                          </Typography>
-                        </Stack>
-
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            textAlign: { xs: "left", md: "right" },
-                            whiteSpace: "nowrap",
-                            pt: { xs: 0, md: 0.4 },
-                          }}
-                        >
-                          {entry.ago}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                )}
-              </Box>
-            </Paper>
-          </Box>
-        ) : null}
-
-        <Box>
-          <Stack spacing={2}>
-            {!hiddenPanels.includes("bot") ? (
+        <Stack spacing={2}>
+          {!hiddenPanels.includes("audit") ? (
+            <Box>
               <Paper>
                 <Stack
                   direction="row"
                   alignItems="center"
                   justifyContent="space-between"
-                  sx={{ px: 2.5, py: 1.75, borderBottom: "1px solid", borderColor: "divider" }}
+                  sx={{
+                    px: 2.5,
+                    py: 1.75,
+                    borderBottom: "1px solid",
+                    borderColor: "divider",
+                  }}
                 >
                   <Box>
-                    <Typography variant="h6">Bot controls</Typography>
+                    <Typography variant="h6">Audit logs</Typography>
                     <Typography variant="body2" color="text.secondary">
-                      quick website controls for the live bot runtime
+                      latest moderator actions and control changes
                     </Typography>
                   </Box>
-                  <IconButton size="small" onClick={() => hidePanel("bot")}>
+                  <IconButton size="small" onClick={() => hidePanel("audit")}>
                     <CloseRoundedIcon fontSize="small" />
                   </IconButton>
                 </Stack>
-                <Stack spacing={2} sx={{ p: 2.5 }}>
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                    <Chip
-                      color={summary.botRunning ? "success" : "error"}
-                      label={summary.botRunning ? "Bot online" : "Bot offline"}
-                      sx={botStatusChipSx(summary.botRunning)}
-                    />
-                    <Chip
-                      color={summary.killswitchEnabled ? "error" : "primary"}
-                      label={summary.killswitchEnabled ? "Killswitch on" : "Killswitch off"}
-                      variant={summary.killswitchEnabled ? "filled" : "outlined"}
-                    />
-                  </Stack>
-                  <FormControl fullWidth>
-                    <InputLabel id="dashboard-mode-select-label">Active mode</InputLabel>
-                    <Select
-                      labelId="dashboard-mode-select-label"
-                      label="Active mode"
-                      value={
-                        availableBotModes.some((mode) => mode.key === currentBotModeKey)
-                          ? currentBotModeKey
-                          : ""
-                      }
-                      disabled={availableBotModes.length === 0}
-                      onChange={(event) => void setCurrentBotMode(event.target.value)}
+                <Box
+                  ref={auditScrollRef}
+                  sx={{
+                    maxHeight: { xs: 460, xl: 620 },
+                    overflowY: "auto",
+                    backgroundColor: "rgba(0,0,0,0.18)",
+                  }}
+                >
+                  {orderedAuditEntries.length === 0 ? (
+                    <Box sx={{ px: 2.5, py: 3 }}>
+                      <Typography sx={{ fontSize: "0.95rem", fontWeight: 700 }}>
+                        No audit entries yet
+                      </Typography>
+                      <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
+                        Moderator actions will show up here once the bot starts logging them.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Stack
+                      spacing={1.25}
+                      sx={{
+                        p: 1.5,
+                      }}
                     >
-                      {availableBotModes.length === 0 ? (
-                        <MenuItem value="" disabled>
-                          No modes available yet
-                        </MenuItem>
-                      ) : null}
-                      {availableBotModes.map((mode) => (
-                        <MenuItem key={mode.key} value={mode.key}>
-                          {mode.title}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Typography variant="body2" color="text.secondary">
-                    Switch the live bot mode here or hit the killswitch instantly without needing a
-                    chat command.
-                  </Typography>
-                  <Stack direction="row" spacing={1.25}>
-                    <Button
-                      fullWidth
-                      variant="contained"
-                      color={summary.killswitchEnabled ? "success" : "error"}
-                      onClick={() => void toggleKillswitch()}
-                    >
-                      {summary.killswitchEnabled ? "Turn Killswitch Off" : "Turn Killswitch On"}
-                    </Button>
-                  </Stack>
-                </Stack>
-              </Paper>
-            ) : null}
+                      {orderedAuditEntries.map((entry) => (
+                        <Box
+                          key={entry.id}
+                          data-fresh={freshAuditIDs.includes(entry.id) ? "true" : "false"}
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "1fr", md: "minmax(0,1fr) auto" },
+                            gap: 1.5,
+                            alignItems: "start",
+                            px: 1.5,
+                            py: 1.35,
+                            border: "1px solid",
+                            borderColor: "divider",
+                            borderRadius: 1.5,
+                            backgroundColor: "rgba(255,255,255,0.03)",
+                            transition: "background-color 180ms ease, border-color 180ms ease",
+                            animation: freshAuditIDs.includes(entry.id)
+                              ? `${auditEntryAppear} 600ms ease`
+                              : "none",
+                          }}
+                        >
+                          <Stack spacing={1.1}>
+                            <Stack
+                              direction="row"
+                              spacing={1.25}
+                              alignItems="center"
+                              flexWrap="wrap"
+                              useFlexGap
+                            >
+                              <Avatar
+                                src={entry.actorAvatarURL || undefined}
+                                sx={{
+                                  width: 32,
+                                  height: 32,
+                                  bgcolor: "primary.dark",
+                                  color: "#f0f0f0",
+                                  fontSize: "0.72rem",
+                                  fontWeight: 800,
+                                }}
+                              >
+                                {entry.actor.slice(0, 2).toUpperCase()}
+                              </Avatar>
+                              <Typography sx={{ fontSize: "0.92rem", fontWeight: 800 }}>
+                                {entry.actor}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                label={entry.command}
+                                sx={{
+                                  height: 24,
+                                  backgroundColor: "rgba(74,137,255,0.14)",
+                                  color: "primary.main",
+                                  fontWeight: 700,
+                                }}
+                              />
+                            </Stack>
 
+                            <Typography
+                              sx={{
+                                fontSize: "0.93rem",
+                                lineHeight: 1.6,
+                                color: "text.primary",
+                                pl: { xs: 0, sm: 5.25 },
+                              }}
+                            >
+                              {entry.detail}
+                            </Typography>
+                          </Stack>
+
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              textAlign: { xs: "left", md: "right" },
+                              whiteSpace: "nowrap",
+                              pt: { xs: 0, md: 0.4 },
+                            }}
+                          >
+                            {entry.ago}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  )}
+                </Box>
+              </Paper>
+            </Box>
+          ) : null}
+
+          {!hiddenPanels.includes("bot") ? (
+            <Paper>
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+                sx={{ px: 2.5, py: 1.75, borderBottom: "1px solid", borderColor: "divider" }}
+              >
+                <Box>
+                  <Typography variant="h6">Bot controls</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    quick website controls for the live bot runtime
+                  </Typography>
+                </Box>
+                <IconButton size="small" onClick={() => hidePanel("bot")}>
+                  <CloseRoundedIcon fontSize="small" />
+                </IconButton>
+              </Stack>
+              <Stack spacing={2} sx={{ p: 2.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Chip
+                    color={summaryLoading ? "default" : summary.botRunning ? "success" : "error"}
+                    label={summaryLoading ? "Loading..." : summary.botRunning ? "Bot online" : "Bot offline"}
+                    sx={botStatusChipSx(summary.botRunning)}
+                  />
+                  <Chip
+                    color={summary.killswitchEnabled ? "error" : "primary"}
+                    label={summary.killswitchEnabled ? "Killswitch on" : "Killswitch off"}
+                    variant={summary.killswitchEnabled ? "filled" : "outlined"}
+                  />
+                </Stack>
+                <FormControl fullWidth>
+                  <InputLabel id="dashboard-mode-select-label">Active mode</InputLabel>
+                  <Select
+                    labelId="dashboard-mode-select-label"
+                    label="Active mode"
+                    value={
+                      availableBotModes.some((mode) => mode.key === currentBotModeKey)
+                        ? currentBotModeKey
+                        : ""
+                    }
+                    disabled={availableBotModes.length === 0}
+                    onChange={(event) => void setCurrentBotMode(event.target.value)}
+                  >
+                    {availableBotModes.length === 0 ? (
+                      <MenuItem value="" disabled>
+                        No modes available yet
+                      </MenuItem>
+                    ) : null}
+                    {availableBotModes.map((mode) => (
+                      <MenuItem key={mode.key} value={mode.key}>
+                        {mode.title}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Typography variant="body2" color="text.secondary">
+                  Switch the live bot mode here or hit the killswitch instantly without needing a
+                  chat command.
+                </Typography>
+                <Stack direction="row" spacing={1.25}>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color={summary.killswitchEnabled ? "success" : "error"}
+                    onClick={() => void toggleKillswitch()}
+                  >
+                    {summary.killswitchEnabled ? "Turn Killswitch Off" : "Turn Killswitch On"}
+                  </Button>
+                </Stack>
+              </Stack>
+            </Paper>
+          ) : null}
+        </Stack>
+
+        <Box>
+          <Stack spacing={2}>
             {!hiddenPanels.includes("stream") ? (
               <Paper>
                 <Stack
@@ -537,7 +540,9 @@ export function DashboardOverviewPage() {
                   </IconButton>
                 </Stack>
                 <Stack spacing={2} sx={{ p: 2.5 }}>
-                  {!spotifyState.linked ? (
+                  {spotifyLoading ? (
+                    <Alert severity="info">Loading Spotify status...</Alert>
+                  ) : !spotifyState.linked ? (
                     <>
                       <Alert severity="info">
                         Link Spotify first if you want to search songs, queue tracks, or control

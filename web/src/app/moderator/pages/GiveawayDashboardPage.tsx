@@ -1,6 +1,5 @@
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import ChatRoundedIcon from "@mui/icons-material/ChatRounded";
-import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import {
   Box,
@@ -13,9 +12,6 @@ import {
   InputAdornment,
   MenuItem,
   Paper,
-  Radio,
-  RadioGroup,
-  Slider,
   Stack,
   TextField,
   Typography,
@@ -23,7 +19,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { isAutoGiveawayStatus, resolveGiveawayStatus } from "../giveaways";
 import { useModerator } from "../ModeratorContext";
 import type { GiveawayEntry } from "../types";
 
@@ -32,7 +27,7 @@ type GiveawayDraft = Omit<GiveawayEntry, "id">;
 export function GiveawayDashboardPage() {
   const navigate = useNavigate();
   const { giveawayId = "" } = useParams();
-  const { giveaways, availableBotModes, currentBotModeKey, updateGiveaway } = useModerator();
+  const { giveaways, updateGiveaway } = useModerator();
   const giveaway = giveaways.find((entry) => entry.id === giveawayId) ?? null;
   const [draft, setDraft] = useState<GiveawayDraft | null>(null);
   const [userQuery, setUserQuery] = useState("");
@@ -52,10 +47,9 @@ export function GiveawayDashboardPage() {
       return [];
     }
 
-    return [
-      draft.chatPrompt,
-      draft.winnerMessage.replace(/\{winner\}/g, "@basementhelper"),
-    ].filter((entry) => entry.trim() !== "");
+    return [draft.chatPrompt, draft.winnerMessage].filter(
+      (entry) => entry.trim() !== "",
+    );
   }, [draft]);
 
   if (giveaway == null || draft == null) {
@@ -71,7 +65,7 @@ export function GiveawayDashboardPage() {
             variant="outlined"
             startIcon={<ArrowBackRoundedIcon />}
             sx={{ mt: 2 }}
-            onClick={() => navigate("/dashboard/giveaways")}
+            onClick={() => navigate("/d/giveaways")}
           >
             Back to giveaways
           </Button>
@@ -80,23 +74,16 @@ export function GiveawayDashboardPage() {
     );
   }
 
-  const resolvedStatus = resolveGiveawayStatus(draft, currentBotModeKey);
-
   const saveDraft = () => {
     updateGiveaway(giveaway.id, {
       ...draft,
-      status: draft.type === "1v1" ? "ready" : draft.status,
       name: draft.name.trim(),
       description: draft.description.trim(),
-      entryTrigger: draft.entryTrigger.trim(),
-      requiredModeKey: draft.requiredModeKey.trim(),
+      entryTrigger: draft.entryMethod === "keyword" ? draft.entryTrigger.trim() : "",
       chatPrompt: draft.chatPrompt.trim(),
       winnerMessage: draft.winnerMessage.trim(),
       entryWindowSeconds: Math.max(10, Math.round(draft.entryWindowSeconds)),
-      inactivityTimeoutSeconds: Math.max(0, Math.round(draft.inactivityTimeoutSeconds)),
-      subscriberLuckMultiplier: Math.max(1, Math.round(draft.subscriberLuckMultiplier)),
       winnerCount: Math.max(1, Math.round(draft.winnerCount)),
-      entrantCount: Math.max(0, Math.round(draft.entrantCount)),
     });
   };
 
@@ -113,24 +100,24 @@ export function GiveawayDashboardPage() {
             variant="outlined"
             size="small"
             startIcon={<ArrowBackRoundedIcon />}
-            onClick={() => navigate("/dashboard/giveaways")}
+            onClick={() => navigate("/d/giveaways")}
           >
             Back
           </Button>
           <Box>
             <Typography variant="h5">{draft.name}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-              Dedicated giveaway dashboard for live entrants, settings, and chat-facing behavior.
+              {draft.type === "1v1"
+                ? "Built-in picker dashboard for viewers entering through chat."
+                : "Custom raffle dashboard for entrant flow, prompts, and chat behavior."}
             </Typography>
           </Box>
         </Stack>
 
         <Stack direction="row" spacing={1} alignItems="center">
-          <Chip
-            color={resolvedStatus === "live" ? "success" : resolvedStatus === "ready" ? "warning" : "default"}
-            label={resolvedStatus === "live" ? "Live" : resolvedStatus === "ready" ? "Ready" : resolvedStatus}
-            sx={{ fontWeight: 800 }}
-          />
+          {draft.protected ? (
+            <Chip label="Built-in" sx={{ fontWeight: 800 }} />
+          ) : null}
           <Button variant="contained" onClick={saveDraft}>
             Save
           </Button>
@@ -150,7 +137,7 @@ export function GiveawayDashboardPage() {
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Typography variant="h6">Users</Typography>
               <Typography color="text.secondary" sx={{ fontSize: "0.9rem", fontWeight: 700 }}>
-                0 users
+                Auto-collected
               </Typography>
             </Stack>
 
@@ -160,19 +147,12 @@ export function GiveawayDashboardPage() {
               type="search"
               value={userQuery}
               onChange={(event) => setUserQuery(event.target.value)}
-              placeholder="Search users..."
+              placeholder="Search entered users..."
               sx={{ mt: 2 }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <SearchRoundedIcon fontSize="small" sx={{ color: "text.secondary" }} />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button size="small" sx={{ minWidth: 0, p: 0.5 }}>
-                      <RefreshRoundedIcon fontSize="small" />
-                    </Button>
                   </InputAdornment>
                 ),
               }}
@@ -191,8 +171,8 @@ export function GiveawayDashboardPage() {
             >
               <Typography sx={{ fontWeight: 700 }}>No live entrants yet</Typography>
               <Typography color="text.secondary" sx={{ mt: 0.75, lineHeight: 1.7 }}>
-                This area is ready for the runtime-backed entrant list. Once giveaway storage is
-                wired, searchable users will appear here instead of being faked in seed data.
+                Entered users should appear here automatically from the bot runtime. Broadcaster
+                and bot accounts are skipped, so only real viewer entries should show up.
               </Typography>
             </Box>
           </CardContent>
@@ -207,329 +187,222 @@ export function GiveawayDashboardPage() {
               alignItems={{ xs: "flex-start", md: "center" }}
             >
               <Typography variant="h6">Settings</Typography>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={draft.chatAnnouncementsEnabled}
+              <Stack direction="row" spacing={1}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={draft.enabled}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current == null
+                            ? current
+                            : { ...current, enabled: event.target.checked },
+                        )
+                      }
+                    />
+                  }
+                  label="Enabled"
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={draft.chatAnnouncementsEnabled}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current == null
+                            ? current
+                            : {
+                                ...current,
+                                chatAnnouncementsEnabled: event.target.checked,
+                              },
+                        )
+                      }
+                    />
+                  }
+                  label="Chat announcements"
+                />
+              </Stack>
+            </Stack>
+
+            {draft.type === "1v1" ? (
+              <Stack spacing={2.5} sx={{ mt: 2 }}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    px: 2,
+                    py: 1.6,
+                    backgroundColor: "background.default",
+                    border: "1px solid",
+                    borderColor: "divider",
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 800 }}>Built-in 1v1 flow</Typography>
+                  <Typography color="text.secondary" sx={{ mt: 0.75, lineHeight: 1.7 }}>
+                    This picker is meant to stay simple. Viewers enter by typing{" "}
+                    <strong>1v1</strong> in chat while 1v1 mode is active, and the runtime should
+                    collect them automatically instead of you hand-building rounds here.
+                  </Typography>
+                </Paper>
+
+                <TextField
+                  fullWidth
+                  label="Entry phrase"
+                  value="1v1"
+                  helperText="This is hardcoded for the built-in 1v1 picker."
+                  InputProps={{ readOnly: true }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Chat prompt"
+                  value={draft.chatPrompt}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current == null
+                        ? current
+                        : { ...current, chatPrompt: event.target.value },
+                    )
+                  }
+                  multiline
+                  minRows={3}
+                  placeholder="Type 1v1 once in chat for a chance to get picked."
+                />
+
+                <Box>
+                  <Button variant="contained" disabled>
+                    Pick next 1v1 viewer
+                  </Button>
+                  <Typography color="text.secondary" sx={{ mt: 0.85, fontSize: "0.88rem" }}>
+                    This lights up once the entrant list is runtime-backed instead of placeholder
+                    UI state.
+                  </Typography>
+                </Box>
+              </Stack>
+            ) : (
+              <Stack spacing={2.5} sx={{ mt: 2 }}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Entry method"
+                  value={draft.entryMethod}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current == null
+                        ? current
+                        : {
+                            ...current,
+                            entryMethod: event.target.value as GiveawayDraft["entryMethod"],
+                          },
+                    )
+                  }
+                >
+                  <MenuItem value="keyword">Keyword</MenuItem>
+                  <MenuItem value="active-users">Active users</MenuItem>
+                </TextField>
+
+                <TextField
+                  fullWidth
+                  label="Entry trigger"
+                  value={draft.entryTrigger}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current == null
+                        ? current
+                        : { ...current, entryTrigger: event.target.value },
+                    )
+                  }
+                  disabled={draft.entryMethod !== "keyword"}
+                  helperText={
+                    draft.entryMethod === "keyword"
+                      ? "The chat keyword viewers use to enter."
+                      : "Active-user raffles do not need a manual keyword."
+                  }
+                  placeholder="!joinraffle"
+                />
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                    gap: 2,
+                  }}
+                >
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Entry window"
+                    value={draft.entryWindowSeconds}
                     onChange={(event) =>
                       setDraft((current) =>
                         current == null
                           ? current
-                          : { ...current, chatAnnouncementsEnabled: event.target.checked },
+                          : {
+                              ...current,
+                              entryWindowSeconds: Number(event.target.value) || 0,
+                            },
                       )
                     }
+                    InputProps={{
+                      endAdornment: <Typography color="text.secondary">seconds</Typography>,
+                    }}
                   />
-                }
-                label="Chat announcements"
-              />
-            </Stack>
-
-            <Box sx={{ mt: 2.25 }}>
-              <Typography sx={{ color: "text.secondary", fontWeight: 700, mb: 1 }}>
-                Giveaway type
-              </Typography>
-              <RadioGroup
-                row
-                value={draft.entryMethod}
-                onChange={(event) =>
-                  setDraft((current) =>
-                    current == null
-                      ? current
-                      : {
-                          ...current,
-                          entryMethod: event.target.value as GiveawayDraft["entryMethod"],
-                        },
-                  )
-                }
-              >
-                <FormControlLabel value="active-users" control={<Radio />} label="Active Users" />
-                <FormControlLabel value="keyword" control={<Radio />} label="Keyword" />
-              </RadioGroup>
-            </Box>
-
-            <Stack spacing={2.5} sx={{ mt: 2 }}>
-              <TextField
-                fullWidth
-                label="Keyword phrase"
-                value={draft.entryTrigger}
-                onChange={(event) =>
-                  setDraft((current) =>
-                    current == null ? current : { ...current, entryTrigger: event.target.value },
-                  )
-                }
-                disabled={draft.entryMethod !== "keyword"}
-                helperText="Keyword phrases are fuzzy matched and case-insensitive."
-              />
-
-              <Box>
-                <Typography sx={{ color: "text.secondary", fontWeight: 700 }}>
-                  Inactivity timeout (seconds)
-                </Typography>
-                <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
-                  <Slider
-                    min={0}
-                    max={300}
-                    step={5}
-                    value={draft.inactivityTimeoutSeconds}
-                    onChange={(_, value) =>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Winner count"
+                    value={draft.winnerCount}
+                    onChange={(event) =>
                       setDraft((current) =>
                         current == null
                           ? current
-                          : { ...current, inactivityTimeoutSeconds: value as number },
+                          : { ...current, winnerCount: Number(event.target.value) || 0 },
                       )
                     }
-                    sx={{ flex: 1 }}
                   />
-                  <TextField
-                    value={draft.inactivityTimeoutSeconds}
-                    size="small"
-                    sx={{ width: 92 }}
-                    inputProps={{ readOnly: true }}
-                  />
-                </Stack>
-                <Typography color="text.secondary" sx={{ mt: 0.8, fontSize: "0.88rem" }}>
-                  {draft.inactivityTimeoutSeconds === 0
-                    ? "Users are not removed for inactivity."
-                    : "Inactive users are removed after this much time."}
-                </Typography>
-              </Box>
+                </Box>
 
-              <Box>
-                <Typography sx={{ color: "text.secondary", fontWeight: 700 }}>
-                  Subscriber luck multiplier
-                </Typography>
-                <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
-                  <Slider
-                    min={1}
-                    max={5}
-                    step={1}
-                    value={draft.subscriberLuckMultiplier}
-                    onChange={(_, value) =>
-                      setDraft((current) =>
-                        current == null
-                          ? current
-                          : { ...current, subscriberLuckMultiplier: value as number },
-                      )
-                    }
-                    sx={{ flex: 1 }}
-                  />
-                  <TextField
-                    value={`${draft.subscriberLuckMultiplier}x`}
-                    size="small"
-                    sx={{ width: 92 }}
-                    inputProps={{ readOnly: true }}
-                  />
-                </Stack>
-                <Typography color="text.secondary" sx={{ mt: 0.8, fontSize: "0.88rem" }}>
-                  Subscribers get this weighted advantage in the picker.
-                </Typography>
-              </Box>
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                  gap: 2,
-                }}
-              >
                 <TextField
-                  select
                   fullWidth
-                  label="Required mode"
-                  value={draft.requiredModeKey}
+                  label="Chat prompt"
+                  value={draft.chatPrompt}
                   onChange={(event) =>
                     setDraft((current) =>
                       current == null
                         ? current
-                        : { ...current, requiredModeKey: event.target.value },
+                        : { ...current, chatPrompt: event.target.value },
                     )
                   }
-                >
-                  <MenuItem value="">No mode requirement</MenuItem>
-                  {availableBotModes.map((mode) => (
-                    <MenuItem key={mode.key} value={mode.key}>
-                      {mode.title}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                  multiline
+                  minRows={3}
+                  placeholder="Type !joinraffle once to enter the current giveaway."
+                />
+
                 <TextField
-                  select
                   fullWidth
-                  label="Status"
-                  value={resolvedStatus}
+                  label="Winner message"
+                  value={draft.winnerMessage}
                   onChange={(event) =>
                     setDraft((current) =>
                       current == null
                         ? current
-                        : { ...current, status: event.target.value as GiveawayDraft["status"] },
+                        : { ...current, winnerMessage: event.target.value },
                     )
                   }
-                  disabled={isAutoGiveawayStatus(draft)}
-                  helperText={
-                    isAutoGiveawayStatus(draft)
-                      ? "1v1 giveaways switch between ready and live automatically based on the current bot mode."
-                      : undefined
-                  }
-                >
-                  <MenuItem value="draft">Draft</MenuItem>
-                  <MenuItem value="ready">Ready</MenuItem>
-                  <MenuItem value="live">Live</MenuItem>
-                  <MenuItem value="completed">Completed</MenuItem>
-                </TextField>
-              </Box>
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                  gap: 2,
-                }}
-              >
-                <Box>
-                  <Typography sx={{ color: "text.secondary", fontWeight: 700 }}>
-                    Entry window
-                  </Typography>
-                  <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
-                    <Slider
-                      min={10}
-                      max={600}
-                      step={10}
-                      value={draft.entryWindowSeconds}
-                      onChange={(_, value) =>
-                        setDraft((current) =>
-                          current == null
-                            ? current
-                            : { ...current, entryWindowSeconds: value as number },
-                        )
-                      }
-                      sx={{ flex: 1 }}
-                    />
-                    <TextField
-                      value={draft.entryWindowSeconds}
-                      size="small"
-                      sx={{ width: 92 }}
-                      inputProps={{ readOnly: true }}
-                    />
-                  </Stack>
-                </Box>
+                  multiline
+                  minRows={3}
+                  placeholder="{winner} won the giveaway."
+                />
 
                 <Box>
-                  <Typography sx={{ color: "text.secondary", fontWeight: 700 }}>
-                    Winner count
+                  <Button variant="contained" disabled>
+                    Pick winner
+                  </Button>
+                  <Typography color="text.secondary" sx={{ mt: 0.85, fontSize: "0.88rem" }}>
+                    Winner picking turns on once live entrants are being fed into this dashboard.
                   </Typography>
-                  <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
-                    <Slider
-                      min={1}
-                      max={10}
-                      step={1}
-                      value={draft.winnerCount}
-                      onChange={(_, value) =>
-                        setDraft((current) =>
-                          current == null ? current : { ...current, winnerCount: value as number },
-                        )
-                      }
-                      sx={{ flex: 1 }}
-                    />
-                    <TextField
-                      value={draft.winnerCount}
-                      size="small"
-                      sx={{ width: 92 }}
-                      inputProps={{ readOnly: true }}
-                    />
-                  </Stack>
                 </Box>
-              </Box>
-
-              <Stack spacing={1}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={draft.allowVips}
-                      onChange={(event) =>
-                        setDraft((current) =>
-                          current == null
-                            ? current
-                            : { ...current, allowVips: event.target.checked },
-                        )
-                      }
-                    />
-                  }
-                  label="VIPs can enter"
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={draft.allowSubscribers}
-                      onChange={(event) =>
-                        setDraft((current) =>
-                          current == null
-                            ? current
-                            : { ...current, allowSubscribers: event.target.checked },
-                        )
-                      }
-                    />
-                  }
-                  label="Subscribers can enter"
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={draft.allowModsBroadcaster}
-                      onChange={(event) =>
-                        setDraft((current) =>
-                          current == null
-                            ? current
-                            : { ...current, allowModsBroadcaster: event.target.checked },
-                        )
-                      }
-                    />
-                  }
-                  label="Mods and broadcaster can enter"
-                />
               </Stack>
-
-              <TextField
-                fullWidth
-                label="Chat prompt"
-                value={draft.chatPrompt}
-                onChange={(event) =>
-                  setDraft((current) =>
-                    current == null ? current : { ...current, chatPrompt: event.target.value },
-                  )
-                }
-                multiline
-                minRows={3}
-              />
-
-              <TextField
-                fullWidth
-                label="Winner message"
-                value={draft.winnerMessage}
-                onChange={(event) =>
-                  setDraft((current) =>
-                    current == null ? current : { ...current, winnerMessage: event.target.value },
-                  )
-                }
-                multiline
-                minRows={3}
-              />
-
-              <Paper
-                elevation={0}
-                sx={{
-                  px: 2,
-                  py: 1.6,
-                  textAlign: "center",
-                  backgroundColor: "background.default",
-                  border: "1px solid",
-                  borderColor: "divider",
-                }}
-              >
-                <Typography sx={{ fontWeight: 800, color: "text.secondary" }}>
-                  NO ENTRIES YET
-                </Typography>
-              </Paper>
-            </Stack>
+            )}
           </CardContent>
         </Card>
 
@@ -605,8 +478,7 @@ export function GiveawayDashboardPage() {
               >
                 <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
                   This panel is ready for live entrant joins, winner rolls, and giveaway chat echo.
-                  Once the runtime side is wired, this stops being a preview and becomes the actual
-                  live feed.
+                  Once the runtime side is wired, this preview can become the actual live feed.
                 </Typography>
               </Box>
             </Box>

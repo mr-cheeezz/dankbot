@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,13 +19,15 @@ import (
 const moderationToolsTimeout = 8 * time.Second
 
 type blockedTermResponse struct {
-	ID             string `json:"id"`
-	Pattern        string `json:"pattern"`
-	IsRegex        bool   `json:"is_regex"`
-	Action         string `json:"action"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	Reason         string `json:"reason"`
-	Enabled        bool   `json:"enabled"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Pattern        string     `json:"pattern"`
+	PhraseGroups   [][]string `json:"phrase_groups"`
+	IsRegex        bool       `json:"is_regex"`
+	Action         string     `json:"action"`
+	TimeoutSeconds int        `json:"timeout_seconds"`
+	Reason         string     `json:"reason"`
+	Enabled        bool       `json:"enabled"`
 }
 
 type blockedTermsResponse struct {
@@ -32,12 +35,14 @@ type blockedTermsResponse struct {
 }
 
 type createBlockedTermRequest struct {
-	Pattern        string `json:"pattern"`
-	IsRegex        bool   `json:"is_regex"`
-	Action         string `json:"action"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	Reason         string `json:"reason"`
-	Enabled        bool   `json:"enabled"`
+	Name           string     `json:"name"`
+	Pattern        string     `json:"pattern"`
+	PhraseGroups   [][]string `json:"phrase_groups"`
+	IsRegex        bool       `json:"is_regex"`
+	Action         string     `json:"action"`
+	TimeoutSeconds int        `json:"timeout_seconds"`
+	Reason         string     `json:"reason"`
+	Enabled        bool       `json:"enabled"`
 }
 
 type deleteBlockedTermRequest struct {
@@ -45,13 +50,15 @@ type deleteBlockedTermRequest struct {
 }
 
 type updateBlockedTermRequest struct {
-	ID             string `json:"id"`
-	Pattern        string `json:"pattern"`
-	IsRegex        bool   `json:"is_regex"`
-	Action         string `json:"action"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	Reason         string `json:"reason"`
-	Enabled        bool   `json:"enabled"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Pattern        string     `json:"pattern"`
+	PhraseGroups   [][]string `json:"phrase_groups"`
+	IsRegex        bool       `json:"is_regex"`
+	Action         string     `json:"action"`
+	TimeoutSeconds int        `json:"timeout_seconds"`
+	Reason         string     `json:"reason"`
+	Enabled        bool       `json:"enabled"`
 }
 
 type massModerationRequest struct {
@@ -74,7 +81,21 @@ type massModerationResponse struct {
 	Unresolved []string               `json:"unresolved"`
 }
 
-var errBotAccountNotLinked = errors.New("twitch bot account is not linked")
+type recentFollowersImportEntry struct {
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	FollowedAt  string `json:"followed_at"`
+}
+
+type recentFollowersImportResponse struct {
+	Total int                          `json:"total"`
+	Items []recentFollowersImportEntry `json:"items"`
+}
+
+var (
+	errBotAccountNotLinked      = errors.New("twitch bot account is not linked")
+	errStreamerAccountNotLinked = errors.New("twitch streamer account is not linked")
+)
 
 func (h handler) blockedTerms(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -109,11 +130,14 @@ func (h handler) listBlockedTerms(w http.ResponseWriter, r *http.Request) {
 
 	response := blockedTermsResponse{Items: make([]blockedTermResponse, 0, len(items))}
 	for _, item := range items {
+		action := postgres.NormalizeBlockedTermActionForAPI(item.Action)
 		response.Items = append(response.Items, blockedTermResponse{
 			ID:             strings.TrimSpace(item.ID),
+			Name:           strings.TrimSpace(item.Name),
 			Pattern:        strings.TrimSpace(item.Pattern),
+			PhraseGroups:   item.PhraseGroups,
 			IsRegex:        item.IsRegex,
-			Action:         strings.TrimSpace(item.Action),
+			Action:         action,
 			TimeoutSeconds: item.TimeoutSeconds,
 			Reason:         strings.TrimSpace(item.Reason),
 			Enabled:        item.Enabled,
@@ -371,6 +395,80 @@ func (h handler) massModerationAction(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+func (h handler) massModerationRecentFollowers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w, http.MethodGet)
+		return
+	}
+
+	if _, err := h.requireEditorFeatureAccess(r); err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	limit := 25
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			http.Error(w, "invalid follower import limit", http.StatusBadRequest)
+			return
+		}
+		limit = parsed
+	}
+	if limit <= 0 {
+		http.Error(w, "follower import limit must be greater than zero", http.StatusBadRequest)
+		return
+	}
+	if limit > 500 {
+		http.Error(w, "follower import limit is capped at 500", http.StatusBadRequest)
+		return
+	}
+
+	followerClient, streamerAccount, broadcasterID, err := h.dashboardStreamerFollowersClient(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), moderationToolsStatusCode(err))
+		return
+	}
+
+	if missing := missingScopes(streamerAccount.Scopes, "moderator:read:followers"); len(missing) > 0 {
+		http.Error(w, "linked streamer account is missing moderator:read:followers; relink the streamer account", http.StatusPreconditionFailed)
+		return
+	}
+
+	requestCtx, cancel := context.WithTimeout(r.Context(), moderationToolsTimeout)
+	defer cancel()
+
+	followers, total, err := followerClient.GetRecentChannelFollowers(
+		requestCtx,
+		broadcasterID,
+		strings.TrimSpace(streamerAccount.TwitchUserID),
+		limit,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), moderationToolsStatusCode(err))
+		return
+	}
+
+	response := recentFollowersImportResponse{
+		Total: total,
+		Items: make([]recentFollowersImportEntry, 0, len(followers)),
+	}
+	for _, follower := range followers {
+		response.Items = append(response.Items, recentFollowersImportEntry{
+			Username:    strings.TrimSpace(strings.ToLower(follower.UserLogin)),
+			DisplayName: strings.TrimSpace(follower.UserName),
+			FollowedAt:  follower.FollowedAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
 func (h handler) fetchBlockedTerms(ctx context.Context) ([]postgres.BlockedTerm, error) {
 	if h.appState == nil || h.appState.BlockedTerms == nil {
 		return nil, fmt.Errorf("blocked terms are not configured")
@@ -434,6 +532,60 @@ func (h handler) dashboardBotModerationClient(ctx context.Context) (*helix.Clien
 	return helix.NewClient(h.appState.Config.Twitch.ClientID, accessToken), account, broadcasterID, nil
 }
 
+func (h handler) dashboardStreamerFollowersClient(ctx context.Context) (*helix.Client, *postgres.TwitchAccount, string, error) {
+	if h.appState == nil || h.appState.Config == nil || h.appState.TwitchAccounts == nil {
+		return nil, nil, "", fmt.Errorf("twitch accounts are not configured")
+	}
+
+	account, err := h.appState.TwitchAccounts.Get(ctx, postgres.TwitchAccountKindStreamer)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if account == nil {
+		return nil, nil, "", errStreamerAccountNotLinked
+	}
+
+	if h.appState.TwitchOAuth != nil &&
+		!account.ExpiresAt.IsZero() &&
+		time.Until(account.ExpiresAt) <= time.Minute &&
+		strings.TrimSpace(account.RefreshToken) != "" {
+		token, refreshErr := h.appState.TwitchOAuth.RefreshToken(ctx, account.RefreshToken)
+		if refreshErr == nil {
+			account.AccessToken = strings.TrimSpace(token.AccessToken)
+			if refreshToken := strings.TrimSpace(token.RefreshToken); refreshToken != "" {
+				account.RefreshToken = refreshToken
+			}
+			if tokenType := strings.TrimSpace(token.TokenType); tokenType != "" {
+				account.TokenType = tokenType
+			}
+			account.ExpiresAt = token.ExpiresAt()
+			if len(token.Scope) > 0 {
+				account.Scopes = append([]string(nil), token.Scope...)
+			}
+			_ = h.appState.TwitchAccounts.Save(ctx, *account)
+		}
+	}
+
+	accessToken := strings.TrimSpace(account.AccessToken)
+	if accessToken == "" {
+		return nil, nil, "", fmt.Errorf("twitch streamer access token is missing")
+	}
+
+	broadcasterID := strings.TrimSpace(account.TwitchUserID)
+	if broadcasterID == "" {
+		broadcasterID = strings.TrimSpace(h.appState.Config.Main.StreamerID)
+	}
+	if broadcasterID == "" {
+		return nil, nil, "", fmt.Errorf("streamer id is not configured")
+	}
+
+	if strings.TrimSpace(account.TwitchUserID) == "" {
+		return nil, nil, "", fmt.Errorf("twitch streamer user id is missing")
+	}
+
+	return helix.NewClient(h.appState.Config.Twitch.ClientID, accessToken), account, broadcasterID, nil
+}
+
 func (h handler) dashboardAppHelixClient(ctx context.Context) (*helix.Client, error) {
 	if h.appState == nil || h.appState.Config == nil || h.appState.TwitchOAuth == nil {
 		return nil, nil
@@ -483,7 +635,7 @@ func moderationToolsStatusCode(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
-	if errors.Is(err, errBotAccountNotLinked) {
+	if errors.Is(err, errBotAccountNotLinked) || errors.Is(err, errStreamerAccountNotLinked) {
 		return http.StatusPreconditionFailed
 	}
 
@@ -500,10 +652,41 @@ func moderationToolsStatusCode(err error) int {
 	return http.StatusInternalServerError
 }
 
+func missingScopes(actual []string, required ...string) []string {
+	if len(required) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(actual))
+	for _, scope := range actual {
+		scope = strings.TrimSpace(scope)
+		if scope == "" {
+			continue
+		}
+		seen[scope] = struct{}{}
+	}
+
+	missing := make([]string, 0, len(required))
+	for _, scope := range required {
+		scope = strings.TrimSpace(scope)
+		if scope == "" {
+			continue
+		}
+		if _, ok := seen[scope]; ok {
+			continue
+		}
+		missing = append(missing, scope)
+	}
+
+	return missing
+}
+
 func blockedTermFromCreateRequest(request createBlockedTermRequest) (postgres.BlockedTerm, error) {
 	return blockedTermFromUpdateRequest(updateBlockedTermRequest{
 		ID:             fmt.Sprintf("blocked-term-%d", time.Now().UTC().UnixNano()),
+		Name:           request.Name,
 		Pattern:        request.Pattern,
+		PhraseGroups:   request.PhraseGroups,
 		IsRegex:        request.IsRegex,
 		Action:         request.Action,
 		TimeoutSeconds: request.TimeoutSeconds,
@@ -515,7 +698,9 @@ func blockedTermFromCreateRequest(request createBlockedTermRequest) (postgres.Bl
 func blockedTermFromUpdateRequest(request updateBlockedTermRequest) (postgres.BlockedTerm, error) {
 	term := postgres.BlockedTerm{
 		ID:             strings.TrimSpace(request.ID),
+		Name:           strings.TrimSpace(request.Name),
 		Pattern:        strings.TrimSpace(request.Pattern),
+		PhraseGroups:   request.PhraseGroups,
 		IsRegex:        request.IsRegex,
 		Action:         strings.TrimSpace(request.Action),
 		TimeoutSeconds: request.TimeoutSeconds,
@@ -526,19 +711,24 @@ func blockedTermFromUpdateRequest(request updateBlockedTermRequest) (postgres.Bl
 	if term.ID == "" {
 		return postgres.BlockedTerm{}, fmt.Errorf("blocked term id is required")
 	}
-	if term.Pattern == "" {
-		return postgres.BlockedTerm{}, fmt.Errorf("blocked term pattern is required")
+	if term.Name == "" {
+		return postgres.BlockedTerm{}, fmt.Errorf("blocked term name is required")
 	}
 	if term.IsRegex {
+		if term.Pattern == "" {
+			return postgres.BlockedTerm{}, fmt.Errorf("blocked term pattern is required")
+		}
 		if _, err := regexp.Compile(term.Pattern); err != nil {
 			return postgres.BlockedTerm{}, fmt.Errorf("invalid regex: %w", err)
 		}
+	} else if len(term.PhraseGroups) == 0 && term.Pattern == "" {
+		return postgres.BlockedTerm{}, fmt.Errorf("blocked term needs at least one phrase group")
 	}
 	if postgres.NormalizeBlockedTermActionForAPI(term.Action) == "" {
 		return postgres.BlockedTerm{}, fmt.Errorf("unsupported blocked term action")
 	}
 	term.Action = postgres.NormalizeBlockedTermActionForAPI(term.Action)
-	if (term.Action == "timeout" || term.Action == "delete + timeout") && term.TimeoutSeconds <= 0 {
+	if term.Action == "timeout" && term.TimeoutSeconds <= 0 {
 		return postgres.BlockedTerm{}, fmt.Errorf("timeout duration must be greater than zero")
 	}
 
@@ -546,11 +736,14 @@ func blockedTermFromUpdateRequest(request updateBlockedTermRequest) (postgres.Bl
 }
 
 func blockedTermToResponse(term postgres.BlockedTerm) blockedTermResponse {
+	action := postgres.NormalizeBlockedTermActionForAPI(term.Action)
 	return blockedTermResponse{
 		ID:             strings.TrimSpace(term.ID),
+		Name:           strings.TrimSpace(term.Name),
 		Pattern:        strings.TrimSpace(term.Pattern),
+		PhraseGroups:   term.PhraseGroups,
 		IsRegex:        term.IsRegex,
-		Action:         strings.TrimSpace(term.Action),
+		Action:         action,
 		TimeoutSeconds: term.TimeoutSeconds,
 		Reason:         strings.TrimSpace(term.Reason),
 		Enabled:        term.Enabled,

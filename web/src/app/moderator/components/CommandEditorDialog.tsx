@@ -44,6 +44,10 @@ const sections: Array<{ key: SectionKey; label: string }> = [
   { key: "conditions", label: "Conditions" },
 ];
 
+function normalizeCommandToken(value: string): string {
+  return value.trim().replace(/^[!./?]+/, "").trim();
+}
+
 export function CommandEditorDialog({
   open,
   editing,
@@ -69,18 +73,17 @@ export function CommandEditorDialog({
   };
 
   const addAlias = () => {
-    const value = newAlias.trim();
+    const value = normalizeCommandToken(newAlias);
     if (value === "") {
       return;
     }
 
-    const alias = value.startsWith("!") ? value : `!${value}`;
-    if (draft.aliases.some((item) => item.toLowerCase() === alias.toLowerCase())) {
+    if (draft.aliases.some((item) => item.toLowerCase() === value.toLowerCase())) {
       setNewAlias("");
       return;
     }
 
-    setDraft({ aliases: [...draft.aliases, alias] });
+    setDraft({ aliases: [...draft.aliases, value] });
     setNewAlias("");
   };
 
@@ -143,7 +146,7 @@ export function CommandEditorDialog({
                     value={draft.name}
                     onChange={(event) => setDraft({ name: event.target.value })}
                     disabled={draft.kind === "default"}
-                    helperText="Include the ! prefix, for example !discord"
+                    helperText="Enter the command name without the prefix, for example discord"
                   />
                   <FormControlLabel
                     control={
@@ -185,11 +188,13 @@ export function CommandEditorDialog({
                   </TextField>
                 </Box>
 
-                <TextField
-                  label="Description"
-                  value={draft.description}
-                  onChange={(event) => setDraft({ description: event.target.value })}
-                />
+                {draft.kind !== "custom" ? (
+                  <TextField
+                    label="Description"
+                    value={draft.description}
+                    onChange={(event) => setDraft({ description: event.target.value })}
+                  />
+                ) : null}
 
                 <TextField
                   label="Example"
@@ -237,7 +242,7 @@ export function CommandEditorDialog({
                         addAlias();
                       }
                     }}
-                    helperText="Example: !socials"
+                    helperText="Example: socials"
                   />
                   <Button
                     variant="outlined"

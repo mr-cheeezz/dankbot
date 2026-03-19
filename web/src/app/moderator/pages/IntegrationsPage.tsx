@@ -7,17 +7,20 @@ import SensorsRoundedIcon from "@mui/icons-material/SensorsRounded";
 import SportsEsportsRoundedIcon from "@mui/icons-material/SportsEsportsRounded";
 import StreamRoundedIcon from "@mui/icons-material/StreamRounded";
 import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
   Divider,
+  Snackbar,
   Stack,
   Typography,
 } from "@mui/material";
 import type { SvgIconComponent } from "@mui/icons-material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -34,13 +37,45 @@ type IntegrationTone = "success" | "warning" | "neutral";
 export function IntegrationsPage() {
   const { summary, summaryLoading, refreshSummary } = useModerator();
   const { session } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [pendingUnlink, setPendingUnlink] = useState<{
     entry: IntegrationEntry;
     action: IntegrationAction;
   } | null>(null);
   const [unlinkingKey, setUnlinkingKey] = useState("");
+  const [oauthFlash, setOauthFlash] = useState<{
+    severity: "success" | "error";
+    title: string;
+    message: string;
+  } | null>(null);
   const canSeeStreamerConnectLinks = canLinkStreamerIntegrations(session);
   const canSeeBotConnectLinks = canLinkBotIntegration(session);
+
+  useEffect(() => {
+    const status = searchParams.get("oauth_status");
+    if (status == null || status.trim() === "") {
+      return;
+    }
+
+    const normalizedStatus = status.trim().toLowerCase();
+    const severity = normalizedStatus === "success" ? "success" : "error";
+    const title =
+      searchParams.get("oauth_title")?.trim() ||
+      (severity === "success" ? "Integration linked" : "Authorization failed");
+    const message =
+      searchParams.get("oauth_message")?.trim() ||
+      (severity === "success"
+        ? "The integration was linked successfully."
+        : "The integration could not be linked.");
+
+    setOauthFlash({ severity, title, message });
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("oauth_status");
+    nextParams.delete("oauth_title");
+    nextParams.delete("oauth_message");
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const visibleEntries = summary.integrations
     .map((entry) => ({
@@ -138,6 +173,32 @@ export function IntegrationsPage() {
           void confirmUnlink();
         }}
       />
+
+      <Snackbar
+        open={oauthFlash != null}
+        autoHideDuration={4500}
+        onClose={(_, reason) => {
+          if (reason === "clickaway") {
+            return;
+          }
+          setOauthFlash(null);
+        }}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        {oauthFlash ? (
+          <Alert
+            severity={oauthFlash.severity}
+            variant="filled"
+            onClose={() => setOauthFlash(null)}
+            sx={{ width: "100%", alignItems: "center" }}
+          >
+            <strong>{oauthFlash.title}</strong>
+            <Box component="span" sx={{ display: "block", mt: 0.35 }}>
+              {oauthFlash.message}
+            </Box>
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </>
   );
 }

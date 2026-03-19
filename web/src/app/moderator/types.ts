@@ -99,10 +99,18 @@ export type ModeEntry = {
   keywordDescription: string;
   keywordResponse: string;
   coordinatedTwitchTitle: string;
+  coordinatedTwitchCategoryID: string;
+  coordinatedTwitchCategoryName: string;
   timerEnabled: boolean;
   timerMessage: string;
   timerIntervalSeconds: number;
   builtin: boolean;
+};
+
+export type TwitchCategorySearchEntry = {
+  id: string;
+  name: string;
+  boxArtURL: string;
 };
 
 export type TimerEntry = {
@@ -126,24 +134,16 @@ export type TimerEntry = {
 export type GiveawayEntry = {
   id: string;
   name: string;
-  type: "raffle" | "1v1" | "vip-pick";
-  status: "draft" | "ready" | "live" | "completed";
+  type: "raffle" | "1v1";
   entryMethod: "active-users" | "keyword";
   description: string;
   enabled: boolean;
   chatAnnouncementsEnabled: boolean;
   entryTrigger: string;
   entryWindowSeconds: number;
-  inactivityTimeoutSeconds: number;
-  subscriberLuckMultiplier: number;
   winnerCount: number;
-  allowVips: boolean;
-  allowSubscribers: boolean;
-  allowModsBroadcaster: boolean;
-  requiredModeKey: string;
   chatPrompt: string;
   winnerMessage: string;
-  entrantCount: number;
   protected: boolean;
 };
 
@@ -168,6 +168,23 @@ export type ModuleSettingEntry = {
   options?: string[];
 };
 
+export type ModuleSettingSchemaEntry = {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "number" | "select" | "boolean";
+  helperText?: string;
+  options?: string[];
+};
+
+export type ModuleCatalogEntry = {
+  id: string;
+  name: string;
+  state: string;
+  detail: string;
+  commands: string[];
+  settings: ModuleSettingSchemaEntry[];
+};
+
 export type ModuleEntry = {
   id: string;
   name: string;
@@ -187,6 +204,51 @@ export type GameModuleSettings = {
   enabled: boolean;
   aiDetectionEnabled: boolean;
   keywordResponse: string;
+  playtimeTemplate: string;
+  gamesPlayedTemplate: string;
+  gamesPlayedItemTemplate: string;
+  gamesPlayedLimit: number;
+};
+
+export type NowPlayingModuleSettings = {
+  enabled: boolean;
+  aiDetectionEnabled: boolean;
+  keywordResponse: string;
+};
+
+export type QuoteModuleSettings = {
+  enabled: boolean;
+};
+
+export type TabsModuleSettings = {
+  enabled: boolean;
+  interestRatePercent: number;
+  interestEveryDays: number;
+};
+
+export type UserProfileModuleSettings = {
+  enabled: boolean;
+  showTabSection: boolean;
+  showTabHistory: boolean;
+  showRedemptionActivity: boolean;
+  showPollStats: boolean;
+  showPredictionStats: boolean;
+  showLastSeen: boolean;
+  showLastChatActivity: boolean;
+};
+
+export type NewChatterGreetingModuleSettings = {
+  enabled: boolean;
+  messages: string[];
+};
+
+export type QuoteModuleEntry = {
+  id: number;
+  message: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type DiscordBotChannelOption = {
@@ -207,27 +269,34 @@ export type DiscordBotPingRole = {
   enabled: boolean;
 };
 
+export type DiscordBotGamePingSettings = {
+  enabled: boolean;
+  channelID: string;
+  roleID: string;
+  roleName: string;
+  messageTemplate: string;
+  includeWatchLink: boolean;
+  includeJoinLink: boolean;
+};
+
 export type DiscordBotSettings = {
   guildID: string;
   defaultChannelID: string;
   pingRoles: DiscordBotPingRole[];
+  gamePing: DiscordBotGamePingSettings;
   channels: DiscordBotChannelOption[];
   roles: DiscordBotRoleOption[];
   commandName: string;
+  gamePingCommandName: string;
 };
 
 export type BlockedTermEntry = {
   id: string;
+  name: string;
   pattern: string;
+  phraseGroups: string[][];
   isRegex: boolean;
-  action:
-    | "delete"
-    | "warn"
-    | "delete + warn"
-    | "timeout"
-    | "delete + timeout"
-    | "ban"
-    | "delete + ban";
+  action: "delete" | "delete + warn" | "timeout" | "ban";
   timeoutSeconds: number;
   reason: string;
   enabled: boolean;
@@ -239,6 +308,12 @@ export type MassModerationActionResult = {
   action: "warn" | "timeout" | "ban" | "unban";
   success: boolean;
   error?: string;
+};
+
+export type MassModerationFollowerImportEntry = {
+  username: string;
+  displayName: string;
+  followedAt: string;
 };
 
 export type SpamFilterEntry = {
@@ -279,12 +354,66 @@ export type SpamFilterEntry = {
     exemptModsBroadcaster: boolean;
     exemptUsernames: string[];
     allowDiscordInvites: boolean;
+    clipsFilteringEnabled: boolean;
+    blockClipsFromOtherChannels: boolean;
+    blockUsersLinkingOwnClips: boolean;
+    allowedClipChannels: string[];
+    blockedClipChannels: string[];
     enabledWhenOffline: boolean;
     enabledWhenOnline: boolean;
     warningEnabled: boolean;
     warningDurationSeconds: number;
     allowedLinks: string[];
     blockedLinks: string[];
+    repeatOffendersEnabled: boolean;
+    repeatMultiplier: number;
+    repeatCooldownSeconds: number;
+  };
+  capsSettings?: {
+    minimumCharacters: number;
+    maxCapsPercent: number;
+    enabledWhenOffline: boolean;
+    enabledWhenOnline: boolean;
+    enabledForResubMessages: boolean;
+    warningEnabled: boolean;
+    warningDurationSeconds: number;
+    announcementEnabled: boolean;
+    announcementCooldownSeconds: number;
+    ignoredEmoteSources: {
+      platform: boolean;
+      betterTTV: boolean;
+      frankerFaceZ: boolean;
+      sevenTV: boolean;
+    };
+    baseTimeoutSeconds: number;
+    maxTimeoutSeconds: number;
+    impactedRoles: string[];
+    excludedRoles: string[];
+    exemptVips: boolean;
+    exemptSubscribers: boolean;
+    exemptModsBroadcaster: boolean;
+    exemptUsernames: string[];
+    repeatOffendersEnabled: boolean;
+    repeatMultiplier: number;
+    repeatCooldownSeconds: number;
+  };
+  messageFloodSettings?: {
+    matchAnyMessageTooSimilar: boolean;
+    minimumCharacters: number;
+    minimumMessagesCount: number;
+    messageMemorySeconds: number;
+    maximumSimilarityPercent: number;
+    enabledWhenOffline: boolean;
+    enabledWhenOnline: boolean;
+    enabledForResubMessages: boolean;
+    warningEnabled: boolean;
+    warningDurationSeconds: number;
+    announcementEnabled: boolean;
+    announcementCooldownSeconds: number;
+    baseTimeoutSeconds: number;
+    maxTimeoutSeconds: number;
+    impactedRoles: string[];
+    excludedRoles: string[];
     repeatOffendersEnabled: boolean;
     repeatMultiplier: number;
     repeatCooldownSeconds: number;
@@ -379,6 +508,7 @@ export type PublicHomeSettings = {
   showNowPlayingAlbumArt: boolean;
   showNowPlayingProgress: boolean;
   showNowPlayingLinks: boolean;
+  commandPrefix: string;
   promoLinks: Array<{
     label: string;
     href: string;
