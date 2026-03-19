@@ -1,0 +1,22 @@
+configs/*
+!configs/example.ini
+
+# Frontend build/deps
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+
+# Env and local runtime files
+.env
+.env.*
+*.log
+coverage.out
+cover.out
+*.prof
+*.test
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
