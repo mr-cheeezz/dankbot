@@ -72,8 +72,6 @@ type runtime struct {
 	startedAt          time.Time
 }
 
-var botVersion = "dev"
-
 const helixSendTimeout = 1500 * time.Millisecond
 
 func newRuntime(cfg *config.Config) *runtime {

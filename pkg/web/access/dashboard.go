@@ -26,7 +26,7 @@ type DashboardAccess struct {
 
 var ErrDashboardAccessDenied = errors.New("dashboard access denied")
 
-func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID string) (DashboardAccess, error) {
+func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID string, userLogin string) (DashboardAccess, error) {
 	var access DashboardAccess
 
 	if appState == nil || appState.Config == nil {
@@ -34,6 +34,7 @@ func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID 
 	}
 
 	userID = strings.TrimSpace(userID)
+	userLogin = strings.ToLower(strings.TrimSpace(userLogin))
 	streamerID, err := ResolveStreamerID(ctx, appState)
 	if err != nil {
 		return access, err
@@ -46,7 +47,7 @@ func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID 
 	}
 
 	access.IsBroadcaster = streamerID != "" && userID == streamerID
-	access.IsAdmin = adminID != "" && userID == adminID
+	access.IsAdmin = adminID != "" && (userID == adminID || strings.EqualFold(userLogin, adminID))
 	access.IsBotAccount = botID != "" && userID == botID
 
 	if !access.IsBotAccount && botID == "" && appState.TwitchAccounts != nil {
@@ -134,7 +135,7 @@ func LoadDashboardSession(
 		return nil, access, err
 	}
 
-	access, err = EvaluateDashboardAccess(ctx, appState, userSession.UserID)
+	access, err = EvaluateDashboardAccess(ctx, appState, userSession.UserID, userSession.Login)
 	if err != nil {
 		return nil, access, err
 	}

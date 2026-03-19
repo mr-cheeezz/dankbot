@@ -120,7 +120,7 @@ func (h handler) refreshAccess(r *http.Request, sessionID string, userSession *s
 		return userSession
 	}
 
-	access, err := webaccess.EvaluateDashboardAccess(r.Context(), h.appState, userSession.UserID)
+	access, err := webaccess.EvaluateDashboardAccess(r.Context(), h.appState, userSession.UserID, userSession.Login)
 	if err != nil {
 		return userSession
 	}

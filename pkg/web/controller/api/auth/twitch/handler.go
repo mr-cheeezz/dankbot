@@ -124,7 +124,7 @@ func (h handler) requireBotIntegrationAccess(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusForbidden, "forbidden")
 		return false
 	}
-	access, err := webaccess.EvaluateDashboardAccess(r.Context(), h.appState, userSession.UserID)
+	access, err := webaccess.EvaluateDashboardAccess(r.Context(), h.appState, userSession.UserID, userSession.Login)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return false

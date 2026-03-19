@@ -907,7 +907,7 @@ func (h handler) persistSiteLoginSession(ctx context.Context, result *twitchoaut
 		displayName = strings.TrimSpace(result.Validation.UserID)
 	}
 
-	access, err := webaccess.EvaluateDashboardAccess(ctx, h.appState, result.Validation.UserID)
+	access, err := webaccess.EvaluateDashboardAccess(ctx, h.appState, result.Validation.UserID, result.Validation.Login)
 	if err != nil {
 		// Site login should still succeed even if dashboard access can't be evaluated yet.
 		// Access can be recomputed later by the session status endpoint once dependencies recover.
