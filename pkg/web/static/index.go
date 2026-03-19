@@ -36,7 +36,18 @@ func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if statusCode != http.StatusOK {
+		payload, err := os.ReadFile(indexPath)
+		if err != nil {
+			http.Error(w, "frontend build not found; run `npm run build` in web/", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(statusCode)
+		if r.Method == http.MethodHead {
+			return
+		}
+		_, _ = w.Write(payload)
+		return
 	}
 
 	http.ServeFile(w, r, indexPath)
