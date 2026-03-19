@@ -1,3 +1,7 @@
+configs/*
+configs/test.ini
+!configs/example.ini
+
 # Frontend build/deps
 web/node_modules/
 web/dist/
