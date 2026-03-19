@@ -32,8 +32,8 @@ func validateWebConfig(cfg *config.Config) error {
 	if strings.TrimSpace(cfg.Web.PublicURL) == "" {
 		problems = append(problems, "web.public_url is required")
 	}
-	if strings.TrimSpace(cfg.Web.BindAddr) == "" {
-		problems = append(problems, "web.bind_addr is required")
+	if strings.TrimSpace(cfg.Web.BindAddr) == "" && strings.TrimSpace(cfg.Web.BindUnixSocket) == "" {
+		problems = append(problems, "either web.bind_addr or web.bind_unix_socket is required")
 	}
 	if strings.TrimSpace(cfg.Twitch.ClientID) == "" {
 		problems = append(problems, "twitch.client_id is required")

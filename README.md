@@ -83,22 +83,6 @@ npm --prefix web run build
 - Public web URL and binds:
   - `web.public_url`
   - `web.bind_addr`
+  - `web.bind_unix_socket` (optional, takes priority over `web.bind_addr`)
 
 Use `configs/example.ini` as the source of truth for all supported keys.
-
-## Release / Tagging
-
-Create an annotated release tag:
-
-```bash
-git tag -a v0.9.0-beta.1 -m "DankBot v0.9.0-beta.1"
-git push origin v0.9.0-beta.1
-```
-
-If this is your first push of branch changes:
-
-```bash
-git push origin <your-branch>
-git push origin v0.9.0-beta.1
-```
-

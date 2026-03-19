@@ -61,9 +61,15 @@ func Load(path string) (*Config, error) {
 	}
 
 	webSection := file.Section("web")
+	bindAddr := strings.TrimSpace(webSection.Key("bind_addr").String())
+	bindUnixSocket := strings.TrimSpace(webSection.Key("bind_unix_socket").String())
+	if bindUnixSocket != "" {
+		bindAddr = "unix:" + bindUnixSocket
+	}
 	cfg.Web = WebConfig{
 		PublicURL:          webSection.Key("public_url").String(),
-		BindAddr:           webSection.Key("bind_addr").String(),
+		BindAddr:           bindAddr,
+		BindUnixSocket:     bindUnixSocket,
 		CORSAllowedOrigins: splitCommaList(webSection.Key("cors_allowed_origins").String()),
 	}
 

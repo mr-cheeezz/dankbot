@@ -29,6 +29,7 @@ type MainConfig struct {
 type WebConfig struct {
 	PublicURL          string
 	BindAddr           string
+	BindUnixSocket     string
 	CORSAllowedOrigins []string
 }
 
