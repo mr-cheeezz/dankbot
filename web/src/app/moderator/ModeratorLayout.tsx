@@ -80,6 +80,28 @@ function initialsForName(name: string): string {
     .join("");
 }
 
+function formatBuildLine(
+  version: string,
+  branch: string,
+  revision: string,
+  commitTime: string,
+) {
+  const v = version.trim() || "dev";
+  const parts: string[] = [v];
+  if (branch.trim() !== "" || revision.trim() !== "") {
+    parts.push(
+      `(${[branch.trim(), revision.trim().slice(0, 8)].filter((item) => item !== "").join(", ")})`,
+    );
+  }
+  if (commitTime.trim() !== "") {
+    const parsed = new Date(commitTime);
+    if (!Number.isNaN(parsed.getTime())) {
+      parts.push(`Last commit: ${parsed.toLocaleString()}`);
+    }
+  }
+  return parts.join(" - ");
+}
+
 function iconForView(view: ViewKey): ReactNode {
   switch (view) {
     case "dashboard":
@@ -432,6 +454,20 @@ export function ModeratorLayout() {
 
         <Box sx={{ mt: "auto", p: 2 }}>
           <Divider sx={{ mb: 1.5 }} />
+          <Typography
+            sx={{
+              fontSize: "0.72rem",
+              color: "text.secondary",
+              mb: 1.1,
+              lineHeight: 1.4,
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+            }}
+          >
+            {`Bot ${formatBuildLine(summary.botVersion, summary.botBranch, summary.botRevision, summary.botCommitTime)}`}
+            <br />
+            {`Web ${formatBuildLine(summary.webVersion, summary.webBranch, summary.webRevision, summary.webCommitTime)}`}
+          </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <NavLink to="/" style={{ textDecoration: "none" }}>
               <Chip

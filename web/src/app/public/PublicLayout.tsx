@@ -59,6 +59,28 @@ function PublicNavButton({
   );
 }
 
+function formatBuildLine(
+  version: string,
+  branch: string,
+  revision: string,
+  commitTime: string,
+) {
+  const v = version.trim() || "dev";
+  const parts: string[] = [v];
+  if (branch.trim() !== "" || revision.trim() !== "") {
+    parts.push(
+      `(${[branch.trim(), revision.trim().slice(0, 8)].filter((item) => item !== "").join(", ")})`,
+    );
+  }
+  if (commitTime.trim() !== "") {
+    const parsed = new Date(commitTime);
+    if (!Number.isNaN(parsed.getTime())) {
+      parts.push(`Last commit: ${parsed.toLocaleString()}`);
+    }
+  }
+  return parts.join(" - ");
+}
+
 export function PublicLayout() {
   const { session, loading } = useAuth();
   const [summary, setSummary] = useState<PublicSummary>(defaultPublicSummary);
@@ -172,8 +194,6 @@ export function PublicLayout() {
 
           <Stack direction="row" spacing={1} alignItems="center">
             <PublicNavButton to="/" label="Home" />
-            <PublicNavButton to="/channels" label="Channels" />
-            <PublicNavButton to="/request" label="Request" />
             <PublicNavButton to="/commands" label="Commands" />
             <PublicNavButton to="/quotes" label="Quotes" />
 
@@ -272,6 +292,10 @@ export function PublicLayout() {
             >
               Mr_Cheeezz
             </Link>
+            <br />
+            {`Bot ${formatBuildLine(summary.botVersion, summary.botBranch, summary.botRevision, summary.botCommitTime)}`}
+            <br />
+            {`Web ${formatBuildLine(summary.webVersion, summary.webBranch, summary.webRevision, summary.webCommitTime)}`}
           </Typography>
 
           <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>

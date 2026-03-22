@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mr-cheeezz/dankbot/pkg/botstatus"
+	"github.com/mr-cheeezz/dankbot/pkg/buildmeta"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 	"github.com/mr-cheeezz/dankbot/pkg/twitch/helix"
 	webaccess "github.com/mr-cheeezz/dankbot/pkg/web/access"
@@ -42,6 +43,14 @@ type summaryResponse struct {
 	ChannelAvatarURL  string               `json:"channel_avatar_url"`
 	BotRunning        bool                 `json:"bot_running"`
 	KillswitchEnabled bool                 `json:"killswitch_enabled"`
+	WebVersion        string               `json:"web_version"`
+	WebBranch         string               `json:"web_branch"`
+	WebRevision       string               `json:"web_revision"`
+	WebCommitTime     string               `json:"web_commit_time"`
+	BotVersion        string               `json:"bot_version"`
+	BotBranch         string               `json:"bot_branch"`
+	BotRevision       string               `json:"bot_revision"`
+	BotCommitTime     string               `json:"bot_commit_time"`
 	Integrations      []integrationSummary `json:"integrations"`
 }
 
@@ -187,6 +196,11 @@ func (h handler) buildSummary(ctx context.Context) summaryResponse {
 			},
 		},
 	}
+	webInfo := buildmeta.Detect("")
+	summary.WebVersion = strings.TrimSpace(webInfo.Version)
+	summary.WebBranch = strings.TrimSpace(webInfo.Branch)
+	summary.WebRevision = strings.TrimSpace(webInfo.Revision)
+	summary.WebCommitTime = strings.TrimSpace(webInfo.CommitTime)
 
 	if h.appState == nil || h.appState.Config == nil {
 		return summary
@@ -208,6 +222,10 @@ func (h handler) buildSummary(ctx context.Context) summaryResponse {
 		if payload, err := h.appState.Redis.Get(ctx, botstatus.RedisKey); err == nil {
 			if heartbeat, err := botstatus.Unmarshal(payload); err == nil && heartbeat != nil {
 				summary.BotRunning = true
+				summary.BotVersion = strings.TrimSpace(heartbeat.Version)
+				summary.BotBranch = strings.TrimSpace(heartbeat.Branch)
+				summary.BotRevision = strings.TrimSpace(heartbeat.Revision)
+				summary.BotCommitTime = strings.TrimSpace(heartbeat.CommitTime)
 			}
 		}
 	}

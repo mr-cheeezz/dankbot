@@ -21,6 +21,14 @@ export type PublicSummary = {
   botRunning: boolean;
   botStartedAt: string;
   botLastSeenAt: string;
+  webVersion: string;
+  webBranch: string;
+  webRevision: string;
+  webCommitTime: string;
+  botVersion: string;
+  botBranch: string;
+  botRevision: string;
+  botCommitTime: string;
   promoLinks: Array<{
     label: string;
     href: string;
@@ -143,6 +151,14 @@ type PublicSummaryResponse = {
   bot_running: boolean;
   bot_started_at: string;
   bot_last_seen_at: string;
+  web_version: string;
+  web_branch: string;
+  web_revision: string;
+  web_commit_time: string;
+  bot_version: string;
+  bot_branch: string;
+  bot_revision: string;
+  bot_commit_time: string;
   promo_links: Array<{
     label: string;
     href: string;
@@ -282,6 +298,14 @@ export const defaultPublicSummary: PublicSummary = {
   botRunning: false,
   botStartedAt: "",
   botLastSeenAt: "",
+  webVersion: "",
+  webBranch: "",
+  webRevision: "",
+  webCommitTime: "",
+  botVersion: "",
+  botBranch: "",
+  botRevision: "",
+  botCommitTime: "",
   promoLinks: [],
   nowPlaying: {
     enabled: true,
@@ -384,6 +408,14 @@ export async function fetchPublicSummary(signal?: AbortSignal): Promise<PublicSu
     botRunning: payload.bot_running,
     botStartedAt: payload.bot_started_at,
     botLastSeenAt: payload.bot_last_seen_at,
+    webVersion: payload.web_version ?? "",
+    webBranch: payload.web_branch ?? "",
+    webRevision: payload.web_revision ?? "",
+    webCommitTime: payload.web_commit_time ?? "",
+    botVersion: payload.bot_version ?? "",
+    botBranch: payload.bot_branch ?? "",
+    botRevision: payload.bot_revision ?? "",
+    botCommitTime: payload.bot_commit_time ?? "",
     promoLinks: Array.isArray(payload.promo_links) ? payload.promo_links : [],
     nowPlaying: {
       enabled: payload.now_playing_enabled,

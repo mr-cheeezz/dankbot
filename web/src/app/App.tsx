@@ -33,9 +33,7 @@ import { SpamFiltersPage } from "./moderator/pages/SpamFiltersPage";
 import { TimersPage } from "./moderator/pages/TimersPage";
 import { PublicCommandsPage } from "./public/PublicCommandsPage";
 import { PublicHomePage } from "./public/PublicHomePage";
-import { PublicHostedChannelsPage } from "./public/PublicHostedChannelsPage";
 import { PublicLayout } from "./public/PublicLayout";
-import { PublicBotRequestPage } from "./public/PublicBotRequestPage";
 import { PublicProfilePage } from "./public/PublicProfilePage";
 import { PublicQuotesPage } from "./public/PublicQuotesPage";
 
@@ -62,8 +60,6 @@ export function App() {
           <Route path="/dashboard/*" element={<LegacyDashboardRedirect />} />
           <Route element={<PublicLayout />}>
             <Route path="/" element={<PublicHomePage />} />
-            <Route path="/channels" element={<PublicHostedChannelsPage />} />
-            <Route path="/request" element={<PublicBotRequestPage />} />
             <Route path="/commands" element={<PublicCommandsPage />} />
             <Route path="/quotes" element={<PublicQuotesPage />} />
             <Route path="/profile" element={<PublicProfilePage />} />

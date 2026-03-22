@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mr-cheeezz/dankbot/pkg/botstatus"
+	"github.com/mr-cheeezz/dankbot/pkg/buildmeta"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 	"github.com/mr-cheeezz/dankbot/pkg/redis"
 	robloxapi "github.com/mr-cheeezz/dankbot/pkg/roblox/api"
@@ -51,6 +52,14 @@ type summaryResponse struct {
 	BotRunning             bool                `json:"bot_running"`
 	BotStartedAt           string              `json:"bot_started_at"`
 	BotLastSeenAt          string              `json:"bot_last_seen_at"`
+	WebVersion             string              `json:"web_version"`
+	WebBranch              string              `json:"web_branch"`
+	WebRevision            string              `json:"web_revision"`
+	WebCommitTime          string              `json:"web_commit_time"`
+	BotVersion             string              `json:"bot_version"`
+	BotBranch              string              `json:"bot_branch"`
+	BotRevision            string              `json:"bot_revision"`
+	BotCommitTime          string              `json:"bot_commit_time"`
 	PromoLinks             []promoLinkResponse `json:"promo_links"`
 	NowPlayingEnabled      bool                `json:"now_playing_enabled"`
 	NowPlayingShowAlbumArt bool                `json:"now_playing_show_album_art"`
@@ -101,6 +110,11 @@ func (h handler) buildSummary(ctx context.Context) summaryResponse {
 		CurrentModeKey:   "join",
 		CurrentModeTitle: "join",
 	}
+	webInfo := buildmeta.Detect("")
+	summary.WebVersion = strings.TrimSpace(webInfo.Version)
+	summary.WebBranch = strings.TrimSpace(webInfo.Branch)
+	summary.WebRevision = strings.TrimSpace(webInfo.Revision)
+	summary.WebCommitTime = strings.TrimSpace(webInfo.CommitTime)
 
 	if h.appState == nil || h.appState.Config == nil {
 		return summary
@@ -144,6 +158,10 @@ func (h handler) buildSummary(ctx context.Context) summaryResponse {
 				summary.BotRunning = true
 				summary.BotStartedAt = heartbeat.StartedAt.UTC().Format(time.RFC3339)
 				summary.BotLastSeenAt = heartbeat.LastSeenAt.UTC().Format(time.RFC3339)
+				summary.BotVersion = strings.TrimSpace(heartbeat.Version)
+				summary.BotBranch = strings.TrimSpace(heartbeat.Branch)
+				summary.BotRevision = strings.TrimSpace(heartbeat.Revision)
+				summary.BotCommitTime = strings.TrimSpace(heartbeat.CommitTime)
 				if summary.ChannelLogin == "" {
 					summary.ChannelLogin = strings.TrimSpace(heartbeat.StreamerLogin)
 				}

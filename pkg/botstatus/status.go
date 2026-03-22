@@ -12,6 +12,10 @@ type Heartbeat struct {
 	LastSeenAt    time.Time `json:"last_seen_at"`
 	BotLogin      string    `json:"bot_login"`
 	StreamerLogin string    `json:"streamer_login"`
+	Version       string    `json:"version,omitempty"`
+	Branch        string    `json:"branch,omitempty"`
+	Revision      string    `json:"revision,omitempty"`
+	CommitTime    string    `json:"commit_time,omitempty"`
 }
 
 func (h Heartbeat) Marshal() (string, error) {

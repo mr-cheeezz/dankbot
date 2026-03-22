@@ -905,6 +905,14 @@ export const defaultDashboardSummary: DashboardSummary = {
   channelAvatarURL: "",
   botRunning: false,
   killswitchEnabled: false,
+  webVersion: "",
+  webBranch: "",
+  webRevision: "",
+  webCommitTime: "",
+  botVersion: "",
+  botBranch: "",
+  botRevision: "",
+  botCommitTime: "",
   integrations: integrationEntries,
 };
 

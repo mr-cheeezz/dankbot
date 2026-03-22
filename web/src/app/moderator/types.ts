@@ -468,6 +468,14 @@ export type DashboardSummary = {
   channelAvatarURL: string;
   botRunning: boolean;
   killswitchEnabled: boolean;
+  webVersion: string;
+  webBranch: string;
+  webRevision: string;
+  webCommitTime: string;
+  botVersion: string;
+  botBranch: string;
+  botRevision: string;
+  botCommitTime: string;
   integrations: IntegrationEntry[];
 };
 

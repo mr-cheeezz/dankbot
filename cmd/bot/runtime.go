@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mr-cheeezz/dankbot/pkg/botstatus"
+	"github.com/mr-cheeezz/dankbot/pkg/buildmeta"
 	"github.com/mr-cheeezz/dankbot/pkg/commands"
 	"github.com/mr-cheeezz/dankbot/pkg/common/config"
 	discordbot "github.com/mr-cheeezz/dankbot/pkg/discord/bot"
@@ -70,6 +71,7 @@ type runtime struct {
 	helixSendDownUntil time.Time
 	commandPrefix      string
 	startedAt          time.Time
+	buildInfo          buildmeta.Info
 }
 
 const helixSendTimeout = 1500 * time.Millisecond
@@ -202,6 +204,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		helixOAuth:         twitchOAuthService,
 		commandPrefix:      "!",
 		startedAt:          time.Now().UTC(),
+		buildInfo:          buildmeta.Detect(botVersion),
 	}
 }
 
@@ -316,6 +319,10 @@ func (r *runtime) writeBotHeartbeat(ctx context.Context) error {
 		LastSeenAt:    time.Now().UTC(),
 		BotLogin:      twitchAccountLogin(r.botAccount),
 		StreamerLogin: twitchAccountLogin(r.streamer),
+		Version:       strings.TrimSpace(r.buildInfo.Version),
+		Branch:        strings.TrimSpace(r.buildInfo.Branch),
+		Revision:      strings.TrimSpace(r.buildInfo.Revision),
+		CommitTime:    strings.TrimSpace(r.buildInfo.CommitTime),
 	}.Marshal()
 	if err != nil {
 		return err

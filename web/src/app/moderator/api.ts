@@ -33,6 +33,14 @@ type DashboardSummaryResponse = {
   channel_avatar_url: string;
   bot_running: boolean;
   killswitch_enabled: boolean;
+  web_version: string;
+  web_branch: string;
+  web_revision: string;
+  web_commit_time: string;
+  bot_version: string;
+  bot_branch: string;
+  bot_revision: string;
+  bot_commit_time: string;
   integrations: IntegrationEntry[];
 };
 
@@ -330,6 +338,14 @@ export async function fetchDashboardSummary(
     channelAvatarURL: payload.channel_avatar_url,
     botRunning: payload.bot_running,
     killswitchEnabled: payload.killswitch_enabled,
+    webVersion: payload.web_version ?? "",
+    webBranch: payload.web_branch ?? "",
+    webRevision: payload.web_revision ?? "",
+    webCommitTime: payload.web_commit_time ?? "",
+    botVersion: payload.bot_version ?? "",
+    botBranch: payload.bot_branch ?? "",
+    botRevision: payload.bot_revision ?? "",
+    botCommitTime: payload.bot_commit_time ?? "",
     integrations: (payload.integrations ?? []).map((entry) => ({
       ...entry,
       actions: Array.isArray(entry.actions)
