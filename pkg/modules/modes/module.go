@@ -245,7 +245,7 @@ func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResul
 	}
 	if state != nil &&
 		strings.EqualFold(strings.TrimSpace(state.CurrentModeKey), "link") &&
-		strings.EqualFold(strings.TrimSpace(state.CurrentModeParam), strings.TrimSpace(link)) {
+		sameRobloxPrivateServerLink(state.CurrentModeParam, link) {
 		// Ignore duplicate link reposts to prevent noisy mode re-announcements.
 		return modules.MessageResult{}, nil
 	}
@@ -303,6 +303,11 @@ func (m *Module) activateMode(ctx modules.CommandContext, modeKey, modeParam str
 		return "", err
 	}
 	if state != nil && state.CurrentModeKey == mode.ModeKey && strings.EqualFold(strings.TrimSpace(state.CurrentModeParam), strings.TrimSpace(modeParam)) {
+		if strings.EqualFold(mode.ModeKey, "link") && sameRobloxPrivateServerLink(state.CurrentModeParam, modeParam) {
+			// Keep duplicate link mode activations silent so reposting the same private
+			// server link does not generate extra chat noise.
+			return "", nil
+		}
 		warning := ""
 		if strings.EqualFold(mode.ModeKey, "link") && looksLikeRobloxPrivateServerURL(modeParam) {
 			warning, err = m.syncConfiguredLinkCommand(context.Background(), modeParam)
@@ -917,6 +922,42 @@ func looksLikeRobloxPrivateServerURL(raw string) bool {
 	default:
 		return false
 	}
+}
+
+func sameRobloxPrivateServerLink(left, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" {
+		return false
+	}
+
+	leftCode := robloxPrivateServerCode(left)
+	rightCode := robloxPrivateServerCode(right)
+	if leftCode != "" && rightCode != "" {
+		return strings.EqualFold(leftCode, rightCode)
+	}
+
+	// Fallback to a strict normalized URL compare if code extraction fails.
+	return strings.EqualFold(left, right)
+}
+
+func robloxPrivateServerCode(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+
+	query := parsed.Query()
+	if code := strings.TrimSpace(query.Get("privateServerLinkCode")); code != "" {
+		return code
+	}
+	if code := strings.TrimSpace(query.Get("code")); code != "" {
+		if kind := strings.ToLower(strings.TrimSpace(query.Get("type"))); kind == "server" || kind == "privateserver" {
+			return code
+		}
+	}
+
+	return ""
 }
 
 func (m *Module) syncConfiguredLinkCommand(ctx context.Context, link string) (string, error) {
