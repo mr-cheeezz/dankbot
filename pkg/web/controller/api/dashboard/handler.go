@@ -49,6 +49,7 @@ func Register(mux *http.ServeMux, appState *state.State) {
 	mux.Handle("/api/dashboard/summary", NewHandler(appState))
 	mux.Handle("/api/dashboard/bot-controls", http.HandlerFunc(handler{appState: appState}.botControls))
 	mux.Handle("/api/dashboard/modes", http.HandlerFunc(handler{appState: appState}.modes))
+	mux.Handle("/api/dashboard/modes/settings", http.HandlerFunc(handler{appState: appState}.modesModuleSettings))
 	mux.Handle("/api/dashboard/killswitch", http.HandlerFunc(handler{appState: appState}.killswitch))
 	mux.Handle("/api/dashboard/audit-logs", http.HandlerFunc(handler{appState: appState}.auditLogs))
 	mux.Handle("/api/dashboard/spotify", http.HandlerFunc(handler{appState: appState}.spotifyStatus))

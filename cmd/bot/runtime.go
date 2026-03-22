@@ -104,6 +104,7 @@ func newRuntime(cfg *config.Config) *runtime {
 	modeModule.SetStreamLiveChecker(streamChecker.IsLive)
 	modeModule.SetTwitchTitleCoordinator(cfg.Twitch.ClientID, twitchOAuthService, twitchAccountStore)
 	modeModule.SetChannelSettingsStore(publicHomeSettingsStore)
+	modeModule.SetModesModuleSettingsStore(postgres.NewModesModuleSettingsStore(postgresClient))
 	alertsModule := alertsmodule.New(redisClient, stateStore)
 	discordModule := discordbotmodule.New(
 		postgres.NewDiscordBotSettingsStore(postgresClient),
@@ -112,6 +113,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		cfg.Main.AdminID,
 	)
 	discordModule.SetStreamLiveChecker(streamChecker.IsLive)
+	discordModule.SetStreamGameChecker(streamChecker.LiveAndGame)
 	spotifyModule := spotifymodule.New(
 		postgres.NewSpotifyAccountStore(postgresClient),
 		twitchAccountStore,
@@ -507,6 +509,7 @@ func (r *runtime) initializeDiscord(ctx context.Context) error {
 	if r.discordBotModule != nil {
 		r.discordBotModule.SetDiscordSender(client.SendMessage)
 		r.discordBotModule.SetDiscordEmbedSender(client.SendEmbed)
+		r.discordBotModule.SetDiscordRichEmbedSender(client.SendEmbedWithComponents)
 	}
 
 	return nil

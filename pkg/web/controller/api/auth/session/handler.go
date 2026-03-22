@@ -1,11 +1,15 @@
 package sessionauth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
+	twitchhelix "github.com/mr-cheeezz/dankbot/pkg/twitch/helix"
+	twitchoauth "github.com/mr-cheeezz/dankbot/pkg/twitch/oauth"
 	webaccess "github.com/mr-cheeezz/dankbot/pkg/web/access"
 	"github.com/mr-cheeezz/dankbot/pkg/web/session"
 	"github.com/mr-cheeezz/dankbot/pkg/web/state"
@@ -134,6 +138,9 @@ func (h handler) refreshAccess(r *http.Request, sessionID string, userSession *s
 	next.IsEditor = access.IsEditor
 	next.IsAdmin = access.IsAdmin
 	next.CanAccessDashboard = access.CanAccessDashboard
+	if strings.TrimSpace(next.AvatarURL) == "" {
+		next.AvatarURL = h.lookupTwitchAvatarURL(r.Context(), next.UserID)
+	}
 
 	if h.appState.Sessions != nil && sessionID != "" {
 		_ = h.appState.Sessions.Save(r.Context(), sessionID, next)
@@ -152,6 +159,43 @@ func isSecureCookie(appState *state.State) bool {
 	}
 
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(appState.Config.Web.PublicURL)), "https://")
+}
+
+func (h handler) lookupTwitchAvatarURL(ctx context.Context, userID string) string {
+	if h.appState == nil || h.appState.Config == nil {
+		return ""
+	}
+
+	clientID := strings.TrimSpace(h.appState.Config.Twitch.ClientID)
+	clientSecret := strings.TrimSpace(h.appState.Config.Twitch.ClientSecret)
+	if clientID == "" || clientSecret == "" {
+		return ""
+	}
+
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return ""
+	}
+
+	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	oauth := twitchoauth.NewService(
+		twitchoauth.NewClient(nil, clientID, clientSecret, ""),
+		nil,
+	)
+	token, err := oauth.AppToken(lookupCtx)
+	if err != nil || token == nil || strings.TrimSpace(token.AccessToken) == "" {
+		return ""
+	}
+
+	client := twitchhelix.NewClient(clientID, token.AccessToken)
+	users, err := client.GetUsersByIDs(lookupCtx, []string{userID})
+	if err != nil || len(users) == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(users[0].ProfileImageURL)
 }
 
 func writeMethodNotAllowed(w http.ResponseWriter, allowedMethod string) {

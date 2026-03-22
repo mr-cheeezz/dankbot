@@ -42,13 +42,14 @@ type discordBotSettingsResponse struct {
 }
 
 type discordBotGamePingResponse struct {
-	Enabled          bool   `json:"enabled"`
-	ChannelID        string `json:"channel_id"`
-	RoleID           string `json:"role_id"`
-	RoleName         string `json:"role_name"`
-	MessageTemplate  string `json:"message_template"`
-	IncludeWatchLink bool   `json:"include_watch_link"`
-	IncludeJoinLink  bool   `json:"include_join_link"`
+	Enabled          bool     `json:"enabled"`
+	ChannelID        string   `json:"channel_id"`
+	RoleID           string   `json:"role_id"`
+	RoleName         string   `json:"role_name"`
+	MessageTemplate  string   `json:"message_template"`
+	IncludeWatchLink bool     `json:"include_watch_link"`
+	IncludeJoinLink  bool     `json:"include_join_link"`
+	AllowedUsers     []string `json:"allowed_users"`
 }
 
 func (h handler) discordBot(w http.ResponseWriter, r *http.Request) {
@@ -143,6 +144,7 @@ func (h handler) updateDiscordBot(w http.ResponseWriter, r *http.Request) {
 		MessageTemplate:  request.GamePing.MessageTemplate,
 		IncludeWatchLink: request.GamePing.IncludeWatchLink,
 		IncludeJoinLink:  request.GamePing.IncludeJoinLink,
+		AllowedUsers:     request.GamePing.AllowedUsers,
 	}
 	if nextGamePing.ChannelID == "" {
 		nextGamePing.ChannelID = defaultChannelID
@@ -308,6 +310,7 @@ func discordBotSettingsToResponse(
 			MessageTemplate:  settings.GamePing.MessageTemplate,
 			IncludeWatchLink: settings.GamePing.IncludeWatchLink,
 			IncludeJoinLink:  settings.GamePing.IncludeJoinLink,
+			AllowedUsers:     settings.GamePing.AllowedUsers,
 		}
 	}
 

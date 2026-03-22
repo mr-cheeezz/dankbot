@@ -44,6 +44,7 @@ type State struct {
 	QuoteModule            *postgres.QuoteModuleSettingsStore
 	TabsModule             *postgres.TabsModuleSettingsStore
 	UserProfileModule      *postgres.UserProfileModuleSettingsStore
+	ModesModule            *postgres.ModesModuleSettingsStore
 	ModuleCatalog          *postgres.ModuleCatalogStore
 	PublicHomeSettings     *postgres.PublicHomeSettingsStore
 	SpamFilters            *postgres.SpamFilterStore
@@ -126,6 +127,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 	quoteModuleStore := postgres.NewQuoteModuleSettingsStore(postgresClient)
 	tabsModuleStore := postgres.NewTabsModuleSettingsStore(postgresClient)
 	userProfileModuleStore := postgres.NewUserProfileModuleSettingsStore(postgresClient)
+	modesModuleStore := postgres.NewModesModuleSettingsStore(postgresClient)
 	moduleCatalogStore := postgres.NewModuleCatalogStore(postgresClient)
 	publicHomeSettingsStore := postgres.NewPublicHomeSettingsStore(postgresClient)
 	spamFilterStore := postgres.NewSpamFilterStore(postgresClient)
@@ -161,6 +163,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 		QuoteModule:            quoteModuleStore,
 		TabsModule:             tabsModuleStore,
 		UserProfileModule:      userProfileModuleStore,
+		ModesModule:            modesModuleStore,
 		ModuleCatalog:          moduleCatalogStore,
 		PublicHomeSettings:     publicHomeSettingsStore,
 		SpamFilters:            spamFilterStore,

@@ -21,6 +21,9 @@ import {
   IconButton,
   Paper,
   Stack,
+  Switch,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -35,12 +38,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
-import { searchDashboardTwitchCategories } from "../api";
+import {
+  fetchModesModuleSettings,
+  saveModesModuleSettings,
+  searchDashboardTwitchCategories,
+} from "../api";
 import { useModerator } from "../ModeratorContext";
 import type { ModeEntry, TwitchCategorySearchEntry } from "../types";
 
 type ModeEditorDraft = Omit<ModeEntry, "id">;
 type ModeEditorSection = "general" | "keyword" | "timer";
+type ModesPageTab = "modes" | "settings";
 
 const defaultDraft: ModeEditorDraft = {
   key: "",
@@ -81,6 +89,11 @@ export function ModesPage() {
   const [categorySearchResults, setCategorySearchResults] = useState<
     TwitchCategorySearchEntry[]
   >([]);
+  const [pageTab, setPageTab] = useState<ModesPageTab>("modes");
+  const [legacyCommandsEnabled, setLegacyCommandsEnabled] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
 
   useEffect(() => {
     const modeKey = searchParams.get("mode");
@@ -102,6 +115,37 @@ export function ModesPage() {
     setCategorySearchLoading(false);
     setEditorOpen(true);
   }, [editorOpen, filteredModes, searchParams]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSettingsLoading(true);
+    setSettingsError("");
+
+    fetchModesModuleSettings(controller.signal)
+      .then((settings) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setLegacyCommandsEnabled(settings.legacyCommandsEnabled);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setSettingsError(
+          error instanceof Error
+            ? error.message
+            : "Could not load mode settings right now.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setSettingsLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
 
   const openCreateDialog = () => {
     setEditingModeID(null);
@@ -274,113 +318,202 @@ export function ModesPage() {
         </Button>
       </Box>
 
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ width: "14%" }}>Mode</TableCell>
-              <TableCell sx={{ width: "12%" }}>Keyword</TableCell>
-              <TableCell>Viewer Response</TableCell>
-              <TableCell sx={{ width: "16%" }}>Timer</TableCell>
-              <TableCell align="right" sx={{ width: "18%" }}>
-                Actions
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredModes.map((entry) => (
-              <TableRow
-                key={entry.id}
-                hover
-                sx={{
-                  "&:hover": {
-                    backgroundColor: "rgba(255,255,255,0.03)",
-                  },
-                }}
-              >
-                <TableCell>
-                  <Typography sx={{ fontSize: "0.88rem", fontWeight: 700 }}>{entry.key}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {entry.builtin ? "built-in" : "custom"}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography sx={{ fontSize: "0.86rem", fontWeight: 700 }}>
-                    {entry.keywordName}
-                  </Typography>
-                </TableCell>
-                <TableCell title={entry.keywordResponse} sx={{ maxWidth: 0 }}>
-                  <Typography
-                    sx={{
-                      fontSize: "0.84rem",
-                      color: "text.primary",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {entry.keywordDescription}
-                  </Typography>
-                  <Typography
-                    sx={{
-                      mt: 0.35,
-                      fontSize: "0.8rem",
-                      color: "text.secondary",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {entry.keywordResponse}
-                  </Typography>
-                </TableCell>
-                <TableCell sx={{ color: "text.secondary", fontSize: "0.84rem" }}>
-                  {entry.timerEnabled
-                    ? `${entry.timerIntervalSeconds}s · ${entry.timerMessage}`
-                    : "timer disabled"}
-                </TableCell>
-                <TableCell align="right">
-                  <Box
-                    sx={{
-                      display: "inline-flex",
-                      justifyContent: "flex-end",
-                      gap: 1,
-                    }}
-                  >
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={<EditOutlinedIcon fontSize="small" />}
-                      onClick={() => openEditDialog(entry)}
-                      sx={{
-                        minHeight: 32,
-                        px: 1.25,
-                        borderColor: "rgba(74,137,255,0.35)",
-                        color: "primary.main",
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={<DeleteOutlineRoundedIcon fontSize="small" />}
-                      disabled={entry.builtin}
-                      onClick={() => setPendingDelete(entry)}
-                      sx={{
-                        minHeight: 32,
-                        px: 1.25,
-                        borderColor: "rgba(74,137,255,0.2)",
-                        color: "primary.main",
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </Box>
+      <Tabs
+        value={pageTab}
+        onChange={(_event, next: ModesPageTab) => setPageTab(next)}
+        sx={{ px: 2.5, borderBottom: "1px solid", borderColor: "divider" }}
+      >
+        <Tab value="modes" label="Modes" />
+        <Tab value="settings" label="Settings" />
+      </Tabs>
+
+      {pageTab === "modes" ? (
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: "14%" }}>Mode</TableCell>
+                <TableCell sx={{ width: "12%" }}>Keyword</TableCell>
+                <TableCell>Viewer Response</TableCell>
+                <TableCell sx={{ width: "16%" }}>Timer</TableCell>
+                <TableCell align="right" sx={{ width: "18%" }}>
+                  Actions
                 </TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              {filteredModes.map((entry) => (
+                <TableRow
+                  key={entry.id}
+                  hover
+                  sx={{
+                    "&:hover": {
+                      backgroundColor: "rgba(255,255,255,0.03)",
+                    },
+                  }}
+                >
+                  <TableCell>
+                    <Typography sx={{ fontSize: "0.88rem", fontWeight: 700 }}>
+                      {entry.key}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {entry.builtin ? "built-in" : "custom"}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography sx={{ fontSize: "0.86rem", fontWeight: 700 }}>
+                      {entry.keywordName}
+                    </Typography>
+                  </TableCell>
+                  <TableCell title={entry.keywordResponse} sx={{ maxWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontSize: "0.84rem",
+                        color: "text.primary",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {entry.keywordDescription}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        mt: 0.35,
+                        fontSize: "0.8rem",
+                        color: "text.secondary",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {entry.keywordResponse}
+                    </Typography>
+                  </TableCell>
+                  <TableCell
+                    sx={{ color: "text.secondary", fontSize: "0.84rem" }}
+                  >
+                    {entry.timerEnabled
+                      ? `${entry.timerIntervalSeconds}s · ${entry.timerMessage}`
+                      : "timer disabled"}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        justifyContent: "flex-end",
+                        gap: 1,
+                      }}
+                    >
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<EditOutlinedIcon fontSize="small" />}
+                        onClick={() => openEditDialog(entry)}
+                        sx={{
+                          minHeight: 32,
+                          px: 1.25,
+                          borderColor: "rgba(74,137,255,0.35)",
+                          color: "primary.main",
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DeleteOutlineRoundedIcon fontSize="small" />}
+                        disabled={entry.builtin}
+                        onClick={() => setPendingDelete(entry)}
+                        sx={{
+                          minHeight: 32,
+                          px: 1.25,
+                          borderColor: "rgba(74,137,255,0.2)",
+                          color: "primary.main",
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : (
+        <Stack spacing={2} sx={{ p: 2.5 }}>
+          {settingsError ? (
+            <Paper sx={{ p: 1.5 }}>
+              <Typography variant="body2">{settingsError}</Typography>
+            </Paper>
+          ) : null}
+          <Card>
+            <CardContent>
+              <Stack spacing={1.75}>
+                <Typography variant="h6">Legacy commands</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Enables moderator shortcuts like <strong>!join.on</strong>,{" "}
+                  <strong>!link.on</strong>, and <strong>!1v1.on</strong>. No
+                  legacy off command exists.
+                </Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 2,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1.5,
+                    px: 2,
+                    py: 1.2,
+                    bgcolor: "background.default",
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 600 }}>
+                    Enable `![mode].on`
+                  </Typography>
+                  <Switch
+                    checked={legacyCommandsEnabled}
+                    disabled={settingsLoading || settingsSaving}
+                    onChange={(_event, checked) => {
+                      const previous = legacyCommandsEnabled;
+                      setLegacyCommandsEnabled(checked);
+                      setSettingsSaving(true);
+                      setSettingsError("");
+                      void saveModesModuleSettings({
+                        legacyCommandsEnabled: checked,
+                      })
+                        .then((saved) => {
+                          setLegacyCommandsEnabled(
+                            saved.legacyCommandsEnabled,
+                          );
+                        })
+                        .catch((error: unknown) => {
+                          setLegacyCommandsEnabled(previous);
+                          setSettingsError(
+                            error instanceof Error
+                              ? error.message
+                              : "Could not save mode settings right now.",
+                          );
+                        })
+                        .finally(() => {
+                          setSettingsSaving(false);
+                        });
+                    }}
+                  />
+                </Box>
+                <Typography variant="caption" color="text.secondary">
+                  {settingsLoading
+                    ? "Loading settings…"
+                    : settingsSaving
+                      ? "Saving…"
+                      : "Changes save immediately."}
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Stack>
+      )}
 
       <Dialog open={editorOpen} onClose={closeDialog} fullWidth maxWidth="lg">
         <DialogTitle

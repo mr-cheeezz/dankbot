@@ -103,6 +103,29 @@ func (c *Client) SendEmbed(channelID, content string, embed *discordgo.MessageEm
 	return nil
 }
 
+func (c *Client) SendEmbedWithComponents(
+	channelID, content string,
+	embed *discordgo.MessageEmbed,
+	components []discordgo.MessageComponent,
+) error {
+	channelID = strings.TrimSpace(channelID)
+	content = strings.TrimSpace(content)
+	if channelID == "" || (content == "" && embed == nil && len(components) == 0) {
+		return nil
+	}
+
+	_, err := c.session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content:    content,
+		Embed:      embed,
+		Components: components,
+	})
+	if err != nil {
+		return fmt.Errorf("send discord embed with components: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) Errors() <-chan error {
 	return c.errs
 }

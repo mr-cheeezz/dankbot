@@ -88,6 +88,7 @@ type Module struct {
 	socialStore     *postgres.BotSocialPromotionStore
 	auditStore      *postgres.AuditLogStore
 	channelSettings *postgres.PublicHomeSettingsStore
+	settingsStore   *postgres.ModesModuleSettingsStore
 	adminIDs        map[string]struct{}
 	isLive          func(context.Context) (bool, error)
 	twitchOAuth     *twitchoauth.Service
@@ -131,6 +132,13 @@ func (m *Module) SetChannelSettingsStore(store *postgres.PublicHomeSettingsStore
 	defer m.mu.Unlock()
 
 	m.channelSettings = store
+}
+
+func (m *Module) SetModesModuleSettingsStore(store *postgres.ModesModuleSettingsStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.settingsStore = store
 }
 
 func (m *Module) Name() string {
@@ -190,6 +198,11 @@ func (m *Module) Start(ctx context.Context) error {
 	if err := m.stateStore.Ensure(ctx, "join"); err != nil {
 		return err
 	}
+	if m.settingsStore != nil {
+		if err := m.settingsStore.EnsureDefault(ctx); err != nil {
+			return err
+		}
+	}
 
 	go m.runModeTimer(ctx)
 	go m.runSocialTimer(ctx)
@@ -199,8 +212,22 @@ func (m *Module) Start(ctx context.Context) error {
 }
 
 func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResult, error) {
+	trimmedMessage := strings.TrimSpace(ctx.Message)
 	commandPrefix := normalizeCommandPrefix(ctx.CommandPrefix)
-	if strings.HasPrefix(strings.TrimSpace(ctx.Message), commandPrefix) {
+	reply, handledLegacy, err := m.handleLegacyModeCommand(ctx, trimmedMessage, commandPrefix)
+	if err != nil {
+		return modules.MessageResult{}, err
+	}
+	if handledLegacy {
+		return modules.MessageResult{
+			Reply:          strings.TrimSpace(reply),
+			StopProcessing: true,
+		}, nil
+	}
+	if strings.HasPrefix(trimmedMessage, commandPrefix) {
+		return modules.MessageResult{}, nil
+	}
+	if m.isLikelyBotSender(ctx) {
 		return modules.MessageResult{}, nil
 	}
 	if !m.canManageModes(ctx) {
@@ -219,18 +246,8 @@ func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResul
 	if state != nil &&
 		strings.EqualFold(strings.TrimSpace(state.CurrentModeKey), "link") &&
 		strings.EqualFold(strings.TrimSpace(state.CurrentModeParam), strings.TrimSpace(link)) {
-		warning, err := m.syncConfiguredLinkCommand(context.Background(), link)
-		if err != nil {
-			return modules.MessageResult{}, err
-		}
-		reply := "Link mode is already active for that private server."
-		if strings.TrimSpace(warning) != "" {
-			reply += " " + warning
-		}
-		return modules.MessageResult{
-			Reply:          reply,
-			StopProcessing: true,
-		}, nil
+		// Ignore duplicate link reposts to prevent noisy mode re-announcements.
+		return modules.MessageResult{}, nil
 	}
 
 	if err := m.stateStore.SetCurrentMode(context.Background(), "link", link, ctx.SenderID); err != nil {
@@ -258,17 +275,27 @@ func (m *Module) mode(ctx modules.CommandContext) (string, error) {
 	}
 
 	modeKey := strings.TrimSpace(strings.ToLower(ctx.Args[0]))
+	modeParam := ""
+	if len(ctx.Args) > 1 {
+		modeParam = strings.TrimSpace(strings.Join(ctx.Args[1:], " "))
+	}
+
+	return m.activateMode(ctx, modeKey, modeParam)
+}
+
+func (m *Module) activateMode(ctx modules.CommandContext, modeKey, modeParam string) (string, error) {
+	modeKey = strings.TrimSpace(strings.ToLower(modeKey))
+	modeParam = strings.TrimSpace(modeParam)
+	if modeKey == "" {
+		return "Mode key is required.", nil
+	}
+
 	mode, err := m.modeStore.Get(context.Background(), modeKey)
 	if err != nil {
 		return "", err
 	}
 	if mode == nil {
 		return fmt.Sprintf(`Unknown mode "%s".`, modeKey), nil
-	}
-
-	modeParam := ""
-	if len(ctx.Args) > 1 {
-		modeParam = strings.TrimSpace(strings.Join(ctx.Args[1:], " "))
 	}
 
 	state, err := m.stateStore.Get(context.Background())
@@ -308,6 +335,71 @@ func (m *Module) mode(ctx modules.CommandContext) (string, error) {
 	}
 
 	return strings.TrimSpace(fmt.Sprintf("@%s, %s has turned on %s mode for %s. %s", streamerLogin, senderName, mode.ModeKey, strings.ToLower(modeParam), warning)), nil
+}
+
+func (m *Module) handleLegacyModeCommand(ctx modules.CommandContext, message, commandPrefix string) (string, bool, error) {
+	if !strings.HasPrefix(message, commandPrefix) {
+		return "", false, nil
+	}
+
+	commandBody := strings.TrimSpace(strings.TrimPrefix(message, commandPrefix))
+	if commandBody == "" {
+		return "", false, nil
+	}
+
+	parts := strings.Fields(commandBody)
+	if len(parts) != 1 {
+		return "", false, nil
+	}
+
+	token := strings.TrimSpace(strings.ToLower(parts[0]))
+	if !strings.HasSuffix(token, ".on") {
+		return "", false, nil
+	}
+
+	enabled, err := m.legacyCommandsEnabled(context.Background())
+	if err != nil {
+		return "", false, err
+	}
+	if !enabled {
+		return "", true, nil
+	}
+
+	if m.isLikelyBotSender(ctx) || !m.canManageModes(ctx) {
+		return "", true, nil
+	}
+
+	modeKey := strings.TrimSuffix(token, ".on")
+	if modeKey == "" {
+		return "", true, nil
+	}
+
+	reply, err := m.activateMode(ctx, modeKey, "")
+	return reply, true, err
+}
+
+func (m *Module) legacyCommandsEnabled(ctx context.Context) (bool, error) {
+	m.mu.RLock()
+	store := m.settingsStore
+	m.mu.RUnlock()
+	if store == nil {
+		return false, nil
+	}
+
+	if err := store.EnsureDefault(ctx); err != nil {
+		return false, err
+	}
+
+	settings, err := store.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	if settings == nil {
+		defaults := postgres.DefaultModesModuleSettings()
+		return defaults.LegacyCommandsEnabled, nil
+	}
+
+	return settings.LegacyCommandsEnabled, nil
 }
 
 func (m *Module) link(ctx modules.CommandContext) (string, error) {
@@ -693,6 +785,44 @@ func (m *Module) senderName(ctx modules.CommandContext) string {
 	}
 
 	return "someone"
+}
+
+func (m *Module) isLikelyBotSender(ctx modules.CommandContext) bool {
+	if ctx.IsBroadcaster {
+		return false
+	}
+
+	knownBots := map[string]struct{}{
+		"dankbot":        {},
+		"nightbot":       {},
+		"streamelements": {},
+		"streamlabs":     {},
+		"moobot":         {},
+		"fossabot":       {},
+		"pajbot":         {},
+		"wizebot":        {},
+		"phantombot":     {},
+		"deepbot":        {},
+	}
+
+	candidates := []string{
+		strings.ToLower(strings.TrimSpace(ctx.Sender)),
+		strings.ToLower(strings.TrimSpace(ctx.DisplayName)),
+	}
+
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if _, ok := knownBots[candidate]; ok {
+			return true
+		}
+		if strings.HasSuffix(candidate, "bot") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (m *Module) logAction(ctx modules.CommandContext, detail string) {

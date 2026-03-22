@@ -64,6 +64,7 @@ const defaultDiscordBotSettings: DiscordBotSettings = {
     messageTemplate: "NEW GAME: {game}",
     includeWatchLink: true,
     includeJoinLink: true,
+    allowedUsers: [],
   },
   channels: [],
   roles: [],
@@ -424,6 +425,28 @@ function useDiscordBotState() {
         gamePing: {
           ...current.gamePing,
           includeJoinLink,
+        },
+      }));
+      setSettingsSaved("");
+    },
+    setGamePingAllowedUsers: (raw: string) => {
+      const seen = new Set<string>();
+      const allowedUsers = raw
+        .split(/\r?\n/)
+        .map((entry) => entry.trim().toLowerCase().replace(/^@+/, ""))
+        .filter((entry) => entry !== "")
+        .filter((entry) => {
+          if (seen.has(entry)) {
+            return false;
+          }
+          seen.add(entry);
+          return true;
+        });
+      setBotSettingsDraft((current) => ({
+        ...current,
+        gamePing: {
+          ...current.gamePing,
+          allowedUsers,
         },
       }));
       setSettingsSaved("");
@@ -1124,6 +1147,16 @@ function DiscordGamePingsPageInner() {
                   value={state.botSettingsDraft.gamePing.messageTemplate}
                   onChange={(event) => state.setGamePingMessageTemplate(event.target.value)}
                   helperText={`Use {game}. Twitch usage: ${state.botSettingsDraft.gamePingCommandName} [role-alias] [game]`}
+                />
+
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  label="Allowed Twitch users"
+                  value={state.botSettingsDraft.gamePing.allowedUsers.join("\n")}
+                  onChange={(event) => state.setGamePingAllowedUsers(event.target.value)}
+                  helperText="One Twitch username per line. Broadcaster/mod/admin can still run it."
                 />
 
                 <Stack direction={{ xs: "column", md: "row" }} spacing={2}>

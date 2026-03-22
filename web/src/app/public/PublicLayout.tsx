@@ -172,6 +172,8 @@ export function PublicLayout() {
 
           <Stack direction="row" spacing={1} alignItems="center">
             <PublicNavButton to="/" label="Home" />
+            <PublicNavButton to="/channels" label="Channels" />
+            <PublicNavButton to="/request" label="Request" />
             <PublicNavButton to="/commands" label="Commands" />
             <PublicNavButton to="/quotes" label="Quotes" />
 

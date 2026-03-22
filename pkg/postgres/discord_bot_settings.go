@@ -17,13 +17,14 @@ type DiscordPingRole struct {
 }
 
 type DiscordGamePingSettings struct {
-	Enabled          bool   `json:"enabled"`
-	ChannelID        string `json:"channel_id"`
-	RoleID           string `json:"role_id"`
-	RoleName         string `json:"role_name"`
-	MessageTemplate  string `json:"message_template"`
-	IncludeWatchLink bool   `json:"include_watch_link"`
-	IncludeJoinLink  bool   `json:"include_join_link"`
+	Enabled          bool     `json:"enabled"`
+	ChannelID        string   `json:"channel_id"`
+	RoleID           string   `json:"role_id"`
+	RoleName         string   `json:"role_name"`
+	MessageTemplate  string   `json:"message_template"`
+	IncludeWatchLink bool     `json:"include_watch_link"`
+	IncludeJoinLink  bool     `json:"include_join_link"`
+	AllowedUsers     []string `json:"allowed_users"`
 }
 
 type DiscordBotSettings struct {
@@ -61,6 +62,7 @@ func defaultDiscordGamePingSettings() DiscordGamePingSettings {
 		MessageTemplate:  "NEW GAME: {game}",
 		IncludeWatchLink: true,
 		IncludeJoinLink:  true,
+		AllowedUsers:     []string{},
 	}
 }
 
@@ -316,5 +318,28 @@ func normalizeDiscordGamePingSettings(settings DiscordGamePingSettings) DiscordG
 		settings.IncludeWatchLink = defaults.IncludeWatchLink
 		settings.IncludeJoinLink = defaults.IncludeJoinLink
 	}
+	settings.AllowedUsers = normalizeDiscordAllowedUsers(settings.AllowedUsers)
 	return settings
+}
+
+func normalizeDiscordAllowedUsers(items []string) []string {
+	if len(items) == 0 {
+		return []string{}
+	}
+
+	normalized := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		value := strings.TrimSpace(strings.ToLower(item))
+		value = strings.TrimPrefix(value, "@")
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized
 }

@@ -237,6 +237,10 @@ export type UserProfileModuleSettings = {
   showLastChatActivity: boolean;
 };
 
+export type ModesModuleSettings = {
+  legacyCommandsEnabled: boolean;
+};
+
 export type NewChatterGreetingModuleSettings = {
   enabled: boolean;
   messages: string[];
@@ -277,6 +281,7 @@ export type DiscordBotGamePingSettings = {
   messageTemplate: string;
   includeWatchLink: boolean;
   includeJoinLink: boolean;
+  allowedUsers: string[];
 };
 
 export type DiscordBotSettings = {

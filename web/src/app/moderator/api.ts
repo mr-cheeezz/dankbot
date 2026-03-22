@@ -7,6 +7,7 @@ import type {
   FollowersOnlyModuleSettings,
   GameModuleSettings,
   NewChatterGreetingModuleSettings,
+  ModesModuleSettings,
   NowPlayingModuleSettings,
   QuoteModuleEntry,
   QuoteModuleSettings,
@@ -181,6 +182,10 @@ type UserProfileModuleResponse = {
   show_last_chat_activity: boolean;
 };
 
+type ModesModuleSettingsResponse = {
+  legacy_commands_enabled: boolean;
+};
+
 type QuoteEntriesResponse = {
   items: Array<{
     id: number;
@@ -220,6 +225,7 @@ type DiscordBotSettingsResponse = {
     message_template: string;
     include_watch_link: boolean;
     include_join_link: boolean;
+    allowed_users: string[];
   };
 };
 
@@ -646,6 +652,52 @@ export async function fetchGameModuleSettings(
       Number.isFinite(payload.gamesplayed_limit) && payload.gamesplayed_limit > 0
         ? payload.gamesplayed_limit
         : 5,
+  };
+}
+
+export async function fetchModesModuleSettings(
+  signal?: AbortSignal,
+): Promise<ModesModuleSettings> {
+  const response = await fetch("/api/dashboard/modes/settings", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load modes module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as ModesModuleSettingsResponse;
+  return {
+    legacyCommandsEnabled: payload.legacy_commands_enabled,
+  };
+}
+
+export async function saveModesModuleSettings(
+  settings: ModesModuleSettings,
+): Promise<ModesModuleSettings> {
+  const response = await fetch("/api/dashboard/modes/settings", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      legacy_commands_enabled: settings.legacyCommandsEnabled,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to save modes module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as ModesModuleSettingsResponse;
+  return {
+    legacyCommandsEnabled: payload.legacy_commands_enabled,
   };
 }
 
@@ -1077,6 +1129,9 @@ export async function fetchDiscordBotSettings(
       messageTemplate: payload.game_ping?.message_template ?? "NEW GAME: {game}",
       includeWatchLink: payload.game_ping?.include_watch_link ?? true,
       includeJoinLink: payload.game_ping?.include_join_link ?? true,
+      allowedUsers: Array.isArray(payload.game_ping?.allowed_users)
+        ? payload.game_ping.allowed_users
+        : [],
     },
   };
 }
@@ -1107,6 +1162,7 @@ export async function saveDiscordBotSettings(
         message_template: settings.gamePing.messageTemplate,
         include_watch_link: settings.gamePing.includeWatchLink,
         include_join_link: settings.gamePing.includeJoinLink,
+        allowed_users: settings.gamePing.allowedUsers,
       },
     }),
   });
@@ -1139,6 +1195,9 @@ export async function saveDiscordBotSettings(
       messageTemplate: payload.game_ping?.message_template ?? "NEW GAME: {game}",
       includeWatchLink: payload.game_ping?.include_watch_link ?? true,
       includeJoinLink: payload.game_ping?.include_join_link ?? true,
+      allowedUsers: Array.isArray(payload.game_ping?.allowed_users)
+        ? payload.game_ping.allowed_users
+        : [],
     },
   };
 }
