@@ -274,7 +274,10 @@ export function DashboardOverviewPage() {
     }
   };
 
-  const handleSpotifyQueue = async (input: { input?: string; uri?: string }, successMessage: string) => {
+  const handleSpotifyQueue = async (
+    input: { input?: string; uri?: string; trackName?: string },
+    successMessage: string,
+  ) => {
     setSpotifyActing(true);
     setSpotifyNotice("");
 
@@ -779,7 +782,7 @@ export function DashboardOverviewPage() {
                                     variant="outlined"
                                     onClick={() =>
                                       void handleSpotifyQueue(
-                                        { uri: track.uri },
+                                        { uri: track.uri, trackName: track.name },
                                         `${track.name} added to the Spotify queue.`,
                                       )
                                     }

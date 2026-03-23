@@ -1973,6 +1973,7 @@ export async function searchDashboardSpotifyTracks(
 export async function queueDashboardSpotifyTrack(input: {
   input?: string;
   uri?: string;
+  trackName?: string;
 }): Promise<DashboardSpotifyState> {
   const response = await fetch("/api/dashboard/spotify/queue", {
     method: "POST",
@@ -1984,6 +1985,7 @@ export async function queueDashboardSpotifyTrack(input: {
     body: JSON.stringify({
       input: input.input ?? "",
       uri: input.uri ?? "",
+      track_name: input.trackName ?? "",
     }),
   });
 

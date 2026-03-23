@@ -20,15 +20,17 @@ type Module struct {
 	redis      *redispkg.Client
 	stateStore *postgres.BotStateStore
 
-	mu      sync.RWMutex
-	channel string
-	say     func(channel, message string) error
+	mu         sync.RWMutex
+	channel    string
+	streamerID string
+	say        func(channel, message string) error
 }
 
-func New(redisClient *redispkg.Client, stateStore *postgres.BotStateStore) *Module {
+func New(redisClient *redispkg.Client, stateStore *postgres.BotStateStore, streamerID string) *Module {
 	return &Module{
 		redis:      redisClient,
 		stateStore: stateStore,
+		streamerID: strings.TrimSpace(streamerID),
 	}
 }
 
@@ -106,6 +108,9 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 		return fmt.Errorf("decode published alert event: %w", err)
 	}
 	if event.Source != eventsub.SourceTwitchEventSub {
+		return nil
+	}
+	if !m.matchesStreamer(event) {
 		return nil
 	}
 
@@ -241,6 +246,27 @@ func (m *Module) output() (string, func(channel, message string) error) {
 	defer m.mu.RUnlock()
 
 	return m.channel, m.say
+}
+
+func (m *Module) matchesStreamer(event eventsub.PublishedEvent) bool {
+	targetStreamerID := strings.TrimSpace(m.streamerID)
+	if targetStreamerID == "" {
+		return true
+	}
+
+	eventBroadcasterID := strings.TrimSpace(event.BroadcasterID)
+	if eventBroadcasterID != "" {
+		return strings.EqualFold(eventBroadcasterID, targetStreamerID)
+	}
+
+	var fallback struct {
+		BroadcasterUserID string `json:"broadcaster_user_id"`
+	}
+	if err := json.Unmarshal(event.Event, &fallback); err != nil {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSpace(fallback.BroadcasterUserID), targetStreamerID)
 }
 
 func displayName(primary string, fallbacks ...string) string {

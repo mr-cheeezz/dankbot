@@ -107,7 +107,7 @@ func newRuntime(cfg *config.Config) *runtime {
 	modeModule.SetTwitchTitleCoordinator(cfg.Twitch.ClientID, twitchOAuthService, twitchAccountStore)
 	modeModule.SetChannelSettingsStore(publicHomeSettingsStore)
 	modeModule.SetModesModuleSettingsStore(postgres.NewModesModuleSettingsStore(postgresClient))
-	alertsModule := alertsmodule.New(redisClient, stateStore)
+	alertsModule := alertsmodule.New(redisClient, stateStore, cfg.Main.StreamerID)
 	discordModule := discordbotmodule.New(
 		postgres.NewDiscordBotSettingsStore(postgresClient),
 		stateStore,

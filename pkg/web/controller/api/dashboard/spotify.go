@@ -12,6 +12,7 @@ import (
 
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 	spotifyapi "github.com/mr-cheeezz/dankbot/pkg/spotify/api"
+	"github.com/mr-cheeezz/dankbot/pkg/twitch/helix"
 	"github.com/mr-cheeezz/dankbot/pkg/web/session"
 )
 
@@ -44,8 +45,9 @@ type spotifySearchResponse struct {
 }
 
 type spotifyQueueRequest struct {
-	Input string `json:"input"`
-	URI   string `json:"uri"`
+	Input     string `json:"input"`
+	URI       string `json:"uri"`
+	TrackName string `json:"track_name"`
 }
 
 type spotifyPlaybackRequest struct {
@@ -137,7 +139,8 @@ func (h handler) spotifyQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.requireDashboardAccess(r); err != nil {
+	userSession, err := h.dashboardSession(r)
+	if err != nil {
 		if errors.Is(err, session.ErrSessionNotFound) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -165,7 +168,7 @@ func (h handler) spotifyQueue(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), spotifyDashboardTimeout)
 	defer cancel()
 
-	itemURI, err := resolveDashboardTrackURI(ctx, client, payload.Input, payload.URI)
+	itemURI, resolvedTrackName, err := resolveDashboardTrackURI(ctx, client, payload.Input, payload.URI)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -175,6 +178,7 @@ func (h handler) spotifyQueue(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	h.announceDashboardSpotifyQueueAdd(r.Context(), userSession, payload.TrackName, resolvedTrackName)
 
 	response, err := h.fetchSpotifyStatus(r.Context())
 	if err != nil {
@@ -393,30 +397,79 @@ func spotifyTrackToResponse(track spotifyapi.Track) spotifyTrackResponse {
 	return out
 }
 
-func resolveDashboardTrackURI(ctx context.Context, client *spotifyapi.Client, input, explicitURI string) (string, error) {
+func resolveDashboardTrackURI(ctx context.Context, client *spotifyapi.Client, input, explicitURI string) (string, string, error) {
 	explicitURI = strings.TrimSpace(explicitURI)
 	if explicitURI != "" {
-		return explicitURI, nil
+		return explicitURI, "", nil
 	}
 
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return "", fmt.Errorf("spotify search or link is required")
+		return "", "", fmt.Errorf("spotify search or link is required")
 	}
 
 	if uri, ok := spotifyTrackURI(input); ok {
-		return uri, nil
+		return uri, "", nil
 	}
 
 	tracks, err := client.SearchTracks(ctx, input, 1)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if len(tracks) == 0 {
-		return "", fmt.Errorf("could not find that track on spotify")
+		return "", "", fmt.Errorf("could not find that track on spotify")
 	}
 
-	return strings.TrimSpace(tracks[0].URI), nil
+	return strings.TrimSpace(tracks[0].URI), strings.TrimSpace(tracks[0].Name), nil
+}
+
+func (h handler) announceDashboardSpotifyQueueAdd(ctx context.Context, userSession *session.UserSession, requestedTrackName, resolvedTrackName string) {
+	if userSession == nil {
+		return
+	}
+
+	client, botAccount, broadcasterID, err := h.dashboardBotModerationClient(ctx)
+	if err != nil || client == nil || botAccount == nil {
+		return
+	}
+
+	if missing := missingScopes(botAccount.Scopes, "user:write:chat"); len(missing) > 0 {
+		return
+	}
+
+	actorName := strings.TrimSpace(userSession.DisplayName)
+	if actorName == "" {
+		actorName = strings.TrimSpace(userSession.Login)
+	}
+	if actorName == "" {
+		actorName = "someone"
+	}
+
+	trackName := strings.TrimSpace(requestedTrackName)
+	if trackName == "" {
+		trackName = strings.TrimSpace(resolvedTrackName)
+	}
+	if trackName == "" {
+		trackName = "a song"
+	}
+
+	message := fmt.Sprintf("[%s] added [%s] to queue", actorName, trackName)
+	if len(message) > 450 {
+		message = message[:450]
+	}
+
+	result, err := client.SendChatMessage(ctx, helix.SendChatMessageRequest{
+		BroadcasterID: strings.TrimSpace(broadcasterID),
+		SenderID:      strings.TrimSpace(botAccount.TwitchUserID),
+		Message:       message,
+	})
+	if err != nil {
+		fmt.Printf("spotify queue chat announce failed: %v\n", err)
+		return
+	}
+	if result != nil && !result.IsSent && result.DropReason != nil {
+		fmt.Printf("spotify queue chat announce dropped: %s\n", strings.TrimSpace(result.DropReason.Message))
+	}
 }
 
 func spotifyTrackURI(input string) (string, bool) {
