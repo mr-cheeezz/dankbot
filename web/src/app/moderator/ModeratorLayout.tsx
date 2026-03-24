@@ -83,14 +83,19 @@ function initialsForName(name: string): string {
 function unifiedVersion(
   botVersion: string,
   webVersion: string,
+  releaseVersion: string,
 ) {
   const bot = botVersion.trim();
-  if (bot !== "" && bot !== "dev") {
+  if (bot !== "" && bot !== "dev" && !bot.startsWith("dev-")) {
     return bot;
   }
   const web = webVersion.trim();
-  if (web !== "") {
+  if (web !== "" && web !== "dev" && !web.startsWith("dev-")) {
     return web;
+  }
+  const release = releaseVersion.trim();
+  if (release !== "") {
+    return release;
   }
   return "dev";
 }
@@ -457,7 +462,7 @@ export function ModeratorLayout() {
               wordBreak: "break-word",
             }}
           >
-            {`Version: ${unifiedVersion(summary.botVersion, summary.webVersion)}`}
+            {`Version: ${unifiedVersion(summary.botVersion, summary.webVersion, summary.releaseVersion)}`}
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <NavLink to="/" style={{ textDecoration: "none" }}>

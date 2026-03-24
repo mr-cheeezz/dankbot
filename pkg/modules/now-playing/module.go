@@ -197,6 +197,11 @@ func (m *Module) addSong(ctx modules.CommandContext, input string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	if title == "" {
+		if resolvedTitle, resolveErr := resolveTrackTitleFromURI(context.Background(), client, trackURI); resolveErr == nil {
+			title = resolvedTitle
+		}
+	}
 
 	if err := client.AddToQueue(context.Background(), trackURI, ""); err != nil {
 		return "", err
@@ -527,11 +532,13 @@ func spotifyTrackURI(input string) (string, bool) {
 	}
 
 	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "track" || strings.TrimSpace(parts[1]) == "" {
-		return "", false
+	for index := 0; index < len(parts)-1; index++ {
+		if parts[index] == "track" && strings.TrimSpace(parts[index+1]) != "" {
+			return "spotify:track:" + strings.TrimSpace(parts[index+1]), true
+		}
 	}
 
-	return "spotify:track:" + parts[1], true
+	return "", false
 }
 
 func spotifyTrackIDFromURI(uri string) (string, bool) {

@@ -44,6 +44,7 @@ type summaryResponse struct {
 	ChannelAvatarURL  string               `json:"channel_avatar_url"`
 	BotRunning        bool                 `json:"bot_running"`
 	KillswitchEnabled bool                 `json:"killswitch_enabled"`
+	ReleaseVersion    string               `json:"release_version"`
 	WebVersion        string               `json:"web_version"`
 	WebBranch         string               `json:"web_branch"`
 	WebRevision       string               `json:"web_revision"`
@@ -151,6 +152,7 @@ func (h handler) buildSummary(ctx context.Context) summaryResponse {
 	summary := summaryResponse{
 		ChannelName:      "",
 		ChannelAvatarURL: "",
+		ReleaseVersion:   strings.TrimSpace(release.Current),
 		Integrations: []integrationSummary{
 			{
 				ID:     "twitch",

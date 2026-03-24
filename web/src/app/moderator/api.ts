@@ -34,6 +34,7 @@ type DashboardSummaryResponse = {
   channel_avatar_url: string;
   bot_running: boolean;
   killswitch_enabled: boolean;
+  release_version: string;
   web_version: string;
   web_branch: string;
   web_revision: string;
@@ -343,6 +344,7 @@ export async function fetchDashboardSummary(
     channelAvatarURL: payload.channel_avatar_url,
     botRunning: payload.bot_running,
     killswitchEnabled: payload.killswitch_enabled,
+    releaseVersion: payload.release_version ?? "",
     webVersion: payload.web_version ?? "",
     webBranch: payload.web_branch ?? "",
     webRevision: payload.web_revision ?? "",

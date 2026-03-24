@@ -601,9 +601,6 @@ func (h handler) dashboardSpotifyChatSenders(ctx context.Context) ([]dashboardCh
 		if account == nil {
 			return
 		}
-		if missing := missingScopes(account.Scopes, "user:write:chat"); len(missing) > 0 {
-			return
-		}
 
 		accessToken := strings.TrimSpace(account.AccessToken)
 		accountUserID := strings.TrimSpace(account.TwitchUserID)
