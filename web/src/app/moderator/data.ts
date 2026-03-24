@@ -31,8 +31,8 @@ export const navSections: NavSection[] = [
   {
     title: "Moderation",
     items: [
-      { key: "spamFilters", label: "Spam Filters" },
-      { key: "blockedTerms", label: "Blocked Terms" },
+      { key: "spamFilters", label: "Chat Filters" },
+      { key: "blockedTerms", label: "Banned Words" },
       { key: "massModeration", label: "Mass Moderation" },
     ],
   },
@@ -57,7 +57,7 @@ export const navSections: NavSection[] = [
 export const initialAuditEntries: AuditEntry[] = [
   {
     id: "sample-1",
-    actor: "mr_cheeezz",
+    actor: "loading...",
     actorAvatarURL: "",
     command: "!mode",
     detail: "turned on join mode",
@@ -65,7 +65,7 @@ export const initialAuditEntries: AuditEntry[] = [
   },
   {
     id: "sample-2",
-    actor: "basementhelper",
+    actor: "loading...",
     actorAvatarURL: "",
     command: "!song skip",
     detail: "skipped the current spotify song",
@@ -73,7 +73,7 @@ export const initialAuditEntries: AuditEntry[] = [
   },
   {
     id: "sample-3",
-    actor: "mr_cheeezz",
+    actor: "loading...",
     actorAvatarURL: "",
     command: "!add quote",
     detail: "added quote #42",
@@ -81,7 +81,7 @@ export const initialAuditEntries: AuditEntry[] = [
   },
   {
     id: "sample-4",
-    actor: "mr_cheeezz",
+    actor: "loading...",
     actorAvatarURL: "",
     command: "!killswitch",
     detail: "turned killswitch off",
@@ -378,7 +378,7 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
       exemptVips: true,
       exemptSubscribers: false,
       exemptModsBroadcaster: true,
-      exemptUsernames: ["mr_cheeezz"],
+      exemptUsernames: [],
       repeatOffendersEnabled: true,
       repeatMultiplier: 2,
       repeatCooldownSeconds: 60,
@@ -397,7 +397,7 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
       exemptVips: true,
       exemptSubscribers: false,
       exemptModsBroadcaster: true,
-      exemptUsernames: ["mr_cheeezz", "basementhelper"],
+      exemptUsernames: [],
       allowDiscordInvites: false,
       clipsFilteringEnabled: false,
       blockClipsFromOtherChannels: false,
@@ -521,7 +521,7 @@ export const initialAlertEntries: AlertEntry[] = [
     behavior: "chat alert for prime subs",
     status: "stable",
     enabled: true,
-    template: "{user} just subscribed with Prime! tibb12Prime POGGIES PogU",
+    template: "{user} just subscribed with Prime! POGGIES PogU",
     scope: "subscriptions",
   },
   {
@@ -901,7 +901,7 @@ export const integrationEntries: IntegrationEntry[] = [
 ];
 
 export const defaultDashboardSummary: DashboardSummary = {
-  channelName: "mr_cheeezz",
+  channelName: "loading...",
   channelAvatarURL: "",
   botRunning: false,
   killswitchEnabled: false,
@@ -1019,9 +1019,9 @@ export function pageTitleForView(view: ViewKey): string {
     case "alerts":
       return "Chat Alerts";
     case "spamFilters":
-      return "Spam Filters";
+      return "Chat Filters";
     case "blockedTerms":
-      return "Blocked Terms";
+      return "Banned Words";
     case "massModeration":
       return "Mass Moderation";
     case "channelPoints":
@@ -1040,7 +1040,7 @@ export function pageTitleForView(view: ViewKey): string {
 export function pageSubtitleForView(view: ViewKey): string {
   switch (view) {
     case "dashboard":
-      return "twitch.tv/mr_cheeezz";
+      return "loading...";
     case "commands":
       return "default, built-in, and module command controls";
     case "keywords":
@@ -1070,6 +1070,6 @@ export function pageSubtitleForView(view: ViewKey): string {
     case "settings":
       return "stream-facing defaults and bot preferences";
     default:
-      return "twitch.tv/mr_cheeezz";
+      return "loading...";
   }
 }

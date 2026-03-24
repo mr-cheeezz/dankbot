@@ -98,6 +98,7 @@ func newRuntime(cfg *config.Config) *runtime {
 	auditStore := postgres.NewAuditLogStore(postgresClient)
 	chatActivityStore := postgres.NewTwitchUserChatActivityStore(postgresClient)
 	publicHomeSettingsStore := postgres.NewPublicHomeSettingsStore(postgresClient)
+	alertSettingsStore := postgres.NewAlertSettingsStore(postgresClient)
 	defaultCommandStore := postgres.NewDefaultCommandSettingStore(postgresClient)
 	defaultKeywordStore := postgres.NewDefaultKeywordSettingStore(postgresClient)
 	gameModuleSettingsStore := postgres.NewGameModuleSettingsStore(postgresClient)
@@ -107,7 +108,7 @@ func newRuntime(cfg *config.Config) *runtime {
 	modeModule.SetTwitchTitleCoordinator(cfg.Twitch.ClientID, twitchOAuthService, twitchAccountStore)
 	modeModule.SetChannelSettingsStore(publicHomeSettingsStore)
 	modeModule.SetModesModuleSettingsStore(postgres.NewModesModuleSettingsStore(postgresClient))
-	alertsModule := alertsmodule.New(redisClient, stateStore, cfg.Main.StreamerID)
+	alertsModule := alertsmodule.New(redisClient, stateStore, alertSettingsStore, cfg.Main.StreamerID)
 	discordModule := discordbotmodule.New(
 		postgres.NewDiscordBotSettingsStore(postgresClient),
 		stateStore,

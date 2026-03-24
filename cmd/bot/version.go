@@ -7,7 +7,7 @@ import (
 
 // botVersion can be overridden at build time:
 // go build -ldflags "-X main.botVersion=v0.9.0-beta.1" ./cmd/bot
-var botVersion = "dev"
+var botVersion = "0.9.1-beta2"
 
 func init() {
 	botVersion = resolveBotVersion(botVersion)

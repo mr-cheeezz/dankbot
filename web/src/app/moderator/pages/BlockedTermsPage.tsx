@@ -264,7 +264,7 @@ export function BlockedTermsPage() {
         setError(
           nextError instanceof Error
             ? nextError.message
-            : "Could not load blocked terms right now.",
+            : "Could not load banned words right now.",
         );
       })
       .finally(() => {
@@ -426,7 +426,7 @@ export function BlockedTermsPage() {
           setError(
             nextError instanceof Error
               ? nextError.message
-              : "Could not save blocked term right now.",
+              : "Could not save banned word rule right now.",
           );
         });
       return;
@@ -446,7 +446,7 @@ export function BlockedTermsPage() {
         setError(
           nextError instanceof Error
             ? nextError.message
-            : "Could not save blocked term right now.",
+            : "Could not save banned word rule right now.",
         );
       });
   };
@@ -468,7 +468,7 @@ export function BlockedTermsPage() {
           }}
         >
           <Box>
-            <Typography variant="h5">Blocked Terms</Typography>
+            <Typography variant="h5">Banned Words</Typography>
             <Typography
               variant="body2"
               color="text.secondary"
@@ -508,7 +508,7 @@ export function BlockedTermsPage() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search blocked terms..."
+              placeholder="Search banned words..."
               sx={{ maxWidth: 460 }}
               InputProps={{
                 startAdornment: (
@@ -539,7 +539,7 @@ export function BlockedTermsPage() {
             </Alert>
           ) : null}
           {loading ? (
-            <Alert severity="info">Loading blocked terms…</Alert>
+            <Alert severity="info">Loading banned words…</Alert>
           ) : visibleTerms.length === 0 ? (
             <Paper
               elevation={0}
@@ -551,13 +551,13 @@ export function BlockedTermsPage() {
               }}
             >
               <Typography sx={{ fontSize: "0.95rem", fontWeight: 700 }}>
-                No blocked terms yet
+                No banned words yet
               </Typography>
               <Typography
                 color="text.secondary"
                 sx={{ mt: 0.5, fontSize: "0.9rem" }}
               >
-                Create your first named blocked term here.
+                Create your first banned word rule here.
               </Typography>
             </Paper>
           ) : (
@@ -732,11 +732,11 @@ export function BlockedTermsPage() {
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="lg">
         <DialogTitle sx={{ px: 3, py: 2 }}>
-          {editingTerm == null ? "Create blocked term" : "Edit blocked term"}
+          {editingTerm == null ? "Create banned word rule" : "Edit banned word rule"}
           <IconButton
             onClick={closeDialog}
             sx={{ position: "absolute", right: 12, top: 12 }}
-            aria-label="close blocked term editor"
+            aria-label="close banned word editor"
           >
             <CloseRoundedIcon />
           </IconButton>
@@ -799,7 +799,7 @@ export function BlockedTermsPage() {
                         onChange={(event) =>
                           setDraftField({ name: event.target.value })
                         }
-                        helperText="Required, used to organize and identify the blocked term."
+                        helperText="Required, used to organize and identify this banned word rule."
                       />
                       <TextField
                         fullWidth
@@ -846,7 +846,7 @@ export function BlockedTermsPage() {
                       severity="info"
                       icon={<InfoOutlinedIcon fontSize="inherit" />}
                     >
-                      Standard blocked terms use phrase groups. If every phrase
+                      Standard banned word rules use phrase groups. If every phrase
                       in one group appears in a message, the term triggers.
                       Multiple groups act like alternative matches.
                     </Alert>
@@ -1107,7 +1107,7 @@ export function BlockedTermsPage() {
                       color="text.secondary"
                       sx={{ mt: 1.1, fontSize: "0.9rem" }}
                     >
-                      DankBot blocked terms are currently global bot rules. If
+                      DankBot banned word rules are currently global bot rules. If
                       the term is enabled, it applies anywhere the bot is
                       moderating Twitch chat.
                     </Typography>
@@ -1198,7 +1198,7 @@ export function BlockedTermsPage() {
                         onChange={(event) =>
                           setPreviewMessage(event.target.value)
                         }
-                        helperText="Paste a sample chat message and see whether the current blocked term would match it."
+                        helperText="Paste a sample chat message and see whether the current banned word rule would match it."
                       />
                       {matchPreview.error ? (
                         <Alert severity="error">
@@ -1243,11 +1243,11 @@ export function BlockedTermsPage() {
 
       <ConfirmActionDialog
         open={pendingDelete != null}
-        title="Delete blocked term?"
+        title="Delete banned word rule?"
         description={
           pendingDelete == null
             ? ""
-            : `Delete "${pendingDelete.name}" from DankBot blocked terms?`
+            : `Delete "${pendingDelete.name}" from DankBot banned words?`
         }
         confirmLabel="Delete"
         onCancel={() => setPendingDelete(null)}
@@ -1269,7 +1269,7 @@ export function BlockedTermsPage() {
               setError(
                 nextError instanceof Error
                   ? nextError.message
-                  : "Could not delete blocked term right now.",
+                  : "Could not delete banned word rule right now.",
               );
             });
         }}

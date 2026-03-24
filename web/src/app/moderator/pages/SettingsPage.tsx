@@ -51,7 +51,7 @@ const linkCommandTemplateDefaults: Record<
   dankbot: "",
   nightbot: "!commands edit !link {link}",
   fossabot: "!setcommand !link {link}",
-  pajbot: "",
+  pajbot: "!setcommand !link {link}",
   custom: "",
 };
 
@@ -246,7 +246,9 @@ export function SettingsPage() {
   };
 
   const handleAssignEditor = async () => {
-    const login = (selectedEditorCandidate?.login || editorLogin).trim();
+    const login = (selectedEditorCandidate?.login || editorLogin)
+      .trim()
+      .replace(/^@+/, "");
     if (login === "") {
       setRolesMessage("Enter a Twitch login before adding an editor.");
       return;
@@ -351,7 +353,16 @@ export function SettingsPage() {
                         }}
                         inputValue={editorLogin}
                         onInputChange={(_, value, reason) => {
-                          if (reason === "reset" && selectedEditorCandidate != null) {
+                          if (reason === "reset") {
+                            if (selectedEditorCandidate != null) {
+                              setEditorLogin(selectedEditorCandidate.login);
+                            }
+                            return;
+                          }
+                          if (reason === "clear") {
+                            setSelectedEditorCandidate(null);
+                            setEditorLogin("");
+                            setRolesMessage("");
                             return;
                           }
                           setSelectedEditorCandidate(null);
@@ -957,12 +968,15 @@ export function SettingsPage() {
                       : settings.robloxLinkCommandTarget === "fossabot"
                         ? "Fossabot example: !setcommand !link {link}"
                         : settings.robloxLinkCommandTarget === "pajbot"
-                          ? "Paste the Pajbot command syntax you want DankBot to send in chat."
+                          ? "Pajbot example: !setcommand !link {link}"
                           : "Use {link} where the Roblox private server URL should be inserted."
                   }
                   multiline
                   minRows={2}
-                  placeholder="!commands edit !link {link}"
+                  placeholder={
+                    linkCommandTemplateDefaults[settings.robloxLinkCommandTarget] ||
+                    "!commands edit !link {link}"
+                  }
                 />
 
                 <Stack direction="row" spacing={1.25}>

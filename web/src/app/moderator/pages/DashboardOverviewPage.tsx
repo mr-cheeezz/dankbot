@@ -86,6 +86,14 @@ function trackSubtitle(track: DashboardSpotifyTrack | null): string {
   return `${track.artists.join(", ")}${track.albumName ? ` • ${track.albumName}` : ""}`;
 }
 
+function trackQueueLabel(track: DashboardSpotifyTrack): string {
+  if (track.artists.length === 0) {
+    return track.name;
+  }
+
+  return `${track.name} - ${track.artists.join(", ")}`;
+}
+
 export function DashboardOverviewPage() {
   const {
     filteredAuditEntries,
@@ -782,7 +790,7 @@ export function DashboardOverviewPage() {
                                     variant="outlined"
                                     onClick={() =>
                                       void handleSpotifyQueue(
-                                        { uri: track.uri, trackName: track.name },
+                                        { uri: track.uri, trackName: trackQueueLabel(track) },
                                         `${track.name} added to the Spotify queue.`,
                                       )
                                     }

@@ -80,26 +80,19 @@ function initialsForName(name: string): string {
     .join("");
 }
 
-function formatBuildLine(
-  version: string,
-  branch: string,
-  revision: string,
-  commitTime: string,
+function unifiedVersion(
+  botVersion: string,
+  webVersion: string,
 ) {
-  const v = version.trim() || "dev";
-  const parts: string[] = [v];
-  if (branch.trim() !== "" || revision.trim() !== "") {
-    parts.push(
-      `(${[branch.trim(), revision.trim().slice(0, 8)].filter((item) => item !== "").join(", ")})`,
-    );
+  const bot = botVersion.trim();
+  if (bot !== "" && bot !== "dev") {
+    return bot;
   }
-  if (commitTime.trim() !== "") {
-    const parsed = new Date(commitTime);
-    if (!Number.isNaN(parsed.getTime())) {
-      parts.push(`Last commit: ${parsed.toLocaleString()}`);
-    }
+  const web = webVersion.trim();
+  if (web !== "") {
+    return web;
   }
-  return parts.join(" - ");
+  return "dev";
 }
 
 function iconForView(view: ViewKey): ReactNode {
@@ -464,9 +457,7 @@ export function ModeratorLayout() {
               wordBreak: "break-word",
             }}
           >
-            {`Bot ${formatBuildLine(summary.botVersion, summary.botBranch, summary.botRevision, summary.botCommitTime)}`}
-            <br />
-            {`Web ${formatBuildLine(summary.webVersion, summary.webBranch, summary.webRevision, summary.webCommitTime)}`}
+            {`Version: ${unifiedVersion(summary.botVersion, summary.webVersion)}`}
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <NavLink to="/" style={{ textDecoration: "none" }}>

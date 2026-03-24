@@ -1,4 +1,5 @@
 import type {
+  AlertEntry,
   AuditEntry,
   BlockedTermEntry,
   BotModeOption,
@@ -316,6 +317,10 @@ type MassModerationRecentFollowersResponse = {
   }>;
 };
 
+type AlertsResponse = {
+  items: AlertEntry[];
+};
+
 export async function fetchDashboardSummary(
   signal?: AbortSignal,
 ): Promise<DashboardSummary> {
@@ -476,6 +481,48 @@ export async function fetchAuditLogs(
     detail: entry.detail,
     ago: entry.ago,
   }));
+}
+
+export async function fetchAlertSettings(
+  signal?: AbortSignal,
+): Promise<AlertEntry[]> {
+  const response = await fetch("/api/dashboard/alerts", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load alerts settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as AlertsResponse;
+  return Array.isArray(payload.items) ? payload.items : [];
+}
+
+export async function saveAlertSettings(
+  items: AlertEntry[],
+): Promise<AlertEntry[]> {
+  const response = await fetch("/api/dashboard/alerts", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      items,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to save alerts settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as AlertsResponse;
+  return Array.isArray(payload.items) ? payload.items : [];
 }
 
 export async function fetchDefaultKeywordSettings(

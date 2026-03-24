@@ -12,6 +12,7 @@ import {
   deleteMode as deleteDashboardMode,
   fetchBotControls,
   fetchAuditLogs,
+  fetchAlertSettings,
   fetchDefaultKeywordSettings,
   fetchModuleCatalog,
   fetchDashboardSummary,
@@ -25,6 +26,7 @@ import {
   fetchModes,
   fetchSpamFilters,
   saveBotMode,
+  saveAlertSettings,
   saveDefaultKeywordSetting,
   saveFollowersOnlyModuleSettings,
   saveGameModuleSettings,
@@ -173,6 +175,33 @@ const ModeratorContext = createContext<ModeratorContextValue | null>(null);
 const initialStreamTitle = "RIVALSSS | ROBLOX STREAM";
 const initialStreamGame = "ROBLOX";
 const auditRefreshIntervalMS = 5000;
+
+function mergeAlertSettings(
+  defaults: AlertEntry[],
+  saved: AlertEntry[],
+): AlertEntry[] {
+  const savedByID = new Map(
+    saved.map((entry) => [entry.id.trim().toLowerCase(), entry]),
+  );
+  const merged = defaults.map((entry) => {
+    const next = savedByID.get(entry.id.trim().toLowerCase());
+    if (next == null) {
+      return entry;
+    }
+    return { ...entry, ...next };
+  });
+
+  const known = new Set(merged.map((entry) => entry.id.trim().toLowerCase()));
+  for (const entry of saved) {
+    const key = entry.id.trim().toLowerCase();
+    if (key === "" || known.has(key)) {
+      continue;
+    }
+    merged.push(entry);
+  }
+
+  return merged;
+}
 
 function mergeSpamFilterMetadata(
   entry: SpamFilterEntry,
@@ -637,6 +666,14 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       })
       .catch(() => {
         setSpamFilters(initialSpamFilterEntries);
+      });
+
+    fetchAlertSettings(controller.signal)
+      .then((nextAlerts) => {
+        setAlerts(mergeAlertSettings(initialAlertEntries, nextAlerts));
+      })
+      .catch(() => {
+        setAlerts(initialAlertEntries);
       });
 
     refreshAuditEntries(controller.signal).catch(() => {
@@ -1656,33 +1693,60 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
   };
 
   const toggleAlert = (alertId: string) => {
-    setAlerts((current) =>
-      current.map((entry) =>
-        entry.id === alertId
-          ? {
-              ...entry,
-              enabled: !entry.enabled,
-              status: !entry.enabled ? "enabled" : "muted",
-            }
-          : entry,
-      ),
+    const previousAlerts = alerts;
+    const nextAlerts = alerts.map((entry) =>
+      entry.id === alertId
+        ? {
+            ...entry,
+            enabled: !entry.enabled,
+            status: !entry.enabled ? "enabled" : "muted",
+          }
+        : entry,
     );
+
+    setAlerts(nextAlerts);
+    void saveAlertSettings(nextAlerts)
+      .then((saved) => {
+        setAlerts(mergeAlertSettings(initialAlertEntries, saved));
+      })
+      .catch(() => {
+        setAlerts(previousAlerts);
+        setNotice("Could not save alerts right now.");
+      });
   };
 
   const updateAlertTemplate = (alertId: string, template: string) => {
-    setAlerts((current) =>
-      current.map((entry) =>
-        entry.id === alertId ? { ...entry, template } : entry,
-      ),
+    const previousAlerts = alerts;
+    const nextAlerts = alerts.map((entry) =>
+      entry.id === alertId ? { ...entry, template } : entry,
     );
+
+    setAlerts(nextAlerts);
+    void saveAlertSettings(nextAlerts)
+      .then((saved) => {
+        setAlerts(mergeAlertSettings(initialAlertEntries, saved));
+      })
+      .catch(() => {
+        setAlerts(previousAlerts);
+        setNotice("Could not save alerts right now.");
+      });
   };
 
   const updateAlert = (alertId: string, next: Partial<AlertEntry>) => {
-    setAlerts((current) =>
-      current.map((entry) =>
-        entry.id === alertId ? { ...entry, ...next } : entry,
-      ),
+    const previousAlerts = alerts;
+    const nextAlerts = alerts.map((entry) =>
+      entry.id === alertId ? { ...entry, ...next } : entry,
     );
+
+    setAlerts(nextAlerts);
+    void saveAlertSettings(nextAlerts)
+      .then((saved) => {
+        setAlerts(mergeAlertSettings(initialAlertEntries, saved));
+      })
+      .catch(() => {
+        setAlerts(previousAlerts);
+        setNotice("Could not save alerts right now.");
+      });
   };
 
   const toggleSpamFilter = async (filterId: string) => {

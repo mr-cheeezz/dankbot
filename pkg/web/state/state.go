@@ -49,6 +49,7 @@ type State struct {
 	PublicHomeSettings     *postgres.PublicHomeSettingsStore
 	SpamFilters            *postgres.SpamFilterStore
 	BlockedTerms           *postgres.BlockedTermStore
+	AlertSettings          *postgres.AlertSettingsStore
 	AuditLogs              *postgres.AuditLogStore
 	Sessions               *session.Store
 	EventSubSubscriptions  *postgres.EventSubSubscriptionStore
@@ -132,6 +133,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 	publicHomeSettingsStore := postgres.NewPublicHomeSettingsStore(postgresClient)
 	spamFilterStore := postgres.NewSpamFilterStore(postgresClient)
 	blockedTermStore := postgres.NewBlockedTermStore(postgresClient)
+	alertSettingsStore := postgres.NewAlertSettingsStore(postgresClient)
 	auditLogStore := postgres.NewAuditLogStore(postgresClient)
 	eventSubSubscriptionStore := postgres.NewEventSubSubscriptionStore(postgresClient)
 	eventSubActivityStore := postgres.NewEventSubActivityStore(postgresClient)
@@ -168,6 +170,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 		PublicHomeSettings:     publicHomeSettingsStore,
 		SpamFilters:            spamFilterStore,
 		BlockedTerms:           blockedTermStore,
+		AlertSettings:          alertSettingsStore,
 		AuditLogs:              auditLogStore,
 		Sessions:               session.NewStore(redisClient),
 		EventSubSubscriptions:  eventSubSubscriptionStore,

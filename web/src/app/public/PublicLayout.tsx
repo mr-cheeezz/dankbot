@@ -81,6 +81,32 @@ function formatBuildLine(
   return parts.join(" - ");
 }
 
+function unifiedReleaseMeta(summary: PublicSummary) {
+  const botVersion = summary.botVersion.trim();
+  const webVersion = summary.webVersion.trim();
+  const version =
+    botVersion !== "" && botVersion !== "dev"
+      ? botVersion
+      : webVersion !== ""
+        ? webVersion
+        : "dev";
+
+  const branch =
+    summary.botBranch.trim() !== ""
+      ? summary.botBranch.trim()
+      : summary.webBranch.trim();
+  const revision =
+    summary.botRevision.trim() !== ""
+      ? summary.botRevision.trim()
+      : summary.webRevision.trim();
+  const commitTime =
+    summary.botCommitTime.trim() !== ""
+      ? summary.botCommitTime.trim()
+      : summary.webCommitTime.trim();
+
+  return { version, branch, revision, commitTime };
+}
+
 export function PublicLayout() {
   const { session, loading } = useAuth();
   const [summary, setSummary] = useState<PublicSummary>(defaultPublicSummary);
@@ -106,6 +132,7 @@ export function PublicLayout() {
   }, []);
 
   const streamerLabel = formatStreamerTitle(summary.channelName || summary.channelLogin || "streamer");
+  const release = unifiedReleaseMeta(summary);
 
   const goToUserProfile = () => {
     const query = searchInput.trim().replace(/^@+/, "");
@@ -293,9 +320,7 @@ export function PublicLayout() {
               Mr_Cheeezz
             </Link>
             <br />
-            {`Bot ${formatBuildLine(summary.botVersion, summary.botBranch, summary.botRevision, summary.botCommitTime)}`}
-            <br />
-            {`Web ${formatBuildLine(summary.webVersion, summary.webBranch, summary.webRevision, summary.webCommitTime)}`}
+            {`Version ${formatBuildLine(release.version, release.branch, release.revision, release.commitTime)}`}
           </Typography>
 
           <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>

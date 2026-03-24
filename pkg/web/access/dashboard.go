@@ -163,26 +163,31 @@ func LookupTwitchUserByLogin(ctx context.Context, appState *state.State, login s
 		return nil, nil
 	}
 
-	client, err := appHelixClient(ctx, appState)
+	clients, err := helixClientCandidates(ctx, appState)
 	if err != nil {
 		return nil, err
 	}
-	if client == nil {
-		client, err = dashboardHelixClient(ctx, appState)
-	}
-	if err != nil || client == nil {
-		return nil, err
-	}
-
-	users, err := client.GetUsersByLogins(ctx, []string{login})
-	if err != nil {
-		return nil, err
-	}
-	if len(users) == 0 {
+	if len(clients) == 0 {
 		return nil, nil
 	}
 
-	return &users[0], nil
+	var lastErr error
+	for _, client := range clients {
+		users, lookupErr := client.GetUsersByLogins(ctx, []string{login})
+		if lookupErr != nil {
+			lastErr = lookupErr
+			continue
+		}
+		if len(users) == 0 {
+			continue
+		}
+		return &users[0], nil
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+
+	return nil, nil
 }
 
 func SearchTwitchUsers(ctx context.Context, appState *state.State, query string, limit int) ([]helix.User, error) {
@@ -191,22 +196,38 @@ func SearchTwitchUsers(ctx context.Context, appState *state.State, query string,
 		return nil, nil
 	}
 
-	client, err := appHelixClient(ctx, appState)
+	clients, err := helixClientCandidates(ctx, appState)
 	if err != nil {
 		return nil, err
 	}
-	if client == nil {
-		client, err = dashboardHelixClient(ctx, appState)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if client == nil {
+	if len(clients) == 0 {
 		return nil, nil
 	}
 
 	if limit <= 0 {
 		limit = 5
+	}
+
+	var lastErr error
+	for _, client := range clients {
+		out, searchErr := searchTwitchUsersWithClient(ctx, client, query, limit)
+		if searchErr != nil {
+			lastErr = searchErr
+			continue
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return []helix.User{}, nil
+}
+
+func searchTwitchUsersWithClient(ctx context.Context, client *helix.Client, query string, limit int) ([]helix.User, error) {
+	if client == nil || strings.TrimSpace(query) == "" {
+		return nil, nil
 	}
 
 	out := make([]helix.User, 0, limit)
@@ -278,14 +299,13 @@ func SearchTwitchUsers(ctx context.Context, appState *state.State, query string,
 
 		if enriched, ok := enrichedByID[id]; ok {
 			out = append(out, enriched)
-			continue
+		} else {
+			out = append(out, helix.User{
+				ID:          id,
+				Login:       strings.TrimSpace(item.BroadcasterLogin),
+				DisplayName: strings.TrimSpace(item.DisplayName),
+			})
 		}
-
-		out = append(out, helix.User{
-			ID:          id,
-			Login:       strings.TrimSpace(item.BroadcasterLogin),
-			DisplayName: strings.TrimSpace(item.DisplayName),
-		})
 
 		if len(out) >= limit {
 			break
@@ -293,6 +313,31 @@ func SearchTwitchUsers(ctx context.Context, appState *state.State, query string,
 	}
 
 	return out, nil
+}
+
+func helixClientCandidates(ctx context.Context, appState *state.State) ([]*helix.Client, error) {
+	clients := make([]*helix.Client, 0, 2)
+
+	appClient, appErr := appHelixClient(ctx, appState)
+	if appErr == nil && appClient != nil {
+		clients = append(clients, appClient)
+	}
+
+	dashboardClient, dashboardErr := dashboardHelixClient(ctx, appState)
+	if dashboardErr == nil && dashboardClient != nil {
+		clients = append(clients, dashboardClient)
+	}
+
+	if len(clients) > 0 {
+		return clients, nil
+	}
+	if appErr != nil {
+		return nil, appErr
+	}
+	if dashboardErr != nil {
+		return nil, dashboardErr
+	}
+	return nil, nil
 }
 
 func isChannelModerator(ctx context.Context, appState *state.State, streamerID, userID string) (bool, error) {

@@ -276,7 +276,7 @@ type PublicUserTabHistoryResponse = {
 };
 
 export const defaultPublicSummary: PublicSummary = {
-  channelName: "mr_cheeezz",
+  channelName: "Loading...",
   channelLogin: "",
   channelAvatarURL: "",
   streamLive: false,

@@ -19,6 +19,7 @@ const predictionProgressAlertThreshold = 50000
 type Module struct {
 	redis      *redispkg.Client
 	stateStore *postgres.BotStateStore
+	settings   *postgres.AlertSettingsStore
 
 	mu         sync.RWMutex
 	channel    string
@@ -26,10 +27,11 @@ type Module struct {
 	say        func(channel, message string) error
 }
 
-func New(redisClient *redispkg.Client, stateStore *postgres.BotStateStore, streamerID string) *Module {
+func New(redisClient *redispkg.Client, stateStore *postgres.BotStateStore, settingsStore *postgres.AlertSettingsStore, streamerID string) *Module {
 	return &Module{
 		redis:      redisClient,
 		stateStore: stateStore,
+		settings:   settingsStore,
 		streamerID: strings.TrimSpace(streamerID),
 	}
 }
@@ -144,31 +146,90 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode ad break event: %w", err)
 		}
-		return fmt.Sprintf("Heads up, an ad break just started for %d seconds.", event.DurationSeconds), nil
+		return m.renderFromAlertEntry(
+			"ad-break-alerts",
+			map[string]string{
+				"length_seconds": fmt.Sprintf("%d", event.DurationSeconds),
+			},
+			fmt.Sprintf("Heads up, an ad break just started for %d seconds.", event.DurationSeconds),
+			nil,
+		)
 	case "channel.subscribe":
 		var event eventsub.SubscriptionEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode subscription event: %w", err)
 		}
-		return fmt.Sprintf("Thank you %s for subscribing at %s!", displayName(event.UserName, event.UserLogin), humanTier(event.Tier)), nil
+		if event.IsGift {
+			return "", nil
+		}
+		alertID := subscriptionAlertIDFromTier(event.Tier)
+		return m.renderFromAlertEntry(
+			alertID,
+			map[string]string{
+				"user":   displayName(event.UserName, event.UserLogin),
+				"months": "1",
+			},
+			fmt.Sprintf("Thank you %s for subscribing at %s!", displayName(event.UserName, event.UserLogin), humanTier(event.Tier)),
+			nil,
+		)
 	case "channel.subscription.gift":
 		var event eventsub.SubscriptionGiftEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode subscription gift event: %w", err)
 		}
+		total := max(event.Total, 1)
+		alertID := giftedAlertIDFromTier(event.Tier, total > 1)
+		userName := displayName(event.UserName, event.UserLogin)
 		if event.IsAnonymous {
-			return fmt.Sprintf("An anonymous gifter just gifted %d subs at %s!", max(event.Total, 1), humanTier(event.Tier)), nil
+			userName = "Anonymous"
 		}
-		return fmt.Sprintf("%s just gifted %d subs at %s!", displayName(event.UserName, event.UserLogin), max(event.Total, 1), humanTier(event.Tier)), nil
+		defaultMessage := fmt.Sprintf("%s just gifted %d subs at %s!", userName, total, humanTier(event.Tier))
+		return m.renderFromAlertEntry(
+			alertID,
+			map[string]string{
+				"user":      userName,
+				"recipient": "",
+				"amount":    fmt.Sprintf("%d", total),
+			},
+			defaultMessage,
+			nil,
+		)
 	case "channel.cheer":
 		var event eventsub.CheerEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode cheer event: %w", err)
 		}
+		userName := displayName(event.UserName, event.UserLogin)
 		if event.IsAnonymous {
-			return fmt.Sprintf("Someone just cheered %d bits!", event.Bits), nil
+			userName = "Someone"
 		}
-		return fmt.Sprintf("Thank you %s for cheering %d bits!", displayName(event.UserName, event.UserLogin), event.Bits), nil
+		minimum := 0
+		if value := m.alertMinimum("bits-alerts"); value != nil {
+			minimum = *value
+		}
+		if minimum > 0 && event.Bits < minimum {
+			return "", nil
+		}
+		if event.IsAnonymous {
+			return m.renderFromAlertEntry(
+				"bits-alerts",
+				map[string]string{
+					"user": userName,
+					"bits": fmt.Sprintf("%d", event.Bits),
+				},
+				fmt.Sprintf("Someone just cheered %d bits!", event.Bits),
+				nil,
+			)
+		}
+		return m.renderFromAlertEntry(
+			"bits-alerts",
+			map[string]string{
+				"user": userName,
+				"bits": fmt.Sprintf("%d", event.Bits),
+			},
+			fmt.Sprintf("Thank you %s for cheering %d bits!", displayName(event.UserName, event.UserLogin), event.Bits),
+			nil,
+		)
 	case "channel.channel_points_custom_reward_redemption.add":
 		// Do not emit global chat alerts for every redemption.
 		// Redemptions are still persisted through EventSub activity, and
@@ -179,42 +240,167 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode poll begin event: %w", err)
 		}
-		return renderPollStart(event), nil
+		defaultMessage := renderPollStart(event)
+		return m.renderFromAlertEntry(
+			"poll-created",
+			map[string]string{
+				"creator": displayName(event.BroadcasterUserName, event.BroadcasterUserLogin),
+				"title":   strings.TrimSpace(event.Title),
+				"options": formatPollOptions(event.Choices),
+			},
+			defaultMessage,
+			nil,
+		)
 	case "channel.poll.progress":
-		return "", nil
+		var event eventsub.PollEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			return "", fmt.Errorf("decode poll progress event: %w", err)
+		}
+		leading := pollWinningChoice(event.Choices)
+		defaultMessage := ""
+		if leading != "" {
+			defaultMessage = fmt.Sprintf("Poll update: %s | %s is currently ahead.", strings.TrimSpace(event.Title), leading)
+		}
+		return m.renderFromAlertEntry(
+			"poll-progress",
+			map[string]string{
+				"title":          strings.TrimSpace(event.Title),
+				"leading_option": leading,
+			},
+			defaultMessage,
+			func(entry postgres.AlertSettingEntry) bool {
+				return entry.Enabled
+			},
+		)
 	case "channel.poll.end":
 		var event eventsub.PollEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode poll end event: %w", err)
 		}
-		return renderPollEnd(event), nil
+		defaultMessage := renderPollEnd(event)
+		winner := pollWinningChoice(event.Choices)
+		breakdown := formatPollChannelPointBreakdown(event)
+		return m.renderFromAlertEntry(
+			"poll-ended",
+			map[string]string{
+				"winner":                   winner,
+				"channel_points_breakdown": breakdown,
+			},
+			defaultMessage,
+			nil,
+		)
 	case "channel.prediction.begin":
 		var event eventsub.PredictionEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode prediction begin event: %w", err)
 		}
-		return renderPredictionStart(event), nil
+		defaultMessage := renderPredictionStart(event)
+		return m.renderFromAlertEntry(
+			"prediction-created",
+			map[string]string{
+				"creator": displayName(event.BroadcasterUserName, event.BroadcasterUserLogin),
+				"title":   strings.TrimSpace(event.Title),
+			},
+			defaultMessage,
+			nil,
+		)
 	case "channel.prediction.progress":
 		var event eventsub.PredictionEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode prediction progress event: %w", err)
 		}
-		return renderPredictionProgress(event), nil
+		outcome, predictor := topPredictionPredictor(event.Outcomes)
+		if outcome == nil || predictor == nil {
+			return "", nil
+		}
+		threshold := predictionProgressAlertThreshold
+		if value := m.alertMinimum("prediction-progress"); value != nil && *value > 0 {
+			threshold = *value
+		}
+		if predictor.ChannelPointsUsed < threshold {
+			return "", nil
+		}
+		defaultMessage := renderPredictionProgress(event)
+		return m.renderFromAlertEntry(
+			"prediction-progress",
+			map[string]string{
+				"user":   displayName(predictor.UserName, predictor.UserLogin),
+				"points": fmt.Sprintf("%d", predictor.ChannelPointsUsed),
+				"option": strings.TrimSpace(outcome.Title),
+			},
+			defaultMessage,
+			func(entry postgres.AlertSettingEntry) bool {
+				return entry.Enabled
+			},
+		)
 	case "channel.prediction.lock":
 		var event eventsub.PredictionEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode prediction lock event: %w", err)
 		}
-		return renderPredictionLocked(event), nil
+		leader, _ := topPredictionOutcomes(event.Outcomes)
+		var (
+			mostOption string
+			mostPoints string
+			mostUser   string
+			mostBet    string
+		)
+		if leader != nil {
+			mostOption = strings.TrimSpace(leader.Title)
+			mostPoints = fmt.Sprintf("%d", leader.ChannelPoints)
+			if predictor := topPredictionUser(*leader); predictor != nil {
+				mostUser = displayName(predictor.UserName, predictor.UserLogin)
+				mostBet = fmt.Sprintf("%d", predictor.ChannelPointsUsed)
+			}
+		}
+		defaultMessage := renderPredictionLocked(event)
+		return m.renderFromAlertEntry(
+			"prediction-locked",
+			map[string]string{
+				"option_most": mostOption,
+				"points_most": mostPoints,
+				"user_most":   mostUser,
+				"points":      mostBet,
+			},
+			defaultMessage,
+			nil,
+		)
 	case "channel.prediction.end":
 		var event eventsub.PredictionEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
 			return "", fmt.Errorf("decode prediction end event: %w", err)
 		}
 		if strings.EqualFold(strings.TrimSpace(event.Status), "canceled") {
-			return fmt.Sprintf("The prediction was just canceled by %s.", displayName(event.BroadcasterUserName, event.BroadcasterUserLogin)), nil
+			return m.renderFromAlertEntry(
+				"prediction-cancelled",
+				map[string]string{
+					"user": displayName(event.BroadcasterUserName, event.BroadcasterUserLogin),
+				},
+				fmt.Sprintf("The prediction was just canceled by %s.", displayName(event.BroadcasterUserName, event.BroadcasterUserLogin)),
+				nil,
+			)
 		}
-		return renderPredictionEnd(event), nil
+		winner := winningPredictionOutcome(event)
+		totalPoints := 0
+		topUsers := ""
+		winnerTitle := ""
+		if winner != nil {
+			totalPoints = winner.ChannelPoints
+			topUsers = topPredictionUsersSummary(*winner, 3)
+			winnerTitle = strings.TrimSpace(winner.Title)
+		}
+		defaultMessage := renderPredictionEnd(event)
+		return m.renderFromAlertEntry(
+			"prediction-ended",
+			map[string]string{
+				"title":        strings.TrimSpace(event.Title),
+				"winner":       winnerTitle,
+				"total_points": fmt.Sprintf("%d", totalPoints),
+				"top_3_users":  topUsers,
+			},
+			defaultMessage,
+			nil,
+		)
 	case "channel.hype_train.begin":
 		var event eventsub.HypeTrainEvent
 		if err := json.Unmarshal(raw, &event); err != nil {
@@ -238,6 +424,105 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 		return fmt.Sprintf("The hype train ended at level %d.", levelOrOne(event.Level)), nil
 	default:
 		return "", nil
+	}
+}
+
+func (m *Module) renderFromAlertEntry(alertID string, values map[string]string, fallback string, enabledRule func(postgres.AlertSettingEntry) bool) (string, error) {
+	entry, err := m.alertEntry(alertID)
+	if err != nil {
+		return "", err
+	}
+	if entry == nil {
+		return fallback, nil
+	}
+
+	enabled := entry.Enabled
+	if enabledRule != nil {
+		enabled = enabledRule(*entry)
+	}
+	if !enabled {
+		return "", nil
+	}
+
+	template := strings.TrimSpace(entry.Template)
+	if template == "" {
+		template = fallback
+	}
+	if strings.TrimSpace(template) == "" {
+		return "", nil
+	}
+
+	return applyTemplate(template, values), nil
+}
+
+func (m *Module) alertEntry(alertID string) (*postgres.AlertSettingEntry, error) {
+	if m.settings == nil {
+		return nil, nil
+	}
+	settings, err := m.settings.Get(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil || len(settings.Entries) == 0 {
+		return nil, nil
+	}
+	target := strings.TrimSpace(strings.ToLower(alertID))
+	for _, entry := range settings.Entries {
+		if strings.TrimSpace(strings.ToLower(entry.ID)) == target {
+			next := entry
+			return &next, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *Module) alertMinimum(alertID string) *int {
+	entry, err := m.alertEntry(alertID)
+	if err != nil || entry == nil {
+		return nil
+	}
+	return entry.MinimumValue
+}
+
+func applyTemplate(template string, values map[string]string) string {
+	message := template
+	for key, value := range values {
+		message = strings.ReplaceAll(message, "{"+strings.TrimSpace(key)+"}", strings.TrimSpace(value))
+	}
+	return strings.TrimSpace(message)
+}
+
+func subscriptionAlertIDFromTier(tier string) string {
+	switch strings.TrimSpace(strings.ToLower(tier)) {
+	case "2000":
+		return "sub-tier-2"
+	case "3000":
+		return "sub-tier-3"
+	case "prime":
+		return "sub-prime"
+	default:
+		return "sub-tier-1"
+	}
+}
+
+func giftedAlertIDFromTier(tier string, isMass bool) string {
+	base := "gift-tier-1"
+	if isMass {
+		base = "mass-gift-tier-1"
+	}
+	switch strings.TrimSpace(strings.ToLower(tier)) {
+	case "2000":
+		if isMass {
+			return "mass-gift-tier-2"
+		}
+		return "gift-tier-2"
+	case "3000":
+		if isMass {
+			return "mass-gift-tier-3"
+		}
+		return "gift-tier-3"
+	default:
+		return base
 	}
 }
 

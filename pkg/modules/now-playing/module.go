@@ -204,10 +204,10 @@ func (m *Module) addSong(ctx modules.CommandContext, input string) (string, erro
 	m.logAction(ctx, commandPrefix(ctx)+"song add", buildAddSongAuditDetail(title, input))
 
 	if title != "" {
-		return fmt.Sprintf("Added %s to the queue.", title), nil
+		return fmt.Sprintf("Successfully added %s to the queue.", queueTrackLabel(title)), nil
 	}
 
-	return "Added the requested song to the queue.", nil
+	return "Successfully added the requested song to the queue.", nil
 }
 
 func (m *Module) skipSong(ctx modules.CommandContext) (string, error) {
@@ -532,6 +532,26 @@ func formatTrack(track spotifyapi.Track) string {
 	}
 
 	return fmt.Sprintf("%s by %s", title, strings.Join(artistNames, ", "))
+}
+
+func queueTrackLabel(formattedTrack string) string {
+	track := strings.TrimSpace(formattedTrack)
+	if track == "" {
+		return "the requested song"
+	}
+
+	parts := strings.SplitN(track, " by ", 2)
+	if len(parts) != 2 {
+		return track
+	}
+
+	song := strings.TrimSpace(parts[0])
+	artist := strings.TrimSpace(parts[1])
+	if song == "" || artist == "" {
+		return track
+	}
+
+	return fmt.Sprintf("%s - %s", song, artist)
 }
 
 func cleanSpotifyTrackTitle(title string) string {

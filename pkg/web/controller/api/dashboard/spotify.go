@@ -420,7 +420,7 @@ func resolveDashboardTrackURI(ctx context.Context, client *spotifyapi.Client, in
 		return "", "", fmt.Errorf("could not find that track on spotify")
 	}
 
-	return strings.TrimSpace(tracks[0].URI), strings.TrimSpace(tracks[0].Name), nil
+	return strings.TrimSpace(tracks[0].URI), formatDashboardTrackDisplay(tracks[0]), nil
 }
 
 func (h handler) announceDashboardSpotifyQueueAdd(ctx context.Context, userSession *session.UserSession, requestedTrackName, resolvedTrackName string) {
@@ -453,7 +453,7 @@ func (h handler) announceDashboardSpotifyQueueAdd(ctx context.Context, userSessi
 		trackName = "a song"
 	}
 
-	message := fmt.Sprintf("[%s] added [%s] to queue", actorName, trackName)
+	message := fmt.Sprintf("%s added %s to the queue.", actorName, trackName)
 	if len(message) > 450 {
 		message = message[:450]
 	}
@@ -501,4 +501,25 @@ func spotifyTrackURI(input string) (string, bool) {
 	}
 
 	return "", false
+}
+
+func formatDashboardTrackDisplay(track spotifyapi.Track) string {
+	title := strings.TrimSpace(track.Name)
+	if title == "" {
+		title = "a song"
+	}
+
+	artists := make([]string, 0, len(track.Artists))
+	for _, artist := range track.Artists {
+		name := strings.TrimSpace(artist.Name)
+		if name == "" {
+			continue
+		}
+		artists = append(artists, name)
+	}
+	if len(artists) == 0 {
+		return title
+	}
+
+	return fmt.Sprintf("%s - %s", title, strings.Join(artists, ", "))
 }

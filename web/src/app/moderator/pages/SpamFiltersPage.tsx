@@ -1926,7 +1926,7 @@ export function SpamFiltersPage() {
                         <ListFieldEditor
                           title="Allowed clip channels"
                           helperText="These channels are able to have clips linked, even if you block clips from other channels."
-                          placeholder="tibb12"
+                          placeholder="channel_login"
                           values={
                             selectedSpamFilter.linkSettings.allowedClipChannels
                           }
@@ -1950,7 +1950,7 @@ export function SpamFiltersPage() {
                         <ListFieldEditor
                           title="Blocked clip channels"
                           helperText="These channels are never able to have clips linked, even if allowed elsewhere."
-                          placeholder="junklaxr"
+                          placeholder="channel_login"
                           values={
                             selectedSpamFilter.linkSettings.blockedClipChannels
                           }
