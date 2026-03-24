@@ -2,6 +2,8 @@ package alerts
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -15,6 +17,7 @@ import (
 )
 
 const predictionProgressAlertThreshold = 50000
+const alertDuplicateWindow = 45 * time.Second
 
 type Module struct {
 	redis      *redispkg.Client
@@ -25,6 +28,7 @@ type Module struct {
 	channel    string
 	streamerID string
 	say        func(channel, message string) error
+	dedupe     map[string]time.Time
 }
 
 func New(redisClient *redispkg.Client, stateStore *postgres.BotStateStore, settingsStore *postgres.AlertSettingsStore, streamerID string) *Module {
@@ -33,6 +37,7 @@ func New(redisClient *redispkg.Client, stateStore *postgres.BotStateStore, setti
 		stateStore: stateStore,
 		settings:   settingsStore,
 		streamerID: strings.TrimSpace(streamerID),
+		dedupe:     map[string]time.Time{},
 	}
 }
 
@@ -115,6 +120,9 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 	if !m.matchesStreamer(event) {
 		return nil
 	}
+	if m.isDuplicateAlertEvent(event) {
+		return nil
+	}
 
 	message, err := m.renderTwitchAlert(event.Type, event.Event)
 	if err != nil {
@@ -125,6 +133,45 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 	}
 
 	return say(channel, message)
+}
+
+func (m *Module) isDuplicateAlertEvent(event eventsub.PublishedEvent) bool {
+	key := alertEventDedupeKey(event)
+	if key == "" {
+		return false
+	}
+
+	now := time.Now().UTC()
+	cutoff := now.Add(-alertDuplicateWindow)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for staleKey, seenAt := range m.dedupe {
+		if seenAt.Before(cutoff) {
+			delete(m.dedupe, staleKey)
+		}
+	}
+
+	if seenAt, ok := m.dedupe[key]; ok && now.Sub(seenAt) <= alertDuplicateWindow {
+		return true
+	}
+	m.dedupe[key] = now
+	return false
+}
+
+func alertEventDedupeKey(event eventsub.PublishedEvent) string {
+	hasher := sha1.New()
+	hasher.Write([]byte(strings.TrimSpace(event.Source)))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(strings.TrimSpace(event.Type)))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(strings.TrimSpace(event.BroadcasterID)))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(strings.TrimSpace(event.SubscriptionID)))
+	hasher.Write([]byte{0})
+	hasher.Write(event.Event)
+	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (string, error) {

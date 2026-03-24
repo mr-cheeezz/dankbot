@@ -3,6 +3,7 @@ package discordbot
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -239,25 +240,18 @@ func (m *Module) gamePing(ctx modules.CommandContext) (string, error) {
 	joinLabel := ""
 
 	if streamGameIsRoblox {
-		if m.state == nil {
-			return "Roblox game ping requires bot mode state storage.", nil
-		}
-		state, stateErr := m.state.Get(context.Background())
-		if stateErr != nil {
-			return "", stateErr
-		}
-		if state == nil ||
-			!strings.EqualFold(strings.TrimSpace(state.CurrentModeKey), "link") ||
-			!strings.HasPrefix(strings.TrimSpace(state.CurrentModeParam), "http") {
-			return "Roblox game ping requires active link mode with a private server link.", nil
-		}
 		if settings.GamePing.IncludeJoinLink {
-			joinURL = strings.TrimSpace(state.CurrentModeParam)
-			joinLabel = "Join Roblox Server"
+			if link := m.robloxLinkModeURL(context.Background()); link != "" {
+				joinURL = link
+				joinLabel = "Join Roblox Server"
+			} else {
+				joinURL = robloxGameDiscoverURL(gameName)
+				joinLabel = "Open Roblox Game"
+			}
 		}
 	} else if settings.GamePing.IncludeJoinLink {
 		storeURL := ""
-		storeURL, err = m.resolveSteamURL(context.Background(), currentGame)
+		storeURL, err = m.resolveSteamURL(context.Background(), gameName)
 		if err != nil {
 			storeURL = ""
 		}
@@ -313,6 +307,36 @@ func (m *Module) gamePing(ctx modules.CommandContext) (string, error) {
 	}
 
 	return "Sent Discord game ping for " + strconv.Quote(gameName) + ".", nil
+}
+
+func (m *Module) robloxLinkModeURL(ctx context.Context) string {
+	if m.state == nil {
+		return ""
+	}
+
+	state, err := m.state.Get(ctx)
+	if err != nil || state == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(state.CurrentModeKey), "link") {
+		return ""
+	}
+
+	link := strings.TrimSpace(state.CurrentModeParam)
+	if strings.HasPrefix(strings.ToLower(link), "http://") || strings.HasPrefix(strings.ToLower(link), "https://") {
+		return link
+	}
+
+	return ""
+}
+
+func robloxGameDiscoverURL(gameName string) string {
+	gameName = strings.TrimSpace(gameName)
+	if gameName == "" {
+		return "https://www.roblox.com/discover"
+	}
+
+	return "https://www.roblox.com/discover/?Keyword=" + url.QueryEscape(gameName)
 }
 
 func (m *Module) allowGamePingRoleMention() bool {

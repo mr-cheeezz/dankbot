@@ -139,7 +139,7 @@ func (s *AlertSettingsStore) Update(ctx context.Context, entries []AlertSettingE
 			Behavior:      strings.TrimSpace(entry.Behavior),
 			Status:        strings.TrimSpace(entry.Status),
 			Enabled:       entry.Enabled,
-			Template:      strings.TrimSpace(entry.Template),
+			Template:      entry.Template,
 			Scope:         strings.TrimSpace(entry.Scope),
 			Note:          strings.TrimSpace(entry.Note),
 			MinimumLabel:  strings.TrimSpace(entry.MinimumLabel),
