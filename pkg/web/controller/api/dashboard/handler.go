@@ -11,6 +11,7 @@ import (
 	"github.com/mr-cheeezz/dankbot/pkg/botstatus"
 	"github.com/mr-cheeezz/dankbot/pkg/buildmeta"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
+	"github.com/mr-cheeezz/dankbot/pkg/release"
 	"github.com/mr-cheeezz/dankbot/pkg/twitch/helix"
 	webaccess "github.com/mr-cheeezz/dankbot/pkg/web/access"
 	"github.com/mr-cheeezz/dankbot/pkg/web/session"
@@ -197,7 +198,7 @@ func (h handler) buildSummary(ctx context.Context) summaryResponse {
 			},
 		},
 	}
-	webInfo := buildmeta.Detect("")
+	webInfo := buildmeta.Detect(release.Current)
 	summary.WebVersion = strings.TrimSpace(webInfo.Version)
 	summary.WebBranch = strings.TrimSpace(webInfo.Branch)
 	summary.WebRevision = strings.TrimSpace(webInfo.Revision)

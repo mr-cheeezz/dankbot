@@ -54,6 +54,13 @@ type spotifyPlaybackRequest struct {
 	Action string `json:"action"`
 }
 
+type dashboardChatSender struct {
+	client        *helix.Client
+	accountUserID string
+	broadcasterID string
+	label         string
+}
+
 func (h handler) spotifyStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w, http.MethodGet)
@@ -400,6 +407,9 @@ func spotifyTrackToResponse(track spotifyapi.Track) spotifyTrackResponse {
 func resolveDashboardTrackURI(ctx context.Context, client *spotifyapi.Client, input, explicitURI string) (string, string, error) {
 	explicitURI = strings.TrimSpace(explicitURI)
 	if explicitURI != "" {
+		if trackName, err := resolveDashboardTrackTitleFromURI(ctx, client, explicitURI); err == nil {
+			return explicitURI, trackName, nil
+		}
 		return explicitURI, "", nil
 	}
 
@@ -409,6 +419,9 @@ func resolveDashboardTrackURI(ctx context.Context, client *spotifyapi.Client, in
 	}
 
 	if uri, ok := spotifyTrackURI(input); ok {
+		if trackName, err := resolveDashboardTrackTitleFromURI(ctx, client, uri); err == nil {
+			return uri, trackName, nil
+		}
 		return uri, "", nil
 	}
 
@@ -425,15 +438,6 @@ func resolveDashboardTrackURI(ctx context.Context, client *spotifyapi.Client, in
 
 func (h handler) announceDashboardSpotifyQueueAdd(ctx context.Context, userSession *session.UserSession, requestedTrackName, resolvedTrackName string) {
 	if userSession == nil {
-		return
-	}
-
-	client, botAccount, broadcasterID, err := h.dashboardBotModerationClient(ctx)
-	if err != nil || client == nil || botAccount == nil {
-		return
-	}
-
-	if missing := missingScopes(botAccount.Scopes, "user:write:chat"); len(missing) > 0 {
 		return
 	}
 
@@ -458,17 +462,28 @@ func (h handler) announceDashboardSpotifyQueueAdd(ctx context.Context, userSessi
 		message = message[:450]
 	}
 
-	result, err := client.SendChatMessage(ctx, helix.SendChatMessageRequest{
-		BroadcasterID: strings.TrimSpace(broadcasterID),
-		SenderID:      strings.TrimSpace(botAccount.TwitchUserID),
-		Message:       message,
-	})
-	if err != nil {
-		fmt.Printf("spotify queue chat announce failed: %v\n", err)
+	senders, err := h.dashboardSpotifyChatSenders(ctx)
+	if err != nil || len(senders) == 0 {
+		fmt.Printf("spotify queue chat announce skipped: no eligible sender (%v)\n", err)
 		return
 	}
-	if result != nil && !result.IsSent && result.DropReason != nil {
-		fmt.Printf("spotify queue chat announce dropped: %s\n", strings.TrimSpace(result.DropReason.Message))
+
+	for _, sender := range senders {
+		result, sendErr := sender.client.SendChatMessage(ctx, helix.SendChatMessageRequest{
+			BroadcasterID: strings.TrimSpace(sender.broadcasterID),
+			SenderID:      strings.TrimSpace(sender.accountUserID),
+			Message:       message,
+		})
+		if sendErr != nil {
+			fmt.Printf("spotify queue chat announce failed via %s: %v\n", sender.label, sendErr)
+			continue
+		}
+		if result != nil && !result.IsSent && result.DropReason != nil {
+			fmt.Printf("spotify queue chat announce dropped via %s: %s\n", sender.label, strings.TrimSpace(result.DropReason.Message))
+			continue
+		}
+
+		return
 	}
 }
 
@@ -522,4 +537,91 @@ func formatDashboardTrackDisplay(track spotifyapi.Track) string {
 	}
 
 	return fmt.Sprintf("%s - %s", title, strings.Join(artists, ", "))
+}
+
+func resolveDashboardTrackTitleFromURI(ctx context.Context, client *spotifyapi.Client, uri string) (string, error) {
+	trackID, ok := spotifyTrackIDFromURI(uri)
+	if !ok {
+		return "", fmt.Errorf("spotify track id not found")
+	}
+
+	track, err := client.GetTrack(ctx, trackID)
+	if err != nil {
+		return "", err
+	}
+	if track == nil {
+		return "", fmt.Errorf("spotify track lookup returned no data")
+	}
+
+	return formatDashboardTrackDisplay(*track), nil
+}
+
+func spotifyTrackIDFromURI(uri string) (string, bool) {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return "", false
+	}
+
+	lower := strings.ToLower(uri)
+	if !strings.HasPrefix(lower, "spotify:track:") {
+		return "", false
+	}
+
+	parts := strings.SplitN(uri, ":", 3)
+	if len(parts) != 3 {
+		return "", false
+	}
+
+	id := strings.TrimSpace(parts[2])
+	if id == "" {
+		return "", false
+	}
+
+	return id, true
+}
+
+func (h handler) dashboardSpotifyChatSenders(ctx context.Context) ([]dashboardChatSender, error) {
+	if h.appState == nil || h.appState.Config == nil || h.appState.TwitchAccounts == nil {
+		return nil, fmt.Errorf("twitch accounts are not configured")
+	}
+
+	broadcasterID := strings.TrimSpace(h.appState.Config.Main.StreamerID)
+	streamerAccount, _ := h.appState.TwitchAccounts.Get(ctx, postgres.TwitchAccountKindStreamer)
+	if streamerAccount != nil {
+		if resolved := strings.TrimSpace(streamerAccount.TwitchUserID); resolved != "" {
+			broadcasterID = resolved
+		}
+	}
+	if broadcasterID == "" {
+		return nil, fmt.Errorf("streamer id is not configured")
+	}
+
+	senders := make([]dashboardChatSender, 0, 2)
+	appendAccount := func(account *postgres.TwitchAccount, label string) {
+		if account == nil {
+			return
+		}
+		if missing := missingScopes(account.Scopes, "user:write:chat"); len(missing) > 0 {
+			return
+		}
+
+		accessToken := strings.TrimSpace(account.AccessToken)
+		accountUserID := strings.TrimSpace(account.TwitchUserID)
+		if accessToken == "" || accountUserID == "" {
+			return
+		}
+
+		senders = append(senders, dashboardChatSender{
+			client:        helix.NewClient(h.appState.Config.Twitch.ClientID, accessToken),
+			accountUserID: accountUserID,
+			broadcasterID: broadcasterID,
+			label:         label,
+		})
+	}
+
+	botAccount, _ := h.appState.TwitchAccounts.Get(ctx, postgres.TwitchAccountKindBot)
+	appendAccount(botAccount, "bot")
+	appendAccount(streamerAccount, "streamer")
+
+	return senders, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/mr-cheeezz/dankbot/pkg/buildmeta"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 	"github.com/mr-cheeezz/dankbot/pkg/redis"
+	"github.com/mr-cheeezz/dankbot/pkg/release"
 	robloxapi "github.com/mr-cheeezz/dankbot/pkg/roblox/api"
 	spotifyapi "github.com/mr-cheeezz/dankbot/pkg/spotify/api"
 	steamapi "github.com/mr-cheeezz/dankbot/pkg/steam/api"
@@ -110,7 +111,7 @@ func (h handler) buildSummary(ctx context.Context) summaryResponse {
 		CurrentModeKey:   "join",
 		CurrentModeTitle: "join",
 	}
-	webInfo := buildmeta.Detect("")
+	webInfo := buildmeta.Detect(release.Current)
 	summary.WebVersion = strings.TrimSpace(webInfo.Version)
 	summary.WebBranch = strings.TrimSpace(webInfo.Branch)
 	summary.WebRevision = strings.TrimSpace(webInfo.Revision)

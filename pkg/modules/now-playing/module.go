@@ -471,6 +471,9 @@ func (m *Module) output() (string, func(channel, message string) error, func(con
 
 func resolveTrackURI(ctx context.Context, client *spotifyapi.Client, input string) (string, string, error) {
 	if uri, ok := spotifyTrackURI(input); ok {
+		if trackTitle, err := resolveTrackTitleFromURI(ctx, client, uri); err == nil {
+			return uri, trackTitle, nil
+		}
 		return uri, "", nil
 	}
 
@@ -483,6 +486,23 @@ func resolveTrackURI(ctx context.Context, client *spotifyapi.Client, input strin
 	}
 
 	return tracks[0].URI, formatTrack(tracks[0]), nil
+}
+
+func resolveTrackTitleFromURI(ctx context.Context, client *spotifyapi.Client, uri string) (string, error) {
+	trackID, ok := spotifyTrackIDFromURI(uri)
+	if !ok {
+		return "", fmt.Errorf("spotify track id not found")
+	}
+
+	track, err := client.GetTrack(ctx, trackID)
+	if err != nil {
+		return "", err
+	}
+	if track == nil {
+		return "", fmt.Errorf("spotify track lookup returned no data")
+	}
+
+	return formatTrack(*track), nil
 }
 
 func spotifyTrackURI(input string) (string, bool) {
@@ -512,6 +532,30 @@ func spotifyTrackURI(input string) (string, bool) {
 	}
 
 	return "spotify:track:" + parts[1], true
+}
+
+func spotifyTrackIDFromURI(uri string) (string, bool) {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return "", false
+	}
+
+	lower := strings.ToLower(uri)
+	if !strings.HasPrefix(lower, "spotify:track:") {
+		return "", false
+	}
+
+	parts := strings.SplitN(uri, ":", 3)
+	if len(parts) != 3 {
+		return "", false
+	}
+
+	id := strings.TrimSpace(parts[2])
+	if id == "" {
+		return "", false
+	}
+
+	return id, true
 }
 
 func formatTrack(track spotifyapi.Track) string {

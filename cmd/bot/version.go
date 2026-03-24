@@ -3,11 +3,13 @@ package main
 import (
 	"runtime/debug"
 	"strings"
+
+	"github.com/mr-cheeezz/dankbot/pkg/release"
 )
 
 // botVersion can be overridden at build time:
-// go build -ldflags "-X main.botVersion=v0.9.0-beta.1" ./cmd/bot
-var botVersion = "0.9.1-beta2"
+// go build -ldflags "-X main.botVersion=v0.9.1-beta2" ./cmd/bot
+var botVersion = release.Current
 
 func init() {
 	botVersion = resolveBotVersion(botVersion)

@@ -66,19 +66,20 @@ function formatBuildLine(
   commitTime: string,
 ) {
   const v = version.trim() || "dev";
-  const parts: string[] = [v];
-  if (branch.trim() !== "" || revision.trim() !== "") {
-    parts.push(
-      `(${[branch.trim(), revision.trim().slice(0, 8)].filter((item) => item !== "").join(", ")})`,
-    );
-  }
+  const branchLabel = branch.trim() || "unknown";
+  const commitLabel = revision.trim() !== "" ? revision.trim().slice(0, 8) : "unknown";
+
+  let commitDateLabel = "unknown";
   if (commitTime.trim() !== "") {
     const parsed = new Date(commitTime);
     if (!Number.isNaN(parsed.getTime())) {
-      parts.push(`Last commit: ${parsed.toLocaleString()}`);
+      commitDateLabel = parsed.toLocaleString();
+    } else {
+      commitDateLabel = commitTime.trim();
     }
   }
-  return parts.join(" - ");
+
+  return `${v} — branch ${branchLabel}, commit ${commitLabel}, commit date ${commitDateLabel}`;
 }
 
 function unifiedReleaseMeta(summary: PublicSummary) {
