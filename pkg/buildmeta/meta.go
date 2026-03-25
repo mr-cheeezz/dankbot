@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+// These can be injected at build time when VCS metadata is unavailable:
+// -ldflags "-X github.com/mr-cheeezz/dankbot/pkg/buildmeta.BuildBranch=stable \
+//          -X github.com/mr-cheeezz/dankbot/pkg/buildmeta.BuildRevision=abc1234 \
+//          -X github.com/mr-cheeezz/dankbot/pkg/buildmeta.BuildCommitTime=2026-03-24T20:10:00Z"
+var (
+	BuildBranch     = ""
+	BuildRevision   = ""
+	BuildCommitTime = ""
+)
+
 type Info struct {
 	Version      string
 	Branch       string
@@ -36,6 +46,16 @@ func Detect(version string) Info {
 	revision := strings.TrimSpace(settings["vcs.revision"])
 	branch := strings.TrimSpace(settings["vcs.branch"])
 	commitTime := strings.TrimSpace(settings["vcs.time"])
+
+	if branch == "" {
+		branch = strings.TrimSpace(BuildBranch)
+	}
+	if revision == "" {
+		revision = strings.TrimSpace(BuildRevision)
+	}
+	if commitTime == "" {
+		commitTime = strings.TrimSpace(BuildCommitTime)
+	}
 
 	if info.Version == "" || info.Version == "dev" {
 		mainVersion := strings.TrimSpace(buildInfo.Main.Version)
