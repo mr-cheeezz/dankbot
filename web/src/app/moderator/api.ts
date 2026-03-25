@@ -1828,9 +1828,11 @@ export async function fetchDashboardRoles(
   }));
 }
 
-export async function assignDashboardEditor(
-  login: string,
-): Promise<DashboardRoleEntry[]> {
+export async function assignDashboardEditor(input: {
+  login: string;
+  userId?: string;
+  displayName?: string;
+}): Promise<DashboardRoleEntry[]> {
   const response = await fetch("/api/dashboard/roles", {
     method: "POST",
     credentials: "same-origin",
@@ -1839,12 +1841,15 @@ export async function assignDashboardEditor(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      login,
+      user_id: input.userId ?? "",
+      login: input.login,
+      display_name: input.displayName ?? "",
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`failed to assign editor role: ${response.status}`);
+    const detail = (await response.text()).trim();
+    throw new Error(detail || `failed to assign editor role: ${response.status}`);
   }
 
   const payload = (await response.json()) as DashboardRolesResponse;

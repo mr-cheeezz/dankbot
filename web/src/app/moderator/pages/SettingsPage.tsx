@@ -246,7 +246,11 @@ export function SettingsPage() {
   };
 
   const handleAssignEditor = async () => {
-    const login = (selectedEditorCandidate?.login || editorLogin)
+    const selectedCandidate =
+      selectedEditorCandidate != null && !selectedEditorCandidate.userId.startsWith("exact-login:")
+        ? selectedEditorCandidate
+        : null;
+    const login = (selectedCandidate?.login || editorLogin)
       .trim()
       .replace(/^@+/, "");
     if (login === "") {
@@ -258,15 +262,20 @@ export function SettingsPage() {
     setRolesMessage("");
 
     try {
-      const nextRoles = await assignDashboardEditor(login);
+      const nextRoles = await assignDashboardEditor({
+        login,
+        userId: selectedCandidate?.userId,
+        displayName: selectedCandidate?.displayName,
+      });
       setDashboardRoles(nextRoles);
       setEditorLogin("");
       setSelectedEditorCandidate(null);
       setEditorSearchResults([]);
       setRolesMessage(`Editor access added for ${login}.`);
       await refresh();
-    } catch {
-      setRolesMessage("Could not add that editor right now.");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message.trim() : "";
+      setRolesMessage(detail !== "" ? `Could not add editor: ${detail}` : "Could not add that editor right now.");
     } finally {
       setRolesSaving(false);
     }

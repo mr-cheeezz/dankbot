@@ -24,7 +24,9 @@ type dashboardRolesResponse struct {
 }
 
 type assignEditorRequest struct {
-	Login string `json:"login"`
+	UserID      string `json:"user_id"`
+	Login       string `json:"login"`
+	DisplayName string `json:"display_name"`
 }
 
 type deleteEditorRequest struct {
@@ -94,26 +96,40 @@ func (h handler) assignEditorRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := strings.TrimSpace(request.UserID)
 	login := strings.TrimSpace(request.Login)
 	if login == "" {
 		http.Error(w, "login is required", http.StatusBadRequest)
 		return
 	}
 
-	user, err := webaccess.LookupTwitchUserByLogin(r.Context(), h.appState, login)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	displayName := strings.TrimSpace(request.DisplayName)
+	if userID == "" {
+		user, err := webaccess.LookupTwitchUserByLogin(r.Context(), h.appState, login)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if user == nil {
+			http.Error(w, "twitch user not found", http.StatusNotFound)
+			return
+		}
+		userID = strings.TrimSpace(user.ID)
+		login = strings.TrimSpace(user.Login)
+		displayName = strings.TrimSpace(user.DisplayName)
+	}
+	if userID == "" {
+		http.Error(w, "user id is required", http.StatusBadRequest)
 		return
 	}
-	if user == nil {
-		http.Error(w, "twitch user not found", http.StatusNotFound)
-		return
+	if displayName == "" {
+		displayName = login
 	}
 
 	if err := h.appState.DashboardRoles.Save(r.Context(), postgres.DashboardRole{
-		UserID:          user.ID,
-		Login:           user.Login,
-		DisplayName:     user.DisplayName,
+		UserID:          userID,
+		Login:           login,
+		DisplayName:     displayName,
 		RoleName:        postgres.DashboardRoleEditor,
 		AssignedByLogin: strings.TrimSpace(userSession.Login),
 	}); err != nil {
