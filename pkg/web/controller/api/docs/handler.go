@@ -20,18 +20,15 @@ var docsPage = template.Must(template.New("api-docs").Parse(`<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DankBot API Docs</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
   <style>
     :root {
       color-scheme: dark;
       --bg: #2b2b2b;
-      --paper: #2d2d2d;
-      --paper-alt: #111111;
+      --paper: #1f1f1f;
       --border: #3b3b3b;
       --text: #eeeeee;
       --muted: #a8a8a8;
       --primary: #4a89ff;
-      --primary-dark: #2d69dd;
     }
     * { box-sizing: border-box; }
     body {
@@ -144,78 +141,15 @@ var docsPage = template.Must(template.New("api-docs").Parse(`<!doctype html>
     }
     .docs-shell {
       flex: 1;
-      padding: 24px 28px 36px;
+      padding: 24px 28px 28px;
     }
-    #swagger-ui {
+    #api-reference {
       max-width: 1100px;
       margin: 0 auto;
-      padding: 0;
-    }
-    .swagger-ui .topbar {
-      display: none;
-    }
-    .swagger-ui, .swagger-ui .info .title, .swagger-ui .info p, .swagger-ui .info li,
-    .swagger-ui .opblock-description-wrapper p, .swagger-ui .opblock-external-docs-wrapper p,
-    .swagger-ui .opblock-title_normal, .swagger-ui table thead tr td, .swagger-ui table thead tr th,
-    .swagger-ui .parameter__name, .swagger-ui .parameter__type, .swagger-ui .response-col_status,
-    .swagger-ui .response-col_description, .swagger-ui .tab li, .swagger-ui section.models h4,
-    .swagger-ui section.models h5, .swagger-ui .model-title, .swagger-ui .prop-name {
-      color: var(--text);
-    }
-    .swagger-ui .scheme-container,
-    .swagger-ui .info,
-    .swagger-ui .opblock,
-    .swagger-ui .responses-inner,
-    .swagger-ui .model-box,
-    .swagger-ui .models,
-    .swagger-ui .authorization__btn,
-    .swagger-ui .dialog-ux .modal-ux,
-    .swagger-ui .opblock .opblock-section-header,
-    .swagger-ui .response-control-media-type__accept-message {
-      background: var(--paper) !important;
-      border-color: var(--border) !important;
-      box-shadow: none !important;
-    }
-    .swagger-ui .opblock-tag {
-      border-bottom-color: var(--border);
-      color: var(--text);
-    }
-    .swagger-ui .opblock.opblock-get {
-      background: rgba(74, 137, 255, 0.08);
-      border-color: rgba(74, 137, 255, 0.35);
-    }
-    .swagger-ui .opblock.opblock-post,
-    .swagger-ui .opblock.opblock-put,
-    .swagger-ui .opblock.opblock-delete {
-      background: rgba(255,255,255,0.03);
-      border-color: var(--border);
-    }
-    .swagger-ui .btn.authorize,
-    .swagger-ui .btn.execute,
-    .swagger-ui .download-url-wrapper .select-label select {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-    .swagger-ui .btn.execute {
-      background: var(--primary);
-      color: #f7faff;
-    }
-    .swagger-ui .btn.execute:hover,
-    .swagger-ui .btn.authorize:hover {
-      border-color: var(--primary-dark);
-      background: var(--primary-dark);
-      color: #fff;
-    }
-    .swagger-ui input, .swagger-ui textarea, .swagger-ui select {
-      background: #262626;
-      color: var(--text);
-      border-color: var(--border);
-    }
-    .swagger-ui .responses-table .response-col_status {
-      color: var(--text);
-    }
-    .swagger-ui .info a, .swagger-ui a.nostyle, .swagger-ui .opblock-summary-path {
-      color: var(--primary);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #181818;
     }
   </style>
 </head>
@@ -237,37 +171,27 @@ var docsPage = template.Must(template.New("api-docs").Parse(`<!doctype html>
 
     <section class="hero">
       <div class="hero-card">
-        <p class="hero-eyebrow">OpenAPI</p>
+        <p class="hero-eyebrow">Scalar + OpenAPI</p>
         <h1>DankBot API Reference</h1>
         <p>
           Core public and dashboard endpoints, plus the main OAuth entry routes, in one place.
-          The docs are served from <code>/api/openapi.json</code> and styled to match the rest of
-          the site instead of dropping in the stock Swagger chrome.
+          The spec is still served from <code>/api/openapi.json</code>, now rendered in Scalar.
         </p>
       </div>
     </section>
 
     <main class="docs-shell">
-      <div id="swagger-ui"></div>
+      <script
+        id="api-reference"
+        data-url="/api/openapi.json"
+        data-theme="purple"
+        data-dark-mode="true"
+        data-layout="modern">
+      </script>
     </main>
   </div>
 
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
-  <script>
-    window.ui = SwaggerUIBundle({
-      url: "/api/openapi.json",
-      dom_id: "#swagger-ui",
-      deepLinking: true,
-      docExpansion: "list",
-      defaultModelsExpandDepth: -1,
-      displayRequestDuration: true,
-      persistAuthorization: true,
-      tryItOutEnabled: true,
-      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-      layout: "BaseLayout"
-    });
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
 </body>
 </html>`))
 
