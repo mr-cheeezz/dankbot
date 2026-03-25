@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
@@ -32,6 +33,8 @@ type assignEditorRequest struct {
 type deleteEditorRequest struct {
 	UserID string `json:"user_id"`
 }
+
+var twitchLoginPattern = regexp.MustCompile(`(?i)[a-z0-9_]{2,25}`)
 
 func (h handler) roles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -97,7 +100,7 @@ func (h handler) assignEditorRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := strings.TrimSpace(request.UserID)
-	login := strings.TrimSpace(request.Login)
+	login := normalizeTwitchLogin(request.Login)
 	if login == "" {
 		http.Error(w, "login is required", http.StatusBadRequest)
 		return
@@ -223,4 +226,17 @@ func canManageDashboardRoles(userSession *session.UserSession) bool {
 	}
 
 	return userSession.IsBroadcaster || userSession.IsAdmin
+}
+
+func normalizeTwitchLogin(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+
+	value = strings.ToLower(value)
+	if match := twitchLoginPattern.FindString(value); match != "" {
+		return match
+	}
+	return ""
 }

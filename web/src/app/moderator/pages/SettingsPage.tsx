@@ -55,6 +55,30 @@ const linkCommandTemplateDefaults: Record<
   custom: "",
 };
 
+function normalizeTwitchLoginInput(raw: string): string {
+  const value = raw.trim();
+  if (value === "") {
+    return "";
+  }
+
+  const parenMatch = value.match(/\(@?([a-z0-9_]{2,25})\)/i);
+  if (parenMatch?.[1]) {
+    return parenMatch[1].toLowerCase();
+  }
+
+  const directMatch = value.match(/^@?([a-z0-9_]{2,25})$/i);
+  if (directMatch?.[1]) {
+    return directMatch[1].toLowerCase();
+  }
+
+  const fallbackMatch = value.match(/@?([a-z0-9_]{2,25})/i);
+  if (fallbackMatch?.[1]) {
+    return fallbackMatch[1].toLowerCase();
+  }
+
+  return "";
+}
+
 export function SettingsPage() {
   const { summary } = useModerator();
   const { session, refresh } = useAuth();
@@ -250,9 +274,7 @@ export function SettingsPage() {
       selectedEditorCandidate != null && !selectedEditorCandidate.userId.startsWith("exact-login:")
         ? selectedEditorCandidate
         : null;
-    const login = (selectedCandidate?.login || editorLogin)
-      .trim()
-      .replace(/^@+/, "");
+    const login = normalizeTwitchLoginInput(selectedCandidate?.login || editorLogin);
     if (login === "") {
       setRolesMessage("Enter a Twitch login before adding an editor.");
       return;
