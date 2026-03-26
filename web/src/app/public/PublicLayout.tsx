@@ -333,13 +333,13 @@ export function PublicLayout() {
               API Docs
             </Link>
             <Link
-              href="https://mrcheeezz.com"
+              href="https://dankbot.tv/channels"
               target="_blank"
               rel="noreferrer"
               underline="hover"
               color="text.secondary"
             >
-              Website
+              Other Bots
             </Link>
             <Link
               href="https://github.com/mr-cheeezz/dankbot"
