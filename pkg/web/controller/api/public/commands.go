@@ -172,7 +172,7 @@ func publicCommandDocs(
 		})
 	}
 
-	for _, name := range []string{"ping", "uptime", "game", "playtime", "gamesplayed", "quote", "currentmode", "link"} {
+	for _, name := range []string{"ping", "game", "playtime", "gamesplayed", "quote", "currentmode", "link"} {
 		appendDefinition(name, "regular")
 	}
 

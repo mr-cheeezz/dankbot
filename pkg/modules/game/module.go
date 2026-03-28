@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"regexp"
 	"sort"
 	"strings"
@@ -89,7 +90,7 @@ func (m *Module) RegisterCommands() map[string]modules.CommandDefinition {
 }
 
 func (m *Module) Start(ctx context.Context) error {
-	if strings.TrimSpace(m.configCookie) == "" || strings.TrimSpace(m.twitchClientID) == "" || strings.TrimSpace(m.streamerID) == "" || m.playtimeStore == nil || m.twitchOAuth == nil {
+	if strings.TrimSpace(m.twitchClientID) == "" || strings.TrimSpace(m.streamerID) == "" || m.playtimeStore == nil || m.twitchOAuth == nil {
 		return nil
 	}
 
@@ -100,9 +101,13 @@ func (m *Module) Start(ctx context.Context) error {
 func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 	_ = ctx
 
+	if live, err := m.streamIsLive(context.Background()); err == nil && !live {
+		return fmt.Sprintf("%s is offline.", m.streamerName(context.Background())), nil
+	}
+
 	current := m.currentState()
 	if current.UniverseID == 0 {
-		return "no Roblox experience is currently being tracked", nil
+		return "No game is currently being tracked.", nil
 	}
 
 	total := time.Duration(0)
@@ -121,12 +126,12 @@ func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 		total += time.Since(current.TrackedAt)
 	}
 
-	gameName := cleanRobloxExperienceName(current.GameName)
+	gameName := displayTrackedGameName(current.UniverseID, current.GameName)
 	if gameName == "" && item != nil {
-		gameName = cleanRobloxExperienceName(item.GameName)
+		gameName = displayTrackedGameName(item.UniverseID, item.GameName)
 	}
 	if gameName == "" {
-		gameName = "current Roblox experience"
+		gameName = "current stream game"
 	}
 
 	template := postgres.DefaultGameModuleSettings().PlaytimeTemplate
@@ -149,13 +154,9 @@ func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 func (m *Module) game(ctx modules.CommandContext) (string, error) {
 	_ = ctx
 
-	if live, err := m.streamIsLive(context.Background()); err == nil && !live {
-		return fmt.Sprintf("%s is offline.", m.streamerName(context.Background())), nil
-	}
-
 	channel, err := m.currentChannel(context.Background())
 	if err != nil {
-		return "", err
+		return "current game unavailable", nil
 	}
 	if channel == nil {
 		return "current game unavailable", nil
@@ -170,9 +171,14 @@ func (m *Module) game(ctx modules.CommandContext) (string, error) {
 		return fmt.Sprintf("%s is currently playing %s.", m.streamerName(context.Background()), gameName), nil
 	}
 
+	live, err := m.streamIsLive(context.Background())
+	if err == nil && !live {
+		return fmt.Sprintf("%s is offline.", m.streamerName(context.Background())), nil
+	}
+
 	experienceName, err := m.currentRobloxExperienceName(context.Background())
 	if err != nil {
-		return "", err
+		return fmt.Sprintf("%s is currently playing Roblox.", m.streamerName(context.Background())), nil
 	}
 	if experienceName == "" {
 		return fmt.Sprintf("%s is currently playing a Roblox experience.", m.streamerName(context.Background())), nil
@@ -205,14 +211,14 @@ func (m *Module) gamesPlayed(ctx modules.CommandContext) (string, error) {
 		return "", err
 	}
 	if len(items) == 0 {
-		return "no Roblox games have been tracked yet", nil
+		return "No games have been tracked yet.", nil
 	}
 
 	parts := make([]string, 0, len(items))
 	for _, item := range items {
-		name := cleanRobloxExperienceName(item.GameName)
+		name := displayTrackedGameName(item.UniverseID, item.GameName)
 		if name == "" {
-			name = fmt.Sprintf("Universe %d", item.UniverseID)
+			name = "Unknown game"
 		}
 		duration := (time.Duration(item.TotalSeconds) * time.Second).Round(time.Second).String()
 		itemReplacer := strings.NewReplacer(
@@ -242,70 +248,119 @@ func (m *Module) runTracker(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := m.trackOnce(ctx); err != nil {
-				fmt.Printf("roblox tracker error: %v\n", err)
+				fmt.Printf("game tracker error: %v\n", err)
 			}
 		}
 	}
 }
 
 func (m *Module) trackOnce(ctx context.Context) error {
-	isRoblox, err := m.streamIsRoblox(ctx)
+	channel, err := m.currentChannel(ctx)
 	if err != nil {
 		return err
 	}
-	if !isRoblox {
-		if err := m.flushCurrent(ctx, time.Now().UTC()); err != nil {
+	now := time.Now().UTC()
+	if channel == nil || strings.TrimSpace(channel.GameName) == "" {
+		if err := m.flushCurrent(ctx, now); err != nil {
 			return err
 		}
+		return nil
+	}
+
+	live, err := m.streamIsLive(ctx)
+	if err == nil && !live {
+		if err := m.flushCurrent(ctx, now); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	isRoblox := strings.EqualFold(strings.TrimSpace(channel.GameName), robloxCategoryName)
+	if !isRoblox {
+		next := trackerState{
+			UniverseID: syntheticTwitchUniverseID(channel.GameID, channel.GameName),
+			GameName:   strings.TrimSpace(channel.GameName),
+			TrackedAt:  now,
+		}
+		m.advanceTracker(ctx, next, now)
+		return nil
+	}
+
+	if strings.TrimSpace(m.configCookie) == "" {
+		next := trackerState{
+			UniverseID: syntheticTwitchUniverseID(channel.GameID, channel.GameName),
+			GameName:   strings.TrimSpace(channel.GameName),
+			TrackedAt:  now,
+		}
+		m.advanceTracker(ctx, next, now)
 		return nil
 	}
 
 	robloxClient := robloxapi.NewClient(nil, m.configCookie)
 	authUser, err := robloxClient.GetAuthenticatedUser(ctx)
 	if err != nil {
-		return err
+		next := trackerState{
+			UniverseID: syntheticTwitchUniverseID(channel.GameID, channel.GameName),
+			GameName:   strings.TrimSpace(channel.GameName),
+			TrackedAt:  now,
+		}
+		m.advanceTracker(ctx, next, now)
+		return nil
 	}
 
 	presences, err := robloxClient.GetPresences(ctx, []int64{authUser.ID})
 	if err != nil {
-		return err
-	}
-	if len(presences) == 0 {
-		if err := m.flushCurrent(ctx, time.Now().UTC()); err != nil {
-			return err
+		next := trackerState{
+			UniverseID: syntheticTwitchUniverseID(channel.GameID, channel.GameName),
+			GameName:   strings.TrimSpace(channel.GameName),
+			TrackedAt:  now,
 		}
+		m.advanceTracker(ctx, next, now)
+		return nil
+	}
+	if len(presences) == 0 || presences[0].UniverseID == 0 {
+		next := trackerState{
+			UniverseID: syntheticTwitchUniverseID(channel.GameID, channel.GameName),
+			GameName:   strings.TrimSpace(channel.GameName),
+			TrackedAt:  now,
+		}
+		m.advanceTracker(ctx, next, now)
 		return nil
 	}
 
 	presence := presences[0]
-	if presence.UniverseID == 0 {
-		if err := m.flushCurrent(ctx, time.Now().UTC()); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	now := time.Now().UTC()
 	next := trackerState{
 		UniverseID:  presence.UniverseID,
 		RootPlaceID: presence.RootPlaceID,
 		GameName:    cleanRobloxExperienceName(presence.LastLocation),
 		TrackedAt:   now,
 	}
+	m.advanceTracker(ctx, next, now)
+	return nil
+}
+
+func (m *Module) advanceTracker(ctx context.Context, next trackerState, now time.Time) {
+	if next.UniverseID == 0 {
+		if err := m.flushCurrent(ctx, time.Now().UTC()); err != nil {
+			fmt.Printf("game tracker flush error: %v\n", err)
+		}
+		return
+	}
 
 	prev := m.currentState()
 	if prev.UniverseID != 0 && prev.UniverseID == next.UniverseID {
 		next.StreamSessionID = prev.StreamSessionID
-		if err := m.playtimeStore.AddDuration(ctx, prev.StreamSessionID, prev.UniverseID, prev.RootPlaceID, coalesceGameName(prev.GameName, next.GameName), prev.TrackedAt, now); err != nil {
-			return err
+		if err := m.playtimeStore.AddDuration(ctx, prev.StreamSessionID, prev.UniverseID, prev.RootPlaceID, coalesceGameName(prev.UniverseID, prev.GameName, next.GameName), prev.TrackedAt, now); err != nil {
+			fmt.Printf("game tracker add duration error: %v\n", err)
+			return
 		}
 		m.setCurrent(next)
-		return nil
+		return
 	}
 
 	if prev.UniverseID != 0 && !prev.TrackedAt.IsZero() {
 		if err := m.playtimeStore.AddDuration(ctx, prev.StreamSessionID, prev.UniverseID, prev.RootPlaceID, prev.GameName, prev.TrackedAt, now); err != nil {
-			return err
+			fmt.Printf("game tracker rollover add duration error: %v\n", err)
 		}
 	}
 
@@ -316,7 +371,6 @@ func (m *Module) trackOnce(ctx context.Context) error {
 	}
 
 	m.setCurrent(next)
-	return nil
 }
 
 func (m *Module) streamIsRoblox(ctx context.Context) (bool, error) {
@@ -470,9 +524,13 @@ func (m *Module) flushCurrent(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-func coalesceGameName(values ...string) string {
+func coalesceGameName(universeID int64, values ...string) string {
 	for _, value := range values {
-		value = cleanRobloxExperienceName(value)
+		if isSyntheticTwitchUniverseID(universeID) {
+			value = strings.TrimSpace(value)
+		} else {
+			value = cleanRobloxExperienceName(value)
+		}
 		if value != "" {
 			return value
 		}
@@ -610,5 +668,36 @@ func applyCurrentPlaytime(items []postgres.RobloxGamePlaytime, current trackerSt
 }
 
 func newStreamSessionID(now time.Time) string {
-	return fmt.Sprintf("roblox-stream-%d", now.UnixNano())
+	return fmt.Sprintf("game-stream-%d", now.UnixNano())
+}
+
+func syntheticTwitchUniverseID(gameID, gameName string) int64 {
+	seed := strings.TrimSpace(gameID)
+	if seed == "" {
+		seed = strings.TrimSpace(strings.ToLower(gameName))
+	}
+	if seed == "" {
+		seed = "twitch-unknown"
+	}
+	hasher := fnv.New64a()
+	_, _ = hasher.Write([]byte(seed))
+	id := int64(hasher.Sum64())
+	if id > 0 {
+		id = -id
+	}
+	if id == 0 {
+		id = -1
+	}
+	return id
+}
+
+func isSyntheticTwitchUniverseID(universeID int64) bool {
+	return universeID < 0
+}
+
+func displayTrackedGameName(universeID int64, name string) string {
+	if isSyntheticTwitchUniverseID(universeID) {
+		return strings.TrimSpace(name)
+	}
+	return cleanRobloxExperienceName(name)
 }

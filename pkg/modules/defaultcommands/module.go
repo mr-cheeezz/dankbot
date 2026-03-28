@@ -33,8 +33,7 @@ func (m *Module) Name() string {
 
 func (m *Module) RegisterCommands() map[string]modules.CommandDefinition {
 	return map[string]modules.CommandDefinition{
-		"ping":   m.pingDefinition(),
-		"uptime": m.uptimeDefinition(),
+		"ping": m.pingDefinition(),
 	}
 }
 
