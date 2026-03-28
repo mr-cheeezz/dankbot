@@ -171,11 +171,6 @@ func (m *Module) game(ctx modules.CommandContext) (string, error) {
 		return fmt.Sprintf("%s is currently playing %s.", m.streamerName(context.Background()), gameName), nil
 	}
 
-	live, err := m.streamIsLive(context.Background())
-	if err == nil && !live {
-		return fmt.Sprintf("%s is offline.", m.streamerName(context.Background())), nil
-	}
-
 	experienceName, err := m.currentRobloxExperienceName(context.Background())
 	if err != nil {
 		return fmt.Sprintf("%s is currently playing Roblox.", m.streamerName(context.Background())), nil
