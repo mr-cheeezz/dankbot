@@ -79,7 +79,6 @@ function formatBuildLine(
     }
   }
 
-  if 
   return `${v} — branch ${branchLabel}, commit ${commitLabel}, commit date ${commitDateLabel}`;
 }
 
