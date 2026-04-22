@@ -393,6 +393,12 @@ func (r *runtime) initializeChat(ctx context.Context) error {
 			fmt.Println("warning: helix chat send is enabled, but the streamer account is missing channel:bot; bot-badge sends may fail unless the bot is a moderator")
 		}
 	}
+	if missing := missingScopes(botAccount.Scopes, "moderator:manage:chat_messages", "moderator:manage:banned_users"); len(missing) > 0 {
+		fmt.Printf("warning: linked twitch bot account is missing moderation scopes: %s; spam filters can still detect messages, but delete/timeout actions may fail\n", strings.Join(missing, ", "))
+	}
+	if missing := missingScopes(botAccount.Scopes, "moderator:manage:warnings"); len(missing) > 0 {
+		fmt.Printf("warning: linked twitch bot account is missing moderation scopes: %s; warn actions in spam filters or blocked terms may fail\n", strings.Join(missing, ", "))
+	}
 
 	r.botAccount = botAccount
 	r.streamer = streamerAccount
@@ -433,7 +439,12 @@ func (r *runtime) initializeChat(ctx context.Context) error {
 		r.greetingModule.SetChatOutput(streamerAccount.Login, r.sendChannelMessage)
 	}
 	if r.spamFiltersModule != nil {
-		r.spamFiltersModule.SetModerationActions(r.deleteChatMessage, r.timeoutChatUser)
+		r.spamFiltersModule.SetModerationActions(
+			r.deleteChatMessage,
+			r.timeoutChatUser,
+			r.warnChatUser,
+			r.banChatUser,
+		)
 	}
 	if r.blockedTermsModule != nil {
 		r.blockedTermsModule.SetModerationActions(

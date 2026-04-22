@@ -338,6 +338,7 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
       repeatOffendersEnabled: true,
       repeatMultiplier: 2,
       repeatCooldownSeconds: 600,
+      repeatUntilStreamEnd: false,
     },
   },
   {

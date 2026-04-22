@@ -11,21 +11,29 @@ import (
 )
 
 type spamFilterResponse struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Action         string `json:"action"`
-	ThresholdLabel string `json:"threshold_label"`
-	ThresholdValue int    `json:"threshold_value"`
-	Enabled        bool   `json:"enabled"`
+	ID                     string  `json:"id"`
+	Name                   string  `json:"name"`
+	Description            string  `json:"description"`
+	Action                 string  `json:"action"`
+	ThresholdLabel         string  `json:"threshold_label"`
+	ThresholdValue         int     `json:"threshold_value"`
+	Enabled                bool    `json:"enabled"`
+	RepeatOffendersEnabled bool    `json:"repeat_offenders_enabled"`
+	RepeatMultiplier       float64 `json:"repeat_multiplier"`
+	RepeatMemorySeconds    int     `json:"repeat_memory_seconds"`
+	RepeatUntilStreamEnd   bool    `json:"repeat_until_stream_end"`
 }
 
 type updateSpamFilterRequest struct {
-	ID             string `json:"id"`
-	Action         string `json:"action"`
-	ThresholdLabel string `json:"threshold_label"`
-	ThresholdValue int    `json:"threshold_value"`
-	Enabled        bool   `json:"enabled"`
+	ID                     string   `json:"id"`
+	Action                 string   `json:"action"`
+	ThresholdLabel         string   `json:"threshold_label"`
+	ThresholdValue         int      `json:"threshold_value"`
+	Enabled                bool     `json:"enabled"`
+	RepeatOffendersEnabled *bool    `json:"repeat_offenders_enabled"`
+	RepeatMultiplier       *float64 `json:"repeat_multiplier"`
+	RepeatMemorySeconds    *int     `json:"repeat_memory_seconds"`
+	RepeatUntilStreamEnd   *bool    `json:"repeat_until_stream_end"`
 }
 
 func (h handler) spamFilters(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +116,18 @@ func (h handler) updateSpamFilter(w http.ResponseWriter, r *http.Request) {
 	current.ThresholdLabel = strings.TrimSpace(request.ThresholdLabel)
 	current.ThresholdValue = request.ThresholdValue
 	current.Enabled = request.Enabled
+	if request.RepeatOffendersEnabled != nil {
+		current.RepeatOffendersEnabled = *request.RepeatOffendersEnabled
+	}
+	if request.RepeatMultiplier != nil {
+		current.RepeatMultiplier = *request.RepeatMultiplier
+	}
+	if request.RepeatMemorySeconds != nil {
+		current.RepeatMemorySeconds = *request.RepeatMemorySeconds
+	}
+	if request.RepeatUntilStreamEnd != nil {
+		current.RepeatUntilStreamEnd = *request.RepeatUntilStreamEnd
+	}
 
 	updated, err := h.appState.SpamFilters.Update(r.Context(), *current)
 	if err != nil {
@@ -121,12 +141,16 @@ func (h handler) updateSpamFilter(w http.ResponseWriter, r *http.Request) {
 
 func spamFilterToResponse(item postgres.SpamFilter) spamFilterResponse {
 	return spamFilterResponse{
-		ID:             item.FilterKey,
-		Name:           item.Title,
-		Description:    item.Description,
-		Action:         item.Action,
-		ThresholdLabel: item.ThresholdLabel,
-		ThresholdValue: item.ThresholdValue,
-		Enabled:        item.Enabled,
+		ID:                     item.FilterKey,
+		Name:                   item.Title,
+		Description:            item.Description,
+		Action:                 item.Action,
+		ThresholdLabel:         item.ThresholdLabel,
+		ThresholdValue:         item.ThresholdValue,
+		Enabled:                item.Enabled,
+		RepeatOffendersEnabled: item.RepeatOffendersEnabled,
+		RepeatMultiplier:       item.RepeatMultiplier,
+		RepeatMemorySeconds:    item.RepeatMemorySeconds,
+		RepeatUntilStreamEnd:   item.RepeatUntilStreamEnd,
 	}
 }

@@ -329,6 +329,10 @@ export type SpamFilterEntry = {
   thresholdLabel: string;
   thresholdValue: number;
   enabled: boolean;
+  repeatOffendersEnabled?: boolean;
+  repeatMultiplier?: number;
+  repeatMemorySeconds?: number;
+  repeatUntilStreamEnd?: boolean;
   lengthSettings?: {
     enabledWhenOffline: boolean;
     enabledWhenOnline: boolean;
@@ -422,6 +426,7 @@ export type SpamFilterEntry = {
     repeatOffendersEnabled: boolean;
     repeatMultiplier: number;
     repeatCooldownSeconds: number;
+    repeatUntilStreamEnd: boolean;
   };
 };
 

@@ -1,7 +1,5 @@
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
-import ShieldRoundedIcon from "@mui/icons-material/ShieldRounded";
-import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import {
   Box,
@@ -28,10 +26,17 @@ const commonActions = [
   "delete",
   "warn",
   "delete + warn",
+  "timeout",
   "delete + timeout",
   "timeout 30s",
+  "delete + timeout 30s",
   "timeout 60s",
+  "delete + timeout 60s",
+  "ban",
+  "delete + ban",
 ];
+
+const timeoutActionPattern = /timeout(?:\s+(\d+)\s*([smh]?))?/i;
 
 function formatLabel(value: string): string {
   return value
@@ -39,6 +44,37 @@ function formatLabel(value: string): string {
     .filter(Boolean)
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function actionIncludesTimeout(action: string): boolean {
+  return timeoutActionPattern.test(action);
+}
+
+function parseActionTimeoutSeconds(action: string): number {
+  const match = timeoutActionPattern.exec(action);
+  if (match == null) {
+    return 30;
+  }
+  const value = Number(match[1] ?? "30");
+  const unit = (match[2] ?? "s").toLowerCase();
+  if (!Number.isFinite(value) || value <= 0) {
+    return 30;
+  }
+  if (unit === "h") {
+    return Math.round(value * 3600);
+  }
+  if (unit === "m") {
+    return Math.round(value * 60);
+  }
+  return Math.round(value);
+}
+
+function withActionTimeoutSeconds(action: string, seconds: number): string {
+  if (!actionIncludesTimeout(action)) {
+    return action;
+  }
+  const safe = Math.max(1, Math.round(seconds || 1));
+  return action.replace(timeoutActionPattern, `timeout ${safe}s`);
 }
 
 function SectionTitle({ label }: { label: string }) {
@@ -333,6 +369,22 @@ function LengthFilterEditor({
                   ))}
                 </Select>
               </FormControl>
+              {actionIncludesTimeout(selectedSpamFilter.action) ? (
+                <TextField
+                  type="number"
+                  label="Timeout (seconds)"
+                  value={parseActionTimeoutSeconds(selectedSpamFilter.action)}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => {
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      action: withActionTimeoutSeconds(
+                        selectedSpamFilter.action,
+                        Number(event.target.value) || 1,
+                      ),
+                    });
+                  }}
+                />
+              ) : null}
 
               <Box
                 sx={{
@@ -446,11 +498,15 @@ function LengthFilterEditor({
                 control={
                   <Checkbox
                     checked={settings.repeatOffendersEnabled}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const checked = event.target.checked;
                       updateLengthSettings({
-                        repeatOffendersEnabled: event.target.checked,
-                      })
-                    }
+                        repeatOffendersEnabled: checked,
+                      });
+                      void updateSpamFilter(selectedSpamFilter.id, {
+                        repeatOffendersEnabled: checked,
+                      });
+                    }}
                   />
                 }
                 label="Enable repeat offender detection"
@@ -471,14 +527,15 @@ function LengthFilterEditor({
                   label="Multiplier"
                   value={settings.repeatMultiplier}
                   inputProps={{ min: 1 }}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = Math.max(1, Number(event.target.value) || 1);
                     updateLengthSettings({
-                      repeatMultiplier: Math.max(
-                        1,
-                        Number(event.target.value) || 1,
-                      ),
-                    })
-                  }
+                      repeatMultiplier: value,
+                    });
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      repeatMultiplier: value,
+                    });
+                  }}
                   helperText="The factor by which the timeout increases per repeat offense."
                 />
                 <TextField
@@ -486,14 +543,15 @@ function LengthFilterEditor({
                   label="Cooldown"
                   value={settings.repeatCooldownSeconds}
                   inputProps={{ min: 1 }}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = Math.max(1, Number(event.target.value) || 1);
                     updateLengthSettings({
-                      repeatCooldownSeconds: Math.max(
-                        1,
-                        Number(event.target.value) || 1,
-                      ),
-                    })
-                  }
+                      repeatCooldownSeconds: value,
+                    });
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      repeatMemorySeconds: value,
+                    });
+                  }}
                   helperText="How long a user must not be timed out for in order to reset."
                 />
               </Box>
@@ -597,6 +655,22 @@ function LengthFilterEditor({
                   ))}
                 </Select>
               </FormControl>
+              {actionIncludesTimeout(selectedSpamFilter.action) ? (
+                <TextField
+                  type="number"
+                  label="Timeout (seconds)"
+                  value={parseActionTimeoutSeconds(selectedSpamFilter.action)}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => {
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      action: withActionTimeoutSeconds(
+                        selectedSpamFilter.action,
+                        Number(event.target.value) || 1,
+                      ),
+                    });
+                  }}
+                />
+              ) : null}
               <TextField
                 type="number"
                 label="Duration"
@@ -894,6 +968,22 @@ function CapsFilterEditor({
                   ))}
                 </Select>
               </FormControl>
+              {actionIncludesTimeout(selectedSpamFilter.action) ? (
+                <TextField
+                  type="number"
+                  label="Timeout (seconds)"
+                  value={parseActionTimeoutSeconds(selectedSpamFilter.action)}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => {
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      action: withActionTimeoutSeconds(
+                        selectedSpamFilter.action,
+                        Number(event.target.value) || 1,
+                      ),
+                    });
+                  }}
+                />
+              ) : null}
 
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
                 <TextField
@@ -1028,7 +1118,18 @@ function CapsFilterEditor({
             <SectionTitle label="Repeat Offenders" />
             <Stack spacing={2}>
               <FormControlLabel
-                control={<Checkbox checked={settings.repeatOffendersEnabled} onChange={(event) => updateCapsSettings({ repeatOffendersEnabled: event.target.checked })} />}
+                control={
+                  <Checkbox
+                    checked={settings.repeatOffendersEnabled}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      updateCapsSettings({ repeatOffendersEnabled: checked });
+                      void updateSpamFilter(selectedSpamFilter.id, {
+                        repeatOffendersEnabled: checked,
+                      });
+                    }}
+                  />
+                }
                 label="Enable repeat offender detection"
               />
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
@@ -1037,14 +1138,26 @@ function CapsFilterEditor({
                   label="Multiplier"
                   value={settings.repeatMultiplier}
                   inputProps={{ min: 1, step: 0.1 }}
-                  onChange={(event) => updateCapsSettings({ repeatMultiplier: Math.max(1, Number(event.target.value) || 1) })}
+                  onChange={(event) => {
+                    const value = Math.max(1, Number(event.target.value) || 1);
+                    updateCapsSettings({ repeatMultiplier: value });
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      repeatMultiplier: value,
+                    });
+                  }}
                 />
                 <TextField
                   type="number"
                   label="Cooldown seconds"
                   value={settings.repeatCooldownSeconds}
                   inputProps={{ min: 1 }}
-                  onChange={(event) => updateCapsSettings({ repeatCooldownSeconds: Math.max(1, Number(event.target.value) || 1) })}
+                  onChange={(event) => {
+                    const value = Math.max(1, Number(event.target.value) || 1);
+                    updateCapsSettings({ repeatCooldownSeconds: value });
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      repeatMemorySeconds: value,
+                    });
+                  }}
                 />
               </Box>
             </Stack>
@@ -1229,6 +1342,22 @@ function MessageFloodFilterEditor({
                   ))}
                 </Select>
               </FormControl>
+              {actionIncludesTimeout(selectedSpamFilter.action) ? (
+                <TextField
+                  type="number"
+                  label="Timeout (seconds)"
+                  value={parseActionTimeoutSeconds(selectedSpamFilter.action)}
+                  inputProps={{ min: 1 }}
+                  onChange={(event) => {
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      action: withActionTimeoutSeconds(
+                        selectedSpamFilter.action,
+                        Number(event.target.value) || 1,
+                      ),
+                    });
+                  }}
+                />
+              ) : null}
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
                 <TextField
                   type="number"
@@ -1325,21 +1454,63 @@ function MessageFloodFilterEditor({
           <Box>
             <SectionTitle label="Repeat Offenders" />
             <Stack spacing={2}>
-              <FormControlLabel control={<Checkbox checked={settings.repeatOffendersEnabled} onChange={(event) => updateSettings({ repeatOffendersEnabled: event.target.checked })} />} label="Enable repeat offender detection" />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={settings.repeatOffendersEnabled}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      updateSettings({ repeatOffendersEnabled: checked });
+                      void updateSpamFilter(selectedSpamFilter.id, {
+                        repeatOffendersEnabled: checked,
+                      });
+                    }}
+                  />
+                }
+                label="Enable repeat offender detection"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={settings.repeatUntilStreamEnd}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      updateSettings({ repeatUntilStreamEnd: checked });
+                      void updateSpamFilter(selectedSpamFilter.id, {
+                        repeatUntilStreamEnd: checked,
+                      });
+                    }}
+                  />
+                }
+                label="Do not forget offenses until stream/session reset"
+              />
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
                 <TextField
                   type="number"
                   label="Multiplier"
                   value={settings.repeatMultiplier}
                   inputProps={{ min: 1, step: 0.1 }}
-                  onChange={(event) => updateSettings({ repeatMultiplier: Math.max(1, Number(event.target.value) || 1) })}
+                  onChange={(event) => {
+                    const value = Math.max(1, Number(event.target.value) || 1);
+                    updateSettings({ repeatMultiplier: value });
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      repeatMultiplier: value,
+                    });
+                  }}
                 />
                 <TextField
                   type="number"
-                  label="Cooldown"
+                  label="Forget after (seconds)"
                   value={settings.repeatCooldownSeconds}
                   inputProps={{ min: 1 }}
-                  onChange={(event) => updateSettings({ repeatCooldownSeconds: Math.max(1, Number(event.target.value) || 1) })}
+                  disabled={settings.repeatUntilStreamEnd}
+                  onChange={(event) => {
+                    const value = Math.max(1, Number(event.target.value) || 1);
+                    updateSettings({ repeatCooldownSeconds: value });
+                    void updateSpamFilter(selectedSpamFilter.id, {
+                      repeatMemorySeconds: value,
+                    });
+                  }}
                 />
               </Box>
             </Stack>
@@ -1452,6 +1623,22 @@ function GenericSpamFilterEditor({
             ))}
           </Select>
         </FormControl>
+        {actionIncludesTimeout(selectedSpamFilter.action) ? (
+          <TextField
+            label="Timeout (seconds)"
+            type="number"
+            value={parseActionTimeoutSeconds(selectedSpamFilter.action)}
+            inputProps={{ min: 1 }}
+            onChange={(event) => {
+              void updateSpamFilter(selectedSpamFilter.id, {
+                action: withActionTimeoutSeconds(
+                  selectedSpamFilter.action,
+                  Number(event.target.value) || 1,
+                ),
+              });
+            }}
+          />
+        ) : null}
       </Box>
 
       <Paper
@@ -1506,9 +1693,6 @@ export function SpamFiltersPage() {
   const [floodImpactedRoleInput, setFloodImpactedRoleInput] = useState("");
   const [floodExcludedRoleInput, setFloodExcludedRoleInput] = useState("");
 
-  const enabledCount = filteredSpamFilters.filter(
-    (entry) => entry.enabled,
-  ).length;
   const isLinkFilter =
     selectedSpamFilter?.id === "links" &&
     selectedSpamFilter.linkSettings != null;
@@ -1607,38 +1791,17 @@ export function SpamFiltersPage() {
                 borderColor: "divider",
               }}
             >
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                justifyContent="space-between"
-                spacing={1.5}
-                alignItems={{ xs: "flex-start", sm: "center" }}
-              >
-                <Box>
-                  <Typography variant="h5">Spam filters</Typography>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mt: 0.45 }}
-                  >
-                    Tune the rules that catch flood, links, caps, and other
-                    noisy chat behavior.
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip
-                    icon={<ShieldRoundedIcon />}
-                    label={`${enabledCount} active`}
-                    color="success"
-                    variant="outlined"
-                  />
-                  <Chip
-                    icon={<TuneRoundedIcon />}
-                    label={`${filteredSpamFilters.length} rules`}
-                    color="primary"
-                    variant="outlined"
-                  />
-                </Stack>
-              </Stack>
+              <Box>
+                <Typography variant="h5">Spam filters</Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: 0.45 }}
+                >
+                  Tune the rules that catch flood, links, caps, and other noisy
+                  chat behavior.
+                </Typography>
+              </Box>
             </Box>
 
             <Stack spacing={1.25} sx={{ p: 1.5 }}>
@@ -2183,6 +2346,24 @@ export function SpamFiltersPage() {
                             ))}
                           </Select>
                         </FormControl>
+                        {actionIncludesTimeout(selectedSpamFilter.action) ? (
+                          <TextField
+                            type="number"
+                            label="Timeout (seconds)"
+                            value={parseActionTimeoutSeconds(
+                              selectedSpamFilter.action,
+                            )}
+                            inputProps={{ min: 1 }}
+                            onChange={(event) => {
+                              void updateSpamFilter(selectedSpamFilter.id, {
+                                action: withActionTimeoutSeconds(
+                                  selectedSpamFilter.action,
+                                  Number(event.target.value) || 1,
+                                ),
+                              });
+                            }}
+                          />
+                        ) : null}
 
                         <Box
                           sx={{
@@ -2239,11 +2420,15 @@ export function SpamFiltersPage() {
                                 selectedSpamFilter.linkSettings
                                   .repeatOffendersEnabled
                               }
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const checked = event.target.checked;
                                 updateLinkSettings({
-                                  repeatOffendersEnabled: event.target.checked,
-                                })
-                              }
+                                  repeatOffendersEnabled: checked,
+                                });
+                                void updateSpamFilter(selectedSpamFilter.id, {
+                                  repeatOffendersEnabled: checked,
+                                });
+                              }}
                             />
                           }
                           label="Enable repeat offender detection"
@@ -2266,14 +2451,18 @@ export function SpamFiltersPage() {
                               selectedSpamFilter.linkSettings.repeatMultiplier
                             }
                             inputProps={{ min: 1 }}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const value = Math.max(
+                                1,
+                                Number(event.target.value) || 1,
+                              );
                               updateLinkSettings({
-                                repeatMultiplier: Math.max(
-                                  1,
-                                  Number(event.target.value) || 1,
-                                ),
-                              })
-                            }
+                                repeatMultiplier: value,
+                              });
+                              void updateSpamFilter(selectedSpamFilter.id, {
+                                repeatMultiplier: value,
+                              });
+                            }}
                           />
                           <TextField
                             label="Cooldown seconds"
@@ -2283,14 +2472,18 @@ export function SpamFiltersPage() {
                                 .repeatCooldownSeconds
                             }
                             inputProps={{ min: 1 }}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const value = Math.max(
+                                1,
+                                Number(event.target.value) || 1,
+                              );
                               updateLinkSettings({
-                                repeatCooldownSeconds: Math.max(
-                                  1,
-                                  Number(event.target.value) || 1,
-                                ),
-                              })
-                            }
+                                repeatCooldownSeconds: value,
+                              });
+                              void updateSpamFilter(selectedSpamFilter.id, {
+                                repeatMemorySeconds: value,
+                              });
+                            }}
                           />
                         </Box>
                       </Stack>

@@ -55,6 +55,10 @@ type SpamFiltersResponse = {
     threshold_label: string;
     threshold_value: number;
     enabled: boolean;
+    repeat_offenders_enabled?: boolean;
+    repeat_multiplier?: number;
+    repeat_memory_seconds?: number;
+    repeat_until_stream_end?: boolean;
   }>;
 };
 
@@ -1327,6 +1331,10 @@ export async function fetchSpamFilters(
     thresholdLabel: entry.threshold_label,
     thresholdValue: entry.threshold_value,
     enabled: entry.enabled,
+    repeatOffendersEnabled: entry.repeat_offenders_enabled,
+    repeatMultiplier: entry.repeat_multiplier,
+    repeatMemorySeconds: entry.repeat_memory_seconds,
+    repeatUntilStreamEnd: entry.repeat_until_stream_end,
   }));
 }
 
@@ -1488,9 +1496,46 @@ export async function deleteMode(modeKey: string): Promise<ModeEntry[]> {
   }));
 }
 
+function resolveSpamRepeatSettings(entry: SpamFilterEntry): {
+  enabled?: boolean;
+  multiplier?: number;
+  memorySeconds?: number;
+  untilStreamEnd?: boolean;
+} {
+  const repeatFromLength = entry.lengthSettings;
+  const repeatFromCaps = entry.capsSettings;
+  const repeatFromFlood = entry.messageFloodSettings;
+  const repeatFromLinks = entry.linkSettings;
+
+  return {
+    enabled:
+      entry.repeatOffendersEnabled ??
+      repeatFromFlood?.repeatOffendersEnabled ??
+      repeatFromLength?.repeatOffendersEnabled ??
+      repeatFromCaps?.repeatOffendersEnabled ??
+      repeatFromLinks?.repeatOffendersEnabled,
+    multiplier:
+      entry.repeatMultiplier ??
+      repeatFromFlood?.repeatMultiplier ??
+      repeatFromLength?.repeatMultiplier ??
+      repeatFromCaps?.repeatMultiplier ??
+      repeatFromLinks?.repeatMultiplier,
+    memorySeconds:
+      entry.repeatMemorySeconds ??
+      repeatFromFlood?.repeatCooldownSeconds ??
+      repeatFromLength?.repeatCooldownSeconds ??
+      repeatFromCaps?.repeatCooldownSeconds ??
+      repeatFromLinks?.repeatCooldownSeconds,
+    untilStreamEnd:
+      entry.repeatUntilStreamEnd ??
+      repeatFromFlood?.repeatUntilStreamEnd,
+  };
+}
+
 export async function saveSpamFilter(
   entry: SpamFilterEntry,
 ): Promise<SpamFilterEntry> {
+  const repeat = resolveSpamRepeatSettings(entry);
   const response = await fetch("/api/dashboard/spam-filters", {
     method: "PUT",
     credentials: "same-origin",
@@ -1504,6 +1549,10 @@ export async function saveSpamFilter(
       threshold_label: entry.thresholdLabel,
       threshold_value: entry.thresholdValue,
       enabled: entry.enabled,
+      repeat_offenders_enabled: repeat.enabled,
+      repeat_multiplier: repeat.multiplier,
+      repeat_memory_seconds: repeat.memorySeconds,
+      repeat_until_stream_end: repeat.untilStreamEnd,
     }),
   });
 
@@ -1519,6 +1568,10 @@ export async function saveSpamFilter(
     threshold_label: string;
     threshold_value: number;
     enabled: boolean;
+    repeat_offenders_enabled?: boolean;
+    repeat_multiplier?: number;
+    repeat_memory_seconds?: number;
+    repeat_until_stream_end?: boolean;
   };
 
   return {
@@ -1529,6 +1582,10 @@ export async function saveSpamFilter(
     thresholdLabel: payload.threshold_label,
     thresholdValue: payload.threshold_value,
     enabled: payload.enabled,
+    repeatOffendersEnabled: payload.repeat_offenders_enabled,
+    repeatMultiplier: payload.repeat_multiplier,
+    repeatMemorySeconds: payload.repeat_memory_seconds,
+    repeatUntilStreamEnd: payload.repeat_until_stream_end,
   };
 }
 

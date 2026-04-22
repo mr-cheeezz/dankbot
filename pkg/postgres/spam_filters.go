@@ -4,21 +4,26 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
 
 type SpamFilter struct {
-	FilterKey      string
-	Title          string
-	Description    string
-	Action         string
-	ThresholdLabel string
-	ThresholdValue int
-	Enabled        bool
-	IsBuiltin      bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	FilterKey              string
+	Title                  string
+	Description            string
+	Action                 string
+	ThresholdLabel         string
+	ThresholdValue         int
+	Enabled                bool
+	RepeatOffendersEnabled bool
+	RepeatMultiplier       float64
+	RepeatMemorySeconds    int
+	RepeatUntilStreamEnd   bool
+	IsBuiltin              bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 type SpamFilterStore struct {
@@ -32,64 +37,88 @@ func NewSpamFilterStore(client *Client) *SpamFilterStore {
 func DefaultSpamFilters() []SpamFilter {
 	return []SpamFilter{
 		{
-			FilterKey:      "message-flood",
-			Title:          "message flood",
-			Description:    "Stops viewers from sending too many messages inside a short window.",
-			Action:         "timeout 30s",
-			ThresholdLabel: "messages / 10s",
-			ThresholdValue: 6,
-			Enabled:        true,
-			IsBuiltin:      true,
+			FilterKey:              "message-flood",
+			Title:                  "message flood",
+			Description:            "Stops viewers from sending too many messages inside a short window.",
+			Action:                 "timeout 30s",
+			ThresholdLabel:         "messages / 10s",
+			ThresholdValue:         6,
+			Enabled:                true,
+			RepeatOffendersEnabled: true,
+			RepeatMultiplier:       2,
+			RepeatMemorySeconds:    600,
+			RepeatUntilStreamEnd:   false,
+			IsBuiltin:              true,
 		},
 		{
-			FilterKey:      "duplicate-messages",
-			Title:          "duplicate messages",
-			Description:    "Catches the same line being posted repeatedly by the same chatter.",
-			Action:         "delete",
-			ThresholdLabel: "same message count",
-			ThresholdValue: 3,
-			Enabled:        true,
-			IsBuiltin:      true,
+			FilterKey:              "duplicate-messages",
+			Title:                  "duplicate messages",
+			Description:            "Catches the same line being posted repeatedly by the same chatter.",
+			Action:                 "delete",
+			ThresholdLabel:         "same message count",
+			ThresholdValue:         3,
+			Enabled:                true,
+			RepeatOffendersEnabled: false,
+			RepeatMultiplier:       1,
+			RepeatMemorySeconds:    600,
+			RepeatUntilStreamEnd:   false,
+			IsBuiltin:              true,
 		},
 		{
-			FilterKey:      "message-length",
-			Title:          "message length",
-			Description:    "Blocks huge walls of text before they turn chat into a paragraph dump.",
-			Action:         "delete",
-			ThresholdLabel: "max characters",
-			ThresholdValue: 320,
-			Enabled:        true,
-			IsBuiltin:      true,
+			FilterKey:              "message-length",
+			Title:                  "message length",
+			Description:            "Blocks huge walls of text before they turn chat into a paragraph dump.",
+			Action:                 "delete",
+			ThresholdLabel:         "max characters",
+			ThresholdValue:         320,
+			Enabled:                true,
+			RepeatOffendersEnabled: false,
+			RepeatMultiplier:       1,
+			RepeatMemorySeconds:    600,
+			RepeatUntilStreamEnd:   false,
+			IsBuiltin:              true,
 		},
 		{
-			FilterKey:      "links",
-			Title:          "links",
-			Description:    "Removes off-site links unless the chatter is trusted or the filter is relaxed.",
-			Action:         "delete + timeout 30s",
-			ThresholdLabel: "max links / message",
-			ThresholdValue: 1,
-			Enabled:        true,
-			IsBuiltin:      true,
+			FilterKey:              "links",
+			Title:                  "links",
+			Description:            "Removes off-site links unless the chatter is trusted or the filter is relaxed.",
+			Action:                 "delete + timeout 30s",
+			ThresholdLabel:         "max links / message",
+			ThresholdValue:         1,
+			Enabled:                true,
+			RepeatOffendersEnabled: false,
+			RepeatMultiplier:       1,
+			RepeatMemorySeconds:    600,
+			RepeatUntilStreamEnd:   false,
+			IsBuiltin:              true,
 		},
 		{
-			FilterKey:      "caps",
-			Title:          "caps",
-			Description:    "Catches messages that are mostly uppercase and look like shouting spam.",
-			Action:         "delete",
-			ThresholdLabel: "caps percentage",
-			ThresholdValue: 75,
-			Enabled:        false,
-			IsBuiltin:      true,
+			FilterKey:              "caps",
+			Title:                  "caps",
+			Description:            "Catches messages that are mostly uppercase and look like shouting spam.",
+			Action:                 "delete",
+			ThresholdLabel:         "caps percentage",
+			ThresholdValue:         75,
+			Enabled:                false,
+			RepeatOffendersEnabled: false,
+			RepeatMultiplier:       1,
+			RepeatMemorySeconds:    600,
+			RepeatUntilStreamEnd:   false,
+			IsBuiltin:              true,
 		},
 		{
-			FilterKey:      "repeated-characters",
-			Title:          "repeated characters",
-			Description:    "Stops stretched-out spam like looooooool or !!!!!!!!!! from flooding chat.",
-			Action:         "delete",
-			ThresholdLabel: "same char run",
-			ThresholdValue: 12,
-			Enabled:        false,
-			IsBuiltin:      true,
+			FilterKey:              "repeated-characters",
+			Title:                  "repeated characters",
+			Description:            "Stops stretched-out spam like looooooool or !!!!!!!!!! from flooding chat.",
+			Action:                 "delete",
+			ThresholdLabel:         "same char run",
+			ThresholdValue:         12,
+			Enabled:                false,
+			RepeatOffendersEnabled: false,
+			RepeatMultiplier:       1,
+			RepeatMemorySeconds:    600,
+			RepeatUntilStreamEnd:   false,
+			IsBuiltin:              true,
 		},
 	}
 }
@@ -117,11 +146,15 @@ INSERT INTO spam_filters (
 	threshold_label,
 	threshold_value,
 	enabled,
+	repeat_offenders_enabled,
+	repeat_multiplier,
+	repeat_memory_seconds,
+	repeat_until_stream_end,
 	is_builtin,
 	created_at,
 	updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
 ON CONFLICT (filter_key) DO NOTHING
 `,
 			filter.FilterKey,
@@ -131,6 +164,10 @@ ON CONFLICT (filter_key) DO NOTHING
 			strings.TrimSpace(filter.ThresholdLabel),
 			filter.ThresholdValue,
 			filter.Enabled,
+			filter.RepeatOffendersEnabled,
+			filter.RepeatMultiplier,
+			filter.RepeatMemorySeconds,
+			filter.RepeatUntilStreamEnd,
 			filter.IsBuiltin,
 		)
 		if err != nil {
@@ -158,6 +195,10 @@ SELECT
 	threshold_label,
 	threshold_value,
 	enabled,
+	repeat_offenders_enabled,
+	repeat_multiplier,
+	repeat_memory_seconds,
+	repeat_until_stream_end,
 	is_builtin,
 	created_at,
 	updated_at
@@ -181,6 +222,10 @@ ORDER BY is_builtin DESC, title ASC, filter_key ASC
 			&item.ThresholdLabel,
 			&item.ThresholdValue,
 			&item.Enabled,
+			&item.RepeatOffendersEnabled,
+			&item.RepeatMultiplier,
+			&item.RepeatMemorySeconds,
+			&item.RepeatUntilStreamEnd,
 			&item.IsBuiltin,
 			&item.CreatedAt,
 			&item.UpdatedAt,
@@ -221,6 +266,10 @@ SELECT
 	threshold_label,
 	threshold_value,
 	enabled,
+	repeat_offenders_enabled,
+	repeat_multiplier,
+	repeat_memory_seconds,
+	repeat_until_stream_end,
 	is_builtin,
 	created_at,
 	updated_at
@@ -236,6 +285,10 @@ WHERE filter_key = $1
 		&item.ThresholdLabel,
 		&item.ThresholdValue,
 		&item.Enabled,
+		&item.RepeatOffendersEnabled,
+		&item.RepeatMultiplier,
+		&item.RepeatMemorySeconds,
+		&item.RepeatUntilStreamEnd,
 		&item.IsBuiltin,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -279,6 +332,12 @@ func (s *SpamFilterStore) Update(ctx context.Context, filter SpamFilter) (*SpamF
 	if filter.ThresholdValue < 1 {
 		filter.ThresholdValue = 1
 	}
+	if filter.RepeatMultiplier < 1 || math.IsNaN(filter.RepeatMultiplier) || math.IsInf(filter.RepeatMultiplier, 0) {
+		filter.RepeatMultiplier = 1
+	}
+	if filter.RepeatMemorySeconds < 1 {
+		filter.RepeatMemorySeconds = 1
+	}
 
 	row := db.QueryRowContext(
 		ctx,
@@ -291,6 +350,10 @@ SET
 	threshold_label = $5,
 	threshold_value = $6,
 	enabled = $7,
+	repeat_offenders_enabled = $8,
+	repeat_multiplier = $9,
+	repeat_memory_seconds = $10,
+	repeat_until_stream_end = $11,
 	updated_at = NOW()
 WHERE filter_key = $1
 RETURNING
@@ -301,6 +364,10 @@ RETURNING
 	threshold_label,
 	threshold_value,
 	enabled,
+	repeat_offenders_enabled,
+	repeat_multiplier,
+	repeat_memory_seconds,
+	repeat_until_stream_end,
 	is_builtin,
 	created_at,
 	updated_at
@@ -312,6 +379,10 @@ RETURNING
 		filter.ThresholdLabel,
 		filter.ThresholdValue,
 		filter.Enabled,
+		filter.RepeatOffendersEnabled,
+		filter.RepeatMultiplier,
+		filter.RepeatMemorySeconds,
+		filter.RepeatUntilStreamEnd,
 	)
 
 	var updated SpamFilter
@@ -323,6 +394,10 @@ RETURNING
 		&updated.ThresholdLabel,
 		&updated.ThresholdValue,
 		&updated.Enabled,
+		&updated.RepeatOffendersEnabled,
+		&updated.RepeatMultiplier,
+		&updated.RepeatMemorySeconds,
+		&updated.RepeatUntilStreamEnd,
 		&updated.IsBuiltin,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,

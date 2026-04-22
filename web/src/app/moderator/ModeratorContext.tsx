@@ -208,21 +208,69 @@ function mergeSpamFilterMetadata(
   existing?: SpamFilterEntry | null,
 ): SpamFilterEntry {
   const preset = initialSpamFilterEntries.find((item) => item.id === entry.id);
+  const mergedLengthSettings =
+    entry.lengthSettings ?? existing?.lengthSettings ?? preset?.lengthSettings;
+  const mergedLinkSettings =
+    entry.linkSettings ?? existing?.linkSettings ?? preset?.linkSettings;
+  const mergedCapsSettings =
+    entry.capsSettings ?? existing?.capsSettings ?? preset?.capsSettings;
+  const mergedMessageFloodSettings =
+    entry.messageFloodSettings ??
+    existing?.messageFloodSettings ??
+    preset?.messageFloodSettings;
+  const resolvedRepeatOffendersEnabled =
+    entry.repeatOffendersEnabled ??
+    existing?.repeatOffendersEnabled ??
+    mergedMessageFloodSettings?.repeatOffendersEnabled ??
+    mergedLengthSettings?.repeatOffendersEnabled ??
+    mergedCapsSettings?.repeatOffendersEnabled ??
+    mergedLinkSettings?.repeatOffendersEnabled;
+  const resolvedRepeatMultiplier =
+    entry.repeatMultiplier ??
+    existing?.repeatMultiplier ??
+    mergedMessageFloodSettings?.repeatMultiplier ??
+    mergedLengthSettings?.repeatMultiplier ??
+    mergedCapsSettings?.repeatMultiplier ??
+    mergedLinkSettings?.repeatMultiplier;
+  const resolvedRepeatMemorySeconds =
+    entry.repeatMemorySeconds ??
+    existing?.repeatMemorySeconds ??
+    mergedMessageFloodSettings?.repeatCooldownSeconds ??
+    mergedLengthSettings?.repeatCooldownSeconds ??
+    mergedCapsSettings?.repeatCooldownSeconds ??
+    mergedLinkSettings?.repeatCooldownSeconds;
+  const resolvedRepeatUntilStreamEnd =
+    entry.repeatUntilStreamEnd ??
+    existing?.repeatUntilStreamEnd ??
+    mergedMessageFloodSettings?.repeatUntilStreamEnd;
 
   return {
     ...entry,
-    lengthSettings:
-      entry.lengthSettings ??
-      existing?.lengthSettings ??
-      preset?.lengthSettings,
-    linkSettings:
-      entry.linkSettings ?? existing?.linkSettings ?? preset?.linkSettings,
-    capsSettings:
-      entry.capsSettings ?? existing?.capsSettings ?? preset?.capsSettings,
+    repeatOffendersEnabled: resolvedRepeatOffendersEnabled,
+    repeatMultiplier: resolvedRepeatMultiplier,
+    repeatMemorySeconds: resolvedRepeatMemorySeconds,
+    repeatUntilStreamEnd: resolvedRepeatUntilStreamEnd,
+    lengthSettings: mergedLengthSettings,
+    linkSettings: mergedLinkSettings,
+    capsSettings: mergedCapsSettings,
     messageFloodSettings:
-      entry.messageFloodSettings ??
-      existing?.messageFloodSettings ??
-      preset?.messageFloodSettings,
+      mergedMessageFloodSettings == null
+        ? mergedMessageFloodSettings
+        : {
+            ...mergedMessageFloodSettings,
+            repeatOffendersEnabled:
+              resolvedRepeatOffendersEnabled ??
+              mergedMessageFloodSettings.repeatOffendersEnabled,
+            repeatMultiplier:
+              resolvedRepeatMultiplier ??
+              mergedMessageFloodSettings.repeatMultiplier,
+            repeatCooldownSeconds:
+              resolvedRepeatMemorySeconds ??
+              mergedMessageFloodSettings.repeatCooldownSeconds,
+            repeatUntilStreamEnd:
+              resolvedRepeatUntilStreamEnd ??
+              mergedMessageFloodSettings.repeatUntilStreamEnd,
+          },
   };
 }
 
