@@ -42,6 +42,7 @@ const defaultSettings: PublicHomeSettings = {
   promoLinks: [],
   robloxLinkCommandTarget: "dankbot",
   robloxLinkCommandTemplate: "",
+  robloxLinkCommandDeleteTemplate: "",
 };
 
 const linkCommandTemplateDefaults: Record<
@@ -52,6 +53,17 @@ const linkCommandTemplateDefaults: Record<
   nightbot: "!commands edit !link {link}",
   fossabot: "!setcommand !link {link}",
   pajbot: "!setcommand !link {link}",
+  custom: "",
+};
+
+const linkCommandDeleteTemplateDefaults: Record<
+  PublicHomeSettings["robloxLinkCommandTarget"],
+  string
+> = {
+  dankbot: "",
+  nightbot: "!commands del !link",
+  fossabot: "!delcommand !link",
+  pajbot: "!delcommand !link",
   custom: "",
 };
 
@@ -210,11 +222,18 @@ export function SettingsPage() {
         current.robloxLinkCommandTemplate === linkCommandTemplateDefaults[current.robloxLinkCommandTarget]
           ? linkCommandTemplateDefaults[target]
           : current.robloxLinkCommandTemplate;
+      const nextDeleteTemplate =
+        current.robloxLinkCommandDeleteTemplate.trim() === "" ||
+        current.robloxLinkCommandDeleteTemplate ===
+          linkCommandDeleteTemplateDefaults[current.robloxLinkCommandTarget]
+          ? linkCommandDeleteTemplateDefaults[target]
+          : current.robloxLinkCommandDeleteTemplate;
 
       return {
         ...current,
         robloxLinkCommandTarget: target,
         robloxLinkCommandTemplate: nextTemplate,
+        robloxLinkCommandDeleteTemplate: nextDeleteTemplate,
       };
     });
     setMessage("");
@@ -999,7 +1018,7 @@ export function SettingsPage() {
                       : settings.robloxLinkCommandTarget === "fossabot"
                         ? "Fossabot example: !setcommand !link {link}"
                         : settings.robloxLinkCommandTarget === "pajbot"
-                          ? "Pajbot example: !setcommand !link {link}"
+                          ? "Pajbot example: !add command !link {link}"
                           : "Use {link} where the Roblox private server URL should be inserted."
                   }
                   multiline
@@ -1007,6 +1026,32 @@ export function SettingsPage() {
                   placeholder={
                     linkCommandTemplateDefaults[settings.robloxLinkCommandTarget] ||
                     "!commands edit !link {link}"
+                  }
+                />
+
+                <TextField
+                  label="External bot delete command template"
+                  value={settings.robloxLinkCommandDeleteTemplate}
+                  onChange={(event) =>
+                    updateField("robloxLinkCommandDeleteTemplate", event.target.value)
+                  }
+                  disabled={
+                    saving || loading || settings.robloxLinkCommandTarget === "dankbot"
+                  }
+                  helperText={
+                    settings.robloxLinkCommandTarget === "nightbot"
+                      ? "Nightbot example: !commands del !link"
+                      : settings.robloxLinkCommandTarget === "fossabot"
+                        ? "Fossabot example: !delcommand !link"
+                        : settings.robloxLinkCommandTarget === "pajbot"
+                          ? "Pajbot example: !delcommand !link"
+                          : "Runs when link mode is turned off or switched to another mode."
+                  }
+                  multiline
+                  minRows={2}
+                  placeholder={
+                    linkCommandDeleteTemplateDefaults[settings.robloxLinkCommandTarget] ||
+                    "!commands del !link"
                   }
                 />
 
@@ -1083,6 +1128,28 @@ export function SettingsPage() {
                       This runs when a moderator posts a Roblox private server link or when link
                       mode is explicitly set with a private server URL.
                     </Typography>
+
+                    <Typography sx={{ mt: 0.8, fontWeight: 700 }}>
+                      {settings.robloxLinkCommandTarget === "dankbot"
+                        ? "No external delete command needed"
+                        : "When link mode is turned off, DankBot will send"}
+                    </Typography>
+                    <Box
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: 1.25,
+                        p: 1.5,
+                        bgcolor: "background.default",
+                        fontFamily: "monospace",
+                        fontSize: "0.95rem",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {settings.robloxLinkCommandTarget === "dankbot"
+                        ? "-"
+                        : settings.robloxLinkCommandDeleteTemplate || "!commands del !link"}
+                    </Box>
                   </Stack>
                 </CardContent>
               </Card>

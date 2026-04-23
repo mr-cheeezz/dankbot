@@ -16,17 +16,18 @@ type PromoLink struct {
 }
 
 type PublicHomeSettings struct {
-	ShowNowPlaying            bool
-	ShowNowPlayingAlbumArt    bool
-	ShowNowPlayingProgress    bool
-	ShowNowPlayingLinks       bool
-	CommandPrefix             string
-	PromoLinks                []PromoLink
-	RobloxLinkCommandTarget   string
-	RobloxLinkCommandTemplate string
-	UpdatedBy                 string
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
+	ShowNowPlaying                  bool
+	ShowNowPlayingAlbumArt          bool
+	ShowNowPlayingProgress          bool
+	ShowNowPlayingLinks             bool
+	CommandPrefix                   string
+	PromoLinks                      []PromoLink
+	RobloxLinkCommandTarget         string
+	RobloxLinkCommandTemplate       string
+	RobloxLinkCommandDeleteTemplate string
+	UpdatedBy                       string
+	CreatedAt                       time.Time
+	UpdatedAt                       time.Time
 }
 
 type PublicHomeSettingsStore struct {
@@ -39,14 +40,15 @@ func NewPublicHomeSettingsStore(client *Client) *PublicHomeSettingsStore {
 
 func DefaultPublicHomeSettings() PublicHomeSettings {
 	return PublicHomeSettings{
-		ShowNowPlaying:            true,
-		ShowNowPlayingAlbumArt:    true,
-		ShowNowPlayingProgress:    true,
-		ShowNowPlayingLinks:       true,
-		CommandPrefix:             "!",
-		PromoLinks:                []PromoLink{},
-		RobloxLinkCommandTarget:   "dankbot",
-		RobloxLinkCommandTemplate: "",
+		ShowNowPlaying:                  true,
+		ShowNowPlayingAlbumArt:          true,
+		ShowNowPlayingProgress:          true,
+		ShowNowPlayingLinks:             true,
+		CommandPrefix:                   "!",
+		PromoLinks:                      []PromoLink{},
+		RobloxLinkCommandTarget:         "dankbot",
+		RobloxLinkCommandTemplate:       "",
+		RobloxLinkCommandDeleteTemplate: "",
 	}
 }
 
@@ -71,11 +73,12 @@ INSERT INTO public_home_settings (
 	promo_links_json,
 	roblox_link_command_target,
 	roblox_link_command_template,
+	roblox_link_command_delete_template,
 	updated_by,
 	created_at,
 	updated_at
 )
-VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, '', NOW(), NOW())
+VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, '', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
 		defaults.ShowNowPlaying,
@@ -86,6 +89,7 @@ ON CONFLICT (id) DO NOTHING
 		promoLinksJSON,
 		defaults.RobloxLinkCommandTarget,
 		defaults.RobloxLinkCommandTemplate,
+		defaults.RobloxLinkCommandDeleteTemplate,
 	)
 	if err != nil {
 		return fmt.Errorf("ensure public home settings defaults: %w", err)
@@ -116,6 +120,7 @@ SELECT
 	promo_links_json,
 	roblox_link_command_target,
 	roblox_link_command_template,
+	roblox_link_command_delete_template,
 	updated_by,
 	created_at,
 	updated_at
@@ -131,6 +136,7 @@ WHERE id = 1
 		&promoLinksJSON,
 		&settings.RobloxLinkCommandTarget,
 		&settings.RobloxLinkCommandTemplate,
+		&settings.RobloxLinkCommandDeleteTemplate,
 		&settings.UpdatedBy,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -170,7 +176,8 @@ SET
 	promo_links_json = $6,
 	roblox_link_command_target = $7,
 	roblox_link_command_template = $8,
-	updated_by = $9,
+	roblox_link_command_delete_template = $9,
+	updated_by = $10,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
@@ -182,6 +189,7 @@ RETURNING
 	promo_links_json,
 	roblox_link_command_target,
 	roblox_link_command_template,
+	roblox_link_command_delete_template,
 	updated_by,
 	created_at,
 	updated_at
@@ -194,6 +202,7 @@ RETURNING
 		promoLinksJSON,
 		normalizeLinkCommandTarget(settings.RobloxLinkCommandTarget),
 		strings.TrimSpace(settings.RobloxLinkCommandTemplate),
+		strings.TrimSpace(settings.RobloxLinkCommandDeleteTemplate),
 		strings.TrimSpace(settings.UpdatedBy),
 	).Scan(
 		&updated.ShowNowPlaying,
@@ -204,6 +213,7 @@ RETURNING
 		&promoLinksJSON,
 		&updated.RobloxLinkCommandTarget,
 		&updated.RobloxLinkCommandTemplate,
+		&updated.RobloxLinkCommandDeleteTemplate,
 		&updated.UpdatedBy,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,

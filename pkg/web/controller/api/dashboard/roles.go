@@ -225,7 +225,7 @@ func canManageDashboardRoles(userSession *session.UserSession) bool {
 		return false
 	}
 
-	return userSession.IsBroadcaster || userSession.IsAdmin
+	return userSession.IsBroadcaster || userSession.IsAdmin || userSession.IsLeadModerator
 }
 
 func normalizeTwitchLogin(raw string) string {

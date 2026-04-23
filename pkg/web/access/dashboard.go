@@ -99,15 +99,15 @@ func EvaluateDashboardAccess(ctx context.Context, appState *state.State, userID 
 }
 
 func CanManageIntegrations(access DashboardAccess) bool {
-	return access.IsBroadcaster || access.IsAdmin || access.IsBotAccount
+	return access.IsBroadcaster || access.IsAdmin || access.IsBotAccount || access.IsLeadModerator
 }
 
 func CanLinkStreamerIntegrations(access DashboardAccess) bool {
-	return access.IsBroadcaster
+	return access.IsBroadcaster || access.IsAdmin || access.IsBotAccount || access.IsLeadModerator
 }
 
 func CanLinkBotIntegration(access DashboardAccess) bool {
-	return access.IsBroadcaster || access.IsAdmin || access.IsBotAccount
+	return access.IsBroadcaster || access.IsAdmin || access.IsBotAccount || access.IsLeadModerator
 }
 
 func CanAccessEditorFeatures(access DashboardAccess) bool {

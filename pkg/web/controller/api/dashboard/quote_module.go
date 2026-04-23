@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,19 @@ type quoteEntryRequest struct {
 	Message string `json:"message"`
 }
 
+type quoteImportRequest struct {
+	Source  string `json:"source"`
+	Payload string `json:"payload"`
+}
+
+type quoteImportResponse struct {
+	Imported int                  `json:"imported"`
+	Skipped  int                  `json:"skipped"`
+	Items    []quoteEntryResponse `json:"items"`
+}
+
+var quoteLinePrefixPattern = regexp.MustCompile(`^(?:[#\[]?\d+[\]\)]?\s*[:.)\-]?\s*)(.+)$`)
+
 func (h handler) quoteModule(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -58,6 +72,96 @@ func (h handler) quoteModuleEntries(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeMethodNotAllowed(w, http.MethodGet+", "+http.MethodPost+", "+http.MethodPut+", "+http.MethodDelete)
 	}
+}
+
+func (h handler) quoteModuleImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w, http.MethodPost)
+		return
+	}
+
+	userSession, err := h.requireEditorFeatureAccess(r)
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	if h.appState == nil || h.appState.Postgres == nil {
+		http.Error(w, "quote storage is not configured", http.StatusInternalServerError)
+		return
+	}
+
+	var request quoteImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "invalid quote import payload", http.StatusBadRequest)
+		return
+	}
+
+	source := strings.ToLower(strings.TrimSpace(request.Source))
+	if source == "" {
+		source = "fossabot"
+	}
+	if source != "fossabot" {
+		http.Error(w, "unsupported quote import source", http.StatusBadRequest)
+		return
+	}
+
+	parsedMessages := parseFossabotQuotes(request.Payload)
+	if len(parsedMessages) == 0 {
+		http.Error(w, "no quotes found to import", http.StatusBadRequest)
+		return
+	}
+
+	store := postgres.NewQuoteStore(h.appState.Postgres)
+	existing, err := store.List(r.Context(), 0)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	seen := make(map[string]struct{}, len(existing)+len(parsedMessages))
+	for _, item := range existing {
+		key := normalizeQuoteImportMessage(item.Message)
+		if key == "" {
+			continue
+		}
+		seen[key] = struct{}{}
+	}
+
+	created := make([]quoteEntryResponse, 0, len(parsedMessages))
+	skipped := 0
+	actor := strings.TrimSpace(userSession.Login)
+
+	for _, message := range parsedMessages {
+		key := normalizeQuoteImportMessage(message)
+		if key == "" {
+			skipped++
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			skipped++
+			continue
+		}
+
+		item, createErr := store.Create(r.Context(), message, actor)
+		if createErr != nil {
+			http.Error(w, createErr.Error(), http.StatusBadRequest)
+			return
+		}
+		seen[key] = struct{}{}
+		created = append(created, quoteToResponse(*item))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(quoteImportResponse{
+		Imported: len(created),
+		Skipped:  skipped,
+		Items:    created,
+	})
 }
 
 func (h handler) getQuoteModule(w http.ResponseWriter, r *http.Request) {
@@ -306,4 +410,75 @@ func quoteToResponse(quote postgres.Quote) quoteEntryResponse {
 		CreatedAt: quote.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: quote.UpdatedAt.Format(time.RFC3339),
 	}
+}
+
+func parseFossabotQuotes(raw string) []string {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	raw = strings.ReplaceAll(raw, "\r", "\n")
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	type jsonQuote struct {
+		Quote   string `json:"quote"`
+		Message string `json:"message"`
+		Text    string `json:"text"`
+	}
+	var jsonItems []jsonQuote
+	if err := json.Unmarshal([]byte(raw), &jsonItems); err == nil && len(jsonItems) > 0 {
+		out := make([]string, 0, len(jsonItems))
+		for _, item := range jsonItems {
+			message := strings.TrimSpace(item.Quote)
+			if message == "" {
+				message = strings.TrimSpace(item.Message)
+			}
+			if message == "" {
+				message = strings.TrimSpace(item.Text)
+			}
+			if message != "" {
+				out = append(out, message)
+			}
+		}
+		return out
+	}
+
+	lines := strings.Split(raw, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		value := strings.TrimSpace(line)
+		if value == "" {
+			continue
+		}
+		value = strings.TrimPrefix(value, "-")
+		value = strings.TrimPrefix(value, "*")
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+
+		if match := quoteLinePrefixPattern.FindStringSubmatch(value); len(match) >= 2 {
+			value = strings.TrimSpace(match[1])
+		}
+
+		if index := strings.Index(value, "\t"); index > 0 {
+			left := strings.TrimSpace(value[:index])
+			right := strings.TrimSpace(value[index+1:])
+			if left != "" && right != "" {
+				if _, err := strconv.Atoi(strings.TrimLeft(left, "#")); err == nil {
+					value = right
+				}
+			}
+		}
+
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+
+	return out
+}
+
+func normalizeQuoteImportMessage(message string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(message)), " "))
 }

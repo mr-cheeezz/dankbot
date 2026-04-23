@@ -11,14 +11,15 @@ import (
 )
 
 type publicHomeSettingsResponse struct {
-	ShowNowPlaying            bool                `json:"show_now_playing"`
-	ShowNowPlayingAlbumArt    bool                `json:"show_now_playing_album_art"`
-	ShowNowPlayingProgress    bool                `json:"show_now_playing_progress"`
-	ShowNowPlayingLinks       bool                `json:"show_now_playing_links"`
-	CommandPrefix             string              `json:"command_prefix"`
-	PromoLinks                []promoLinkResponse `json:"promo_links"`
-	RobloxLinkCommandTarget   string              `json:"roblox_link_command_target"`
-	RobloxLinkCommandTemplate string              `json:"roblox_link_command_template"`
+	ShowNowPlaying                  bool                `json:"show_now_playing"`
+	ShowNowPlayingAlbumArt          bool                `json:"show_now_playing_album_art"`
+	ShowNowPlayingProgress          bool                `json:"show_now_playing_progress"`
+	ShowNowPlayingLinks             bool                `json:"show_now_playing_links"`
+	CommandPrefix                   string              `json:"command_prefix"`
+	PromoLinks                      []promoLinkResponse `json:"promo_links"`
+	RobloxLinkCommandTarget         string              `json:"roblox_link_command_target"`
+	RobloxLinkCommandTemplate       string              `json:"roblox_link_command_template"`
+	RobloxLinkCommandDeleteTemplate string              `json:"roblox_link_command_delete_template"`
 }
 
 type promoLinkResponse struct {
@@ -99,15 +100,16 @@ func (h handler) updatePublicHomeSettings(w http.ResponseWriter, r *http.Request
 	}
 
 	updated, err := h.appState.PublicHomeSettings.Update(r.Context(), postgres.PublicHomeSettings{
-		ShowNowPlaying:            request.ShowNowPlaying,
-		ShowNowPlayingAlbumArt:    request.ShowNowPlayingAlbumArt,
-		ShowNowPlayingProgress:    request.ShowNowPlayingProgress,
-		ShowNowPlayingLinks:       request.ShowNowPlayingLinks,
-		CommandPrefix:             request.CommandPrefix,
-		PromoLinks:                promoLinksFromResponse(request.PromoLinks),
-		RobloxLinkCommandTarget:   request.RobloxLinkCommandTarget,
-		RobloxLinkCommandTemplate: request.RobloxLinkCommandTemplate,
-		UpdatedBy:                 strings.TrimSpace(userSession.Login),
+		ShowNowPlaying:                  request.ShowNowPlaying,
+		ShowNowPlayingAlbumArt:          request.ShowNowPlayingAlbumArt,
+		ShowNowPlayingProgress:          request.ShowNowPlayingProgress,
+		ShowNowPlayingLinks:             request.ShowNowPlayingLinks,
+		CommandPrefix:                   request.CommandPrefix,
+		PromoLinks:                      promoLinksFromResponse(request.PromoLinks),
+		RobloxLinkCommandTarget:         request.RobloxLinkCommandTarget,
+		RobloxLinkCommandTemplate:       request.RobloxLinkCommandTemplate,
+		RobloxLinkCommandDeleteTemplate: request.RobloxLinkCommandDeleteTemplate,
+		UpdatedBy:                       strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -124,14 +126,15 @@ func (h handler) updatePublicHomeSettings(w http.ResponseWriter, r *http.Request
 
 func publicHomeSettingsToResponse(settings postgres.PublicHomeSettings) publicHomeSettingsResponse {
 	return publicHomeSettingsResponse{
-		ShowNowPlaying:            settings.ShowNowPlaying,
-		ShowNowPlayingAlbumArt:    settings.ShowNowPlayingAlbumArt,
-		ShowNowPlayingProgress:    settings.ShowNowPlayingProgress,
-		ShowNowPlayingLinks:       settings.ShowNowPlayingLinks,
-		CommandPrefix:             settings.CommandPrefix,
-		PromoLinks:                promoLinksToResponse(settings.PromoLinks),
-		RobloxLinkCommandTarget:   settings.RobloxLinkCommandTarget,
-		RobloxLinkCommandTemplate: settings.RobloxLinkCommandTemplate,
+		ShowNowPlaying:                  settings.ShowNowPlaying,
+		ShowNowPlayingAlbumArt:          settings.ShowNowPlayingAlbumArt,
+		ShowNowPlayingProgress:          settings.ShowNowPlayingProgress,
+		ShowNowPlayingLinks:             settings.ShowNowPlayingLinks,
+		CommandPrefix:                   settings.CommandPrefix,
+		PromoLinks:                      promoLinksToResponse(settings.PromoLinks),
+		RobloxLinkCommandTarget:         settings.RobloxLinkCommandTarget,
+		RobloxLinkCommandTemplate:       settings.RobloxLinkCommandTemplate,
+		RobloxLinkCommandDeleteTemplate: settings.RobloxLinkCommandDeleteTemplate,
 	}
 }
 

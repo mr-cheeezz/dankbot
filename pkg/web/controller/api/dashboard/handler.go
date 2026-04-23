@@ -77,6 +77,7 @@ func Register(mux *http.ServeMux, appState *state.State) {
 	mux.Handle("/api/dashboard/modules/tabs", http.HandlerFunc(handler{appState: appState}.tabsModule))
 	mux.Handle("/api/dashboard/modules/user-profile", http.HandlerFunc(handler{appState: appState}.userProfileModule))
 	mux.Handle("/api/dashboard/modules/quotes/items", http.HandlerFunc(handler{appState: appState}.quoteModuleEntries))
+	mux.Handle("/api/dashboard/modules/quotes/import", http.HandlerFunc(handler{appState: appState}.quoteModuleImport))
 	mux.Handle("/api/dashboard/public-home-settings", http.HandlerFunc(handler{appState: appState}.publicHomeSettings))
 	mux.Handle("/api/dashboard/alerts", http.HandlerFunc(handler{appState: appState}.alerts))
 	mux.Handle("/api/dashboard/spam-filters", http.HandlerFunc(handler{appState: appState}.spamFilters))

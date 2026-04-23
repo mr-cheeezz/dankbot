@@ -358,6 +358,7 @@ export type SpamFilterEntry = {
     repeatOffendersEnabled: boolean;
     repeatMultiplier: number;
     repeatCooldownSeconds: number;
+    repeatUntilStreamEnd?: boolean;
   };
   linkSettings?: {
     exemptVips: boolean;
@@ -379,6 +380,7 @@ export type SpamFilterEntry = {
     repeatOffendersEnabled: boolean;
     repeatMultiplier: number;
     repeatCooldownSeconds: number;
+    repeatUntilStreamEnd?: boolean;
   };
   capsSettings?: {
     minimumCharacters: number;
@@ -407,6 +409,7 @@ export type SpamFilterEntry = {
     repeatOffendersEnabled: boolean;
     repeatMultiplier: number;
     repeatCooldownSeconds: number;
+    repeatUntilStreamEnd?: boolean;
   };
   messageFloodSettings?: {
     matchAnyMessageTooSimilar: boolean;
@@ -541,6 +544,7 @@ export type PublicHomeSettings = {
     | "pajbot"
     | "custom";
   robloxLinkCommandTemplate: string;
+  robloxLinkCommandDeleteTemplate: string;
 };
 
 export type PlaceholderItem = {

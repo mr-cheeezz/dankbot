@@ -105,6 +105,7 @@ type PublicHomeSettingsResponse = {
     | "pajbot"
     | "custom";
   roblox_link_command_template: string;
+  roblox_link_command_delete_template: string;
 };
 
 type ModesResponse = {
@@ -203,6 +204,19 @@ type ModesModuleSettingsResponse = {
 };
 
 type QuoteEntriesResponse = {
+  items: Array<{
+    id: number;
+    message: string;
+    created_by: string;
+    updated_by: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+};
+
+type QuoteImportResponse = {
+  imported: number;
+  skipped: number;
   items: Array<{
     id: number;
     message: string;
@@ -1161,6 +1175,41 @@ export async function deleteQuoteModuleEntry(id: number): Promise<void> {
   }
 }
 
+export async function importFossabotQuotes(
+  payload: string,
+): Promise<{ imported: number; skipped: number; items: QuoteModuleEntry[] }> {
+  const response = await fetch("/api/dashboard/modules/quotes/import", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source: "fossabot",
+      payload,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to import quotes: ${response.status}`);
+  }
+
+  const data = (await response.json()) as QuoteImportResponse;
+  return {
+    imported: data.imported ?? 0,
+    skipped: data.skipped ?? 0,
+    items: (data.items ?? []).map((entry) => ({
+      id: entry.id,
+      message: entry.message,
+      createdBy: entry.created_by,
+      updatedBy: entry.updated_by,
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at,
+    })),
+  };
+}
+
 export async function fetchDiscordBotSettings(
   signal?: AbortSignal,
 ): Promise<DiscordBotSettings> {
@@ -1856,6 +1905,7 @@ export async function fetchPublicHomeSettings(
     promoLinks: Array.isArray(payload.promo_links) ? payload.promo_links : [],
     robloxLinkCommandTarget: payload.roblox_link_command_target ?? "dankbot",
     robloxLinkCommandTemplate: payload.roblox_link_command_template ?? "",
+    robloxLinkCommandDeleteTemplate: payload.roblox_link_command_delete_template ?? "",
   };
 }
 
@@ -1878,6 +1928,7 @@ export async function savePublicHomeSettings(
       promo_links: settings.promoLinks,
       roblox_link_command_target: settings.robloxLinkCommandTarget,
       roblox_link_command_template: settings.robloxLinkCommandTemplate,
+      roblox_link_command_delete_template: settings.robloxLinkCommandDeleteTemplate,
     }),
   });
 
@@ -1895,6 +1946,7 @@ export async function savePublicHomeSettings(
     promoLinks: Array.isArray(payload.promo_links) ? payload.promo_links : [],
     robloxLinkCommandTarget: payload.roblox_link_command_target ?? "dankbot",
     robloxLinkCommandTemplate: payload.roblox_link_command_template ?? "",
+    robloxLinkCommandDeleteTemplate: payload.roblox_link_command_delete_template ?? "",
   };
 }
 

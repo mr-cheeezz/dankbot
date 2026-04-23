@@ -324,22 +324,35 @@ func (m *Module) activateMode(ctx modules.CommandContext, modeKey, modeParam str
 	if err := m.stateStore.SetCurrentMode(context.Background(), mode.ModeKey, modeParam, ctx.SenderID); err != nil {
 		return "", err
 	}
-	warning := ""
+	warnings := make([]string, 0, 2)
+	if state != nil && strings.EqualFold(strings.TrimSpace(state.CurrentModeKey), "link") && !strings.EqualFold(mode.ModeKey, "link") {
+		clearWarning, clearErr := m.clearConfiguredLinkCommand(context.Background())
+		if clearErr != nil {
+			return "", clearErr
+		}
+		if strings.TrimSpace(clearWarning) != "" {
+			warnings = append(warnings, clearWarning)
+		}
+	}
 	if strings.EqualFold(mode.ModeKey, "link") && looksLikeRobloxPrivateServerURL(modeParam) {
-		warning, err = m.syncConfiguredLinkCommand(context.Background(), modeParam)
+		warning, err := m.syncConfiguredLinkCommand(context.Background(), modeParam)
 		if err != nil {
 			return "", err
 		}
+		if strings.TrimSpace(warning) != "" {
+			warnings = append(warnings, warning)
+		}
 	}
 	m.logAction(ctx, formatModeAuditDetail(mode.ModeKey, modeParam))
+	warningSuffix := joinWarnings(warnings...)
 
 	streamerLogin := m.streamerLogin()
 	senderName := m.senderName(ctx)
 	if modeParam == "" {
-		return strings.TrimSpace(fmt.Sprintf("@%s, %s has turned on %s mode. %s", streamerLogin, senderName, mode.ModeKey, warning)), nil
+		return strings.TrimSpace(fmt.Sprintf("@%s, %s has turned on %s mode. %s", streamerLogin, senderName, mode.ModeKey, warningSuffix)), nil
 	}
 
-	return strings.TrimSpace(fmt.Sprintf("@%s, %s has turned on %s mode for %s. %s", streamerLogin, senderName, mode.ModeKey, strings.ToLower(modeParam), warning)), nil
+	return strings.TrimSpace(fmt.Sprintf("@%s, %s has turned on %s mode for %s. %s", streamerLogin, senderName, mode.ModeKey, strings.ToLower(modeParam), warningSuffix)), nil
 }
 
 func (m *Module) handleLegacyModeCommand(ctx modules.CommandContext, message, commandPrefix string) (string, bool, error) {
@@ -961,7 +974,7 @@ func robloxPrivateServerCode(raw string) string {
 }
 
 func (m *Module) syncConfiguredLinkCommand(ctx context.Context, link string) (string, error) {
-	target, template := m.linkCommandSettings(ctx)
+	target, template, _ := m.linkCommandSettings(ctx)
 	if target == "dankbot" {
 		return "", nil
 	}
@@ -986,22 +999,48 @@ func (m *Module) syncConfiguredLinkCommand(ctx context.Context, link string) (st
 	return fmt.Sprintf("%s link command synced.", displayLinkCommandTarget(target)), nil
 }
 
-func (m *Module) linkCommandSettings(ctx context.Context) (string, string) {
+func (m *Module) clearConfiguredLinkCommand(ctx context.Context) (string, error) {
+	target, _, deleteTemplate := m.linkCommandSettings(ctx)
+	if target == "dankbot" {
+		return "", nil
+	}
+	if strings.TrimSpace(deleteTemplate) == "" {
+		return "No external link delete template is configured yet.", nil
+	}
+
+	channel, say := m.output()
+	if channel == "" || say == nil {
+		return "The external link command could not be removed right now.", nil
+	}
+
+	command := strings.TrimSpace(deleteTemplate)
+	if command == "" {
+		return "The external link delete template is empty.", nil
+	}
+
+	if err := say(channel, command); err != nil {
+		return "I could not remove the external !link command right now.", nil
+	}
+
+	return fmt.Sprintf("%s link command removed.", displayLinkCommandTarget(target)), nil
+}
+
+func (m *Module) linkCommandSettings(ctx context.Context) (string, string, string) {
 	m.mu.RLock()
 	store := m.channelSettings
 	m.mu.RUnlock()
 
 	if store == nil {
-		return "dankbot", ""
+		return "dankbot", "", ""
 	}
 
 	if err := store.EnsureDefault(ctx); err != nil {
-		return "dankbot", ""
+		return "dankbot", "", ""
 	}
 
 	settings, err := store.Get(ctx)
 	if err != nil || settings == nil {
-		return "dankbot", ""
+		return "dankbot", "", ""
 	}
 
 	target := strings.ToLower(strings.TrimSpace(settings.RobloxLinkCommandTarget))
@@ -1009,7 +1048,18 @@ func (m *Module) linkCommandSettings(ctx context.Context) (string, string) {
 		target = "dankbot"
 	}
 
-	return target, strings.TrimSpace(settings.RobloxLinkCommandTemplate)
+	return target, strings.TrimSpace(settings.RobloxLinkCommandTemplate), strings.TrimSpace(settings.RobloxLinkCommandDeleteTemplate)
+}
+
+func joinWarnings(parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(out, " "))
 }
 
 func displayLinkCommandTarget(target string) string {

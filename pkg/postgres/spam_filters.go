@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +34,8 @@ type SpamFilter struct {
 type SpamFilterStore struct {
 	client *Client
 }
+
+var spamTimeoutActionPattern = regexp.MustCompile(`timeout(?:\s+(\d+)\s*([smh]?))?`)
 
 func NewSpamFilterStore(client *Client) *SpamFilterStore {
 	return &SpamFilterStore{client: client}
@@ -151,6 +155,7 @@ func (s *SpamFilterStore) EnsureDefaults(ctx context.Context) error {
 		}
 		filter.ImpactedRoles = normalizeSpamRoleList(filter.ImpactedRoles)
 		filter.ExcludedRoles = normalizeSpamRoleList(filter.ExcludedRoles)
+		filter.Action = normalizeSpamAction(filter.Action)
 		impactedRaw, _ := json.Marshal(filter.ImpactedRoles)
 		excludedRaw, _ := json.Marshal(filter.ExcludedRoles)
 
@@ -263,6 +268,7 @@ ORDER BY is_builtin DESC, title ASC, filter_key ASC
 		}
 		item.ImpactedRoles = decodeSpamRoleList(impactedRaw)
 		item.ExcludedRoles = decodeSpamRoleList(excludedRaw)
+		item.Action = normalizeSpamAction(item.Action)
 		items = append(items, item)
 	}
 
@@ -337,6 +343,7 @@ WHERE filter_key = $1
 	}
 	item.ImpactedRoles = decodeSpamRoleList(impactedRaw)
 	item.ExcludedRoles = decodeSpamRoleList(excludedRaw)
+	item.Action = normalizeSpamAction(item.Action)
 
 	return &item, nil
 }
@@ -350,7 +357,7 @@ func (s *SpamFilterStore) Update(ctx context.Context, filter SpamFilter) (*SpamF
 	filter.FilterKey = normalizeSpamFilterKey(filter.FilterKey)
 	filter.Title = strings.TrimSpace(filter.Title)
 	filter.Description = strings.TrimSpace(filter.Description)
-	filter.Action = strings.TrimSpace(filter.Action)
+	filter.Action = normalizeSpamAction(filter.Action)
 	filter.ThresholdLabel = strings.TrimSpace(filter.ThresholdLabel)
 	filter.ImpactedRoles = normalizeSpamRoleList(filter.ImpactedRoles)
 	filter.ExcludedRoles = normalizeSpamRoleList(filter.ExcludedRoles)
@@ -467,8 +474,62 @@ RETURNING
 	}
 	updated.ImpactedRoles = decodeSpamRoleList(updatedImpacted)
 	updated.ExcludedRoles = decodeSpamRoleList(updatedExcluded)
+	updated.Action = normalizeSpamAction(updated.Action)
 
 	return &updated, nil
+}
+
+func normalizeSpamAction(action string) string {
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action == "" {
+		return "delete"
+	}
+
+	deleteEnabled := strings.Contains(action, "delete")
+	warnEnabled := strings.Contains(action, "warn")
+	timeoutEnabled := strings.Contains(action, "timeout")
+	banEnabled := strings.Contains(action, "ban")
+
+	if banEnabled {
+		if deleteEnabled {
+			return "delete + ban"
+		}
+		return "ban"
+	}
+
+	if timeoutEnabled {
+		seconds := 30
+		match := spamTimeoutActionPattern.FindStringSubmatch(action)
+		if len(match) >= 2 {
+			if value, err := strconv.Atoi(strings.TrimSpace(match[1])); err == nil && value > 0 {
+				switch strings.TrimSpace(match[2]) {
+				case "h":
+					seconds = value * 3600
+				case "m":
+					seconds = value * 60
+				default:
+					seconds = value
+				}
+			}
+		}
+		if deleteEnabled {
+			return fmt.Sprintf("delete + timeout %ds", seconds)
+		}
+		return fmt.Sprintf("timeout %ds", seconds)
+	}
+
+	if warnEnabled {
+		if deleteEnabled {
+			return "delete + warn"
+		}
+		return "warn"
+	}
+
+	if deleteEnabled {
+		return "delete"
+	}
+
+	return "delete"
 }
 
 func decodeSpamRoleList(raw []byte) []string {

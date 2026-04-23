@@ -33,6 +33,7 @@ import {
   createQuoteModuleEntry,
   deleteQuoteModuleEntry,
   fetchQuoteModuleEntries,
+  importFossabotQuotes,
   updateQuoteModuleEntry,
 } from "../api";
 import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
@@ -60,8 +61,12 @@ export function ModuleEditorPage() {
   const [quoteEntries, setQuoteEntries] = useState<QuoteModuleEntry[]>([]);
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [quotesError, setQuotesError] = useState("");
+  const [quotesNotice, setQuotesNotice] = useState("");
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
+  const [quoteImportDialogOpen, setQuoteImportDialogOpen] = useState(false);
+  const [quoteImportDraft, setQuoteImportDraft] = useState("");
+  const [quoteImportSaving, setQuoteImportSaving] = useState(false);
   const [editingQuote, setEditingQuote] = useState<QuoteModuleEntry | null>(
     null,
   );
@@ -103,12 +108,14 @@ export function ModuleEditorPage() {
       setQuoteEntries([]);
       setQuotesLoading(false);
       setQuotesError("");
+      setQuotesNotice("");
       return;
     }
 
     const controller = new AbortController();
     setQuotesLoading(true);
     setQuotesError("");
+    setQuotesNotice("");
 
     fetchQuoteModuleEntries(controller.signal)
       .then((items) => {
@@ -163,6 +170,7 @@ export function ModuleEditorPage() {
   };
 
   const openCreateQuoteDialog = () => {
+    setQuotesNotice("");
     setEditingQuote(null);
     setQuoteDraft("");
     setQuoteDialogOpen(true);
@@ -188,10 +196,12 @@ export function ModuleEditorPage() {
     }
 
     setQuotesError("");
+    setQuotesNotice("");
     if (editingQuote == null) {
       void createQuoteModuleEntry(message)
         .then((created) => {
           setQuoteEntries((current) => [created, ...current]);
+          setQuotesNotice("Quote added.");
           closeQuoteDialog();
         })
         .catch((error: unknown) => {
@@ -209,6 +219,7 @@ export function ModuleEditorPage() {
         setQuoteEntries((current) =>
           current.map((entry) => (entry.id === updated.id ? updated : entry)),
         );
+        setQuotesNotice(`Quote #${updated.id} updated.`);
         closeQuoteDialog();
       })
       .catch((error: unknown) => {
@@ -217,6 +228,54 @@ export function ModuleEditorPage() {
             ? error.message
             : "Could not update quote right now.",
         );
+      });
+  };
+
+  const openQuoteImportDialog = () => {
+    setQuotesNotice("");
+    setQuoteImportDraft("");
+    setQuoteImportDialogOpen(true);
+  };
+
+  const closeQuoteImportDialog = () => {
+    if (quoteImportSaving) {
+      return;
+    }
+    setQuoteImportDialogOpen(false);
+    setQuoteImportDraft("");
+  };
+
+  const saveQuoteImport = () => {
+    const payload = quoteImportDraft.trim();
+    if (payload === "") {
+      setQuotesError("Paste Fossabot quotes before importing.");
+      return;
+    }
+
+    setQuoteImportSaving(true);
+    setQuotesError("");
+    setQuotesNotice("");
+
+    void importFossabotQuotes(payload)
+      .then((result) => {
+        if (result.items.length > 0) {
+          setQuoteEntries((current) => [...result.items, ...current]);
+        }
+        setQuotesNotice(
+          `Imported ${result.imported} quote${result.imported === 1 ? "" : "s"} from Fossabot. Skipped ${result.skipped}.`,
+        );
+        setQuoteImportDialogOpen(false);
+        setQuoteImportDraft("");
+      })
+      .catch((error: unknown) => {
+        setQuotesError(
+          error instanceof Error
+            ? error.message
+            : "Could not import Fossabot quotes right now.",
+        );
+      })
+      .finally(() => {
+        setQuoteImportSaving(false);
       });
   };
 
@@ -453,6 +512,12 @@ export function ModuleEditorPage() {
                         </Typography>
                       </Box>
                       <Button
+                        variant="outlined"
+                        onClick={openQuoteImportDialog}
+                      >
+                        Import Fossabot
+                      </Button>
+                      <Button
                         variant="contained"
                         startIcon={<AddRoundedIcon />}
                         onClick={openCreateQuoteDialog}
@@ -463,6 +528,9 @@ export function ModuleEditorPage() {
 
                     {quotesError ? (
                       <Alert severity="error">{quotesError}</Alert>
+                    ) : null}
+                    {quotesNotice ? (
+                      <Alert severity="success">{quotesNotice}</Alert>
                     ) : null}
 
                     {quotesLoading ? (
@@ -581,6 +649,40 @@ export function ModuleEditorPage() {
               Close
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={quoteImportDialogOpen}
+        onClose={closeQuoteImportDialog}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Import Fossabot quotes</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.25} sx={{ mt: 1 }}>
+            <Alert severity="info">
+              Paste Fossabot quote export text here. Numbered lines and JSON arrays are both supported.
+            </Alert>
+            <TextField
+              autoFocus
+              fullWidth
+              multiline
+              minRows={10}
+              label="Fossabot quote export"
+              placeholder={"1) First quote\n2) Another quote"}
+              value={quoteImportDraft}
+              onChange={(event) => setQuoteImportDraft(event.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button variant="outlined" onClick={closeQuoteImportDialog} disabled={quoteImportSaving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={saveQuoteImport} disabled={quoteImportSaving}>
+            {quoteImportSaving ? "Importing..." : "Import"}
+          </Button>
         </DialogActions>
       </Dialog>
 
