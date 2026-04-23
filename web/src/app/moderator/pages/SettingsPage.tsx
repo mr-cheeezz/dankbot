@@ -223,11 +223,9 @@ export function SettingsPage() {
           ? linkCommandTemplateDefaults[target]
           : current.robloxLinkCommandTemplate;
       const nextDeleteTemplate =
-        current.robloxLinkCommandDeleteTemplate.trim() === "" ||
-        current.robloxLinkCommandDeleteTemplate ===
-          linkCommandDeleteTemplateDefaults[current.robloxLinkCommandTarget]
-          ? linkCommandDeleteTemplateDefaults[target]
-          : current.robloxLinkCommandDeleteTemplate;
+        target === "custom"
+          ? current.robloxLinkCommandDeleteTemplate
+          : linkCommandDeleteTemplateDefaults[target];
 
       return {
         ...current,
