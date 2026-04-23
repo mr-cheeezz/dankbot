@@ -6,18 +6,20 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/mr-cheeezz/dankbot/pkg/modules"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
+	robloxapi "github.com/mr-cheeezz/dankbot/pkg/roblox/api"
 	steamapi "github.com/mr-cheeezz/dankbot/pkg/steam/api"
 )
 
 type Module struct {
 	settings          *postgres.DiscordBotSettingsStore
 	state             *postgres.BotStateStore
+	robloxAccounts    *postgres.RobloxAccountStore
+	robloxCookie      string
 	guildID           string
 	adminID           string
 	sendToChan        func(channelID, content string) error
@@ -26,17 +28,22 @@ type Module struct {
 	isLive            func(context.Context) (bool, error)
 	streamGameChecker func(context.Context) (bool, string, error)
 	steamResolver     func(context.Context, string) (string, error)
-	liveMu            sync.Mutex
-	lastLive          bool
-	sentInLive        bool
 }
 
-func New(settings *postgres.DiscordBotSettingsStore, state *postgres.BotStateStore, guildID, adminID string) *Module {
+func New(
+	settings *postgres.DiscordBotSettingsStore,
+	state *postgres.BotStateStore,
+	robloxAccounts *postgres.RobloxAccountStore,
+	robloxCookie string,
+	guildID, adminID string,
+) *Module {
 	return &Module{
-		settings: settings,
-		state:    state,
-		guildID:  strings.TrimSpace(guildID),
-		adminID:  strings.TrimSpace(adminID),
+		settings:       settings,
+		state:          state,
+		robloxAccounts: robloxAccounts,
+		robloxCookie:   strings.TrimSpace(robloxCookie),
+		guildID:        strings.TrimSpace(guildID),
+		adminID:        strings.TrimSpace(adminID),
 	}
 }
 
@@ -191,15 +198,19 @@ func (m *Module) gamePing(ctx modules.CommandContext) (string, error) {
 	args := append([]string(nil), ctx.Args...)
 	roleID := strings.TrimSpace(settings.GamePing.RoleID)
 	roleName := strings.TrimSpace(settings.GamePing.RoleName)
+	aliasFallbackGameName := ""
 	if len(args) > 0 {
+		firstArgRaw := strings.TrimSpace(args[0])
 		alias := normalizeAlias(args[0])
 		if aliasRole := findPingRole(settings.PingRoles, alias); aliasRole != nil {
 			roleID = strings.TrimSpace(aliasRole.RoleID)
 			roleName = strings.TrimSpace(aliasRole.RoleName)
+			aliasFallbackGameName = firstArgRaw
 			args = args[1:]
 		} else if derivedRole := findPingRoleByName(settings.PingRoles, alias); derivedRole != nil {
 			roleID = strings.TrimSpace(derivedRole.RoleID)
 			roleName = strings.TrimSpace(derivedRole.RoleName)
+			aliasFallbackGameName = firstArgRaw
 			args = args[1:]
 		}
 	}
@@ -213,7 +224,17 @@ func (m *Module) gamePing(ctx modules.CommandContext) (string, error) {
 		return "Game ping only works while the stream is live.", nil
 	}
 	if gameName == "" {
+		if aliasFallbackGameName != "" {
+			gameName = aliasFallbackGameName
+		}
+	}
+	if gameName == "" {
 		gameName = currentGame
+	}
+	if strings.EqualFold(strings.TrimSpace(currentGame), "roblox") && (gameName == "" || strings.EqualFold(gameName, "roblox")) {
+		if robloxExperience := m.currentRobloxExperienceName(context.Background()); robloxExperience != "" {
+			gameName = robloxExperience
+		}
 	}
 	if strings.TrimSpace(gameName) == "" {
 		return "I could not determine the current stream game.", nil
@@ -269,7 +290,7 @@ func (m *Module) gamePing(ctx modules.CommandContext) (string, error) {
 	}
 
 	content := ""
-	if m.allowGamePingRoleMention() && roleID != "" && canMentionGamePingRole(settings.GuildID, roleID, roleName) {
+	if roleID != "" && canMentionGamePingRole(settings.GuildID, roleID, roleName) {
 		content = "<@&" + roleID + ">"
 	}
 
@@ -339,36 +360,6 @@ func robloxGameDiscoverURL(gameName string) string {
 	return "https://www.roblox.com/discover/?Keyword=" + url.QueryEscape(gameName)
 }
 
-func (m *Module) allowGamePingRoleMention() bool {
-	if m.isLive == nil {
-		return true
-	}
-	live, err := m.isLive(context.Background())
-	if err != nil {
-		return true
-	}
-
-	m.liveMu.Lock()
-	defer m.liveMu.Unlock()
-
-	if !live {
-		m.lastLive = false
-		m.sentInLive = false
-		return true
-	}
-
-	if !m.lastLive {
-		m.lastLive = true
-		m.sentInLive = true
-		return false
-	}
-	if !m.sentInLive {
-		m.sentInLive = true
-		return false
-	}
-	return true
-}
-
 func (m *Module) canRunGamePing(ctx modules.CommandContext) bool {
 	if m.canManageDiscord(ctx) {
 		return true
@@ -425,6 +416,52 @@ func (m *Module) resolveSteamURL(ctx context.Context, gameName string) (string, 
 
 	client := steamapi.NewClient(nil, "")
 	return client.ResolveStoreURL(ctx, gameName)
+}
+
+func (m *Module) currentRobloxExperienceName(ctx context.Context) string {
+	if strings.TrimSpace(m.robloxCookie) == "" {
+		return ""
+	}
+
+	client := robloxapi.NewClient(nil, m.robloxCookie)
+	userID, err := m.robloxPresenceUserID(ctx, client)
+	if err != nil || userID <= 0 {
+		return ""
+	}
+
+	presences, err := client.GetPresences(ctx, []int64{userID})
+	if err != nil || len(presences) == 0 {
+		return ""
+	}
+
+	lastLocation := strings.TrimSpace(presences[0].LastLocation)
+	if lastLocation == "" || strings.EqualFold(lastLocation, "website") {
+		return ""
+	}
+
+	return lastLocation
+}
+
+func (m *Module) robloxPresenceUserID(ctx context.Context, client *robloxapi.Client) (int64, error) {
+	if m.robloxAccounts != nil {
+		account, err := m.robloxAccounts.Get(ctx, postgres.RobloxAccountKindStreamer)
+		if err == nil && account != nil {
+			linkedID, parseErr := strconv.ParseInt(strings.TrimSpace(account.RobloxUserID), 10, 64)
+			if parseErr == nil && linkedID > 0 {
+				return linkedID, nil
+			}
+		}
+	}
+
+	authUser, err := client.GetAuthenticatedUser(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if authUser == nil || authUser.ID <= 0 {
+		return 0, fmt.Errorf("roblox authenticated user id is missing")
+	}
+
+	return authUser.ID, nil
 }
 
 func normalizeAllowedUsers(users []string) map[string]struct{} {

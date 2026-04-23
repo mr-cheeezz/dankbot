@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	floodWindow        = 10 * time.Second
-	duplicateWindow    = time.Minute
-	reloadInterval     = 10 * time.Second
-	maxTimeoutDuration = 14 * 24 * time.Hour
+	floodWindow         = 10 * time.Second
+	duplicateWindow     = time.Minute
+	reloadInterval      = 10 * time.Second
+	maxTimeoutDuration  = 14 * 24 * time.Hour
+	streamCheckInterval = 30 * time.Second
 )
 
 var linkPattern = regexp.MustCompile(`(?i)(https?://|www\.)`)
@@ -43,15 +44,19 @@ type repeatOffenseState struct {
 type Module struct {
 	store *postgres.SpamFilterStore
 
-	mu               sync.RWMutex
-	filters          map[string]postgres.SpamFilter
-	history          map[string][]messageSample
-	repeatOffenses   map[string]repeatOffenseState
-	lastOffensePrune time.Time
-	deleteMessage    deleteMessageFunc
-	timeoutUser      timeoutUserFunc
-	warnUser         warnUserFunc
-	banUser          banUserFunc
+	mu                sync.RWMutex
+	filters           map[string]postgres.SpamFilter
+	history           map[string][]messageSample
+	repeatOffenses    map[string]repeatOffenseState
+	lastOffensePrune  time.Time
+	streamLiveChecker func(context.Context) (bool, error)
+	lastStreamCheck   time.Time
+	lastStreamLive    bool
+	streamStateKnown  bool
+	deleteMessage     deleteMessageFunc
+	timeoutUser       timeoutUserFunc
+	warnUser          warnUserFunc
+	banUser           banUserFunc
 }
 
 func New(store *postgres.SpamFilterStore) *Module {
@@ -99,6 +104,13 @@ func (m *Module) SetModerationActions(
 	m.timeoutUser = timeoutUser
 	m.warnUser = warnUser
 	m.banUser = banUser
+}
+
+func (m *Module) SetStreamLiveChecker(checker func(context.Context) (bool, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.streamLiveChecker = checker
 }
 
 func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResult, error) {
@@ -221,6 +233,11 @@ func (m *Module) recordAndLoadHistory(senderID, text string, now time.Time) []me
 }
 
 func (m *Module) applyAction(ctx modules.CommandContext, filter postgres.SpamFilter, reason string, now time.Time) modules.MessageResult {
+	if !isTargetedByFilterTargets(filter, ctx) {
+		return modules.MessageResult{}
+	}
+	m.maybeResetUntilStreamEndOffenses(now)
+
 	action := strings.ToLower(strings.TrimSpace(filter.Action))
 	deleteEnabled := strings.Contains(action, "delete")
 	warnEnabled := strings.Contains(action, "warn")
@@ -265,6 +282,38 @@ func (m *Module) applyAction(ctx modules.CommandContext, filter postgres.SpamFil
 	}
 
 	return modules.MessageResult{StopProcessing: true}
+}
+
+func (m *Module) maybeResetUntilStreamEndOffenses(now time.Time) {
+	m.mu.RLock()
+	checker := m.streamLiveChecker
+	lastCheck := m.lastStreamCheck
+	m.mu.RUnlock()
+
+	if checker == nil || (!lastCheck.IsZero() && now.Sub(lastCheck) < streamCheckInterval) {
+		return
+	}
+
+	live, err := checker(context.Background())
+	if err != nil {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.lastStreamCheck.IsZero() && now.Sub(m.lastStreamCheck) < streamCheckInterval {
+		return
+	}
+	if m.streamStateKnown && m.lastStreamLive && !live {
+		for key, state := range m.repeatOffenses {
+			if state.untilReset {
+				delete(m.repeatOffenses, key)
+			}
+		}
+	}
+	m.streamStateKnown = true
+	m.lastStreamLive = live
+	m.lastStreamCheck = now
 }
 
 func (m *Module) nextRepeatOffenseCount(senderID string, filter postgres.SpamFilter, now time.Time) int {
@@ -349,6 +398,71 @@ func scaledTimeoutDuration(base time.Duration, multiplier float64, offenseCount 
 	}
 
 	return time.Duration(scaledSeconds * float64(time.Second))
+}
+
+func isTargetedByFilterTargets(filter postgres.SpamFilter, ctx modules.CommandContext) bool {
+	excluded := normalizeTargetSet(filter.ExcludedRoles)
+	for _, target := range excluded {
+		if targetMatches(target, ctx) {
+			return false
+		}
+	}
+
+	impacted := normalizeTargetSet(filter.ImpactedRoles)
+	if len(impacted) == 0 {
+		return true
+	}
+	for _, target := range impacted {
+		if targetMatches(target, ctx) {
+			return true
+		}
+	}
+	return false
+}
+
+func targetMatches(target string, ctx modules.CommandContext) bool {
+	target = strings.ToLower(strings.TrimSpace(target))
+	if target == "" {
+		return false
+	}
+	switch target {
+	case "user", "viewer":
+		return true
+	case "vip":
+		return ctx.IsVIP
+	case "sub", "subscriber":
+		return ctx.IsSubscriber
+	}
+
+	sender := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(ctx.Sender), "@"))
+	display := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(ctx.DisplayName), "@"))
+	return target == sender || target == display
+}
+
+func normalizeTargetSet(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		target := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(value), "@"))
+		if target == "" {
+			continue
+		}
+		switch target {
+		case "subs":
+			target = "sub"
+		case "users":
+			target = "user"
+		}
+		if _, ok := seen[target]; ok {
+			continue
+		}
+		seen[target] = struct{}{}
+		out = append(out, target)
+	}
+	return out
 }
 
 func enabledFilter(filters map[string]postgres.SpamFilter, key string) *postgres.SpamFilter {

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -21,6 +22,8 @@ type SpamFilter struct {
 	RepeatMultiplier       float64
 	RepeatMemorySeconds    int
 	RepeatUntilStreamEnd   bool
+	ImpactedRoles          []string
+	ExcludedRoles          []string
 	IsBuiltin              bool
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
@@ -48,6 +51,8 @@ func DefaultSpamFilters() []SpamFilter {
 			RepeatMultiplier:       2,
 			RepeatMemorySeconds:    600,
 			RepeatUntilStreamEnd:   false,
+			ImpactedRoles:          []string{},
+			ExcludedRoles:          []string{},
 			IsBuiltin:              true,
 		},
 		{
@@ -62,6 +67,8 @@ func DefaultSpamFilters() []SpamFilter {
 			RepeatMultiplier:       1,
 			RepeatMemorySeconds:    600,
 			RepeatUntilStreamEnd:   false,
+			ImpactedRoles:          []string{},
+			ExcludedRoles:          []string{},
 			IsBuiltin:              true,
 		},
 		{
@@ -76,6 +83,8 @@ func DefaultSpamFilters() []SpamFilter {
 			RepeatMultiplier:       1,
 			RepeatMemorySeconds:    600,
 			RepeatUntilStreamEnd:   false,
+			ImpactedRoles:          []string{},
+			ExcludedRoles:          []string{},
 			IsBuiltin:              true,
 		},
 		{
@@ -90,6 +99,8 @@ func DefaultSpamFilters() []SpamFilter {
 			RepeatMultiplier:       1,
 			RepeatMemorySeconds:    600,
 			RepeatUntilStreamEnd:   false,
+			ImpactedRoles:          []string{},
+			ExcludedRoles:          []string{},
 			IsBuiltin:              true,
 		},
 		{
@@ -104,6 +115,8 @@ func DefaultSpamFilters() []SpamFilter {
 			RepeatMultiplier:       1,
 			RepeatMemorySeconds:    600,
 			RepeatUntilStreamEnd:   false,
+			ImpactedRoles:          []string{},
+			ExcludedRoles:          []string{},
 			IsBuiltin:              true,
 		},
 		{
@@ -118,6 +131,8 @@ func DefaultSpamFilters() []SpamFilter {
 			RepeatMultiplier:       1,
 			RepeatMemorySeconds:    600,
 			RepeatUntilStreamEnd:   false,
+			ImpactedRoles:          []string{},
+			ExcludedRoles:          []string{},
 			IsBuiltin:              true,
 		},
 	}
@@ -134,6 +149,10 @@ func (s *SpamFilterStore) EnsureDefaults(ctx context.Context) error {
 		if filter.FilterKey == "" {
 			continue
 		}
+		filter.ImpactedRoles = normalizeSpamRoleList(filter.ImpactedRoles)
+		filter.ExcludedRoles = normalizeSpamRoleList(filter.ExcludedRoles)
+		impactedRaw, _ := json.Marshal(filter.ImpactedRoles)
+		excludedRaw, _ := json.Marshal(filter.ExcludedRoles)
 
 		_, err := db.ExecContext(
 			ctx,
@@ -150,11 +169,13 @@ INSERT INTO spam_filters (
 	repeat_multiplier,
 	repeat_memory_seconds,
 	repeat_until_stream_end,
+	impacted_roles,
+	excluded_roles,
 	is_builtin,
 	created_at,
 	updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
 ON CONFLICT (filter_key) DO NOTHING
 `,
 			filter.FilterKey,
@@ -168,6 +189,8 @@ ON CONFLICT (filter_key) DO NOTHING
 			filter.RepeatMultiplier,
 			filter.RepeatMemorySeconds,
 			filter.RepeatUntilStreamEnd,
+			impactedRaw,
+			excludedRaw,
 			filter.IsBuiltin,
 		)
 		if err != nil {
@@ -199,6 +222,8 @@ SELECT
 	repeat_multiplier,
 	repeat_memory_seconds,
 	repeat_until_stream_end,
+	impacted_roles,
+	excluded_roles,
 	is_builtin,
 	created_at,
 	updated_at
@@ -214,6 +239,8 @@ ORDER BY is_builtin DESC, title ASC, filter_key ASC
 	items := make([]SpamFilter, 0)
 	for rows.Next() {
 		var item SpamFilter
+		var impactedRaw []byte
+		var excludedRaw []byte
 		if err := rows.Scan(
 			&item.FilterKey,
 			&item.Title,
@@ -226,13 +253,16 @@ ORDER BY is_builtin DESC, title ASC, filter_key ASC
 			&item.RepeatMultiplier,
 			&item.RepeatMemorySeconds,
 			&item.RepeatUntilStreamEnd,
+			&impactedRaw,
+			&excludedRaw,
 			&item.IsBuiltin,
 			&item.CreatedAt,
 			&item.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan spam filter: %w", err)
 		}
-
+		item.ImpactedRoles = decodeSpamRoleList(impactedRaw)
+		item.ExcludedRoles = decodeSpamRoleList(excludedRaw)
 		items = append(items, item)
 	}
 
@@ -255,6 +285,8 @@ func (s *SpamFilterStore) Get(ctx context.Context, filterKey string) (*SpamFilte
 	}
 
 	var item SpamFilter
+	var impactedRaw []byte
+	var excludedRaw []byte
 	err = db.QueryRowContext(
 		ctx,
 		`
@@ -270,6 +302,8 @@ SELECT
 	repeat_multiplier,
 	repeat_memory_seconds,
 	repeat_until_stream_end,
+	impacted_roles,
+	excluded_roles,
 	is_builtin,
 	created_at,
 	updated_at
@@ -289,6 +323,8 @@ WHERE filter_key = $1
 		&item.RepeatMultiplier,
 		&item.RepeatMemorySeconds,
 		&item.RepeatUntilStreamEnd,
+		&impactedRaw,
+		&excludedRaw,
 		&item.IsBuiltin,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -299,6 +335,8 @@ WHERE filter_key = $1
 		}
 		return nil, fmt.Errorf("get spam filter %q: %w", filterKey, err)
 	}
+	item.ImpactedRoles = decodeSpamRoleList(impactedRaw)
+	item.ExcludedRoles = decodeSpamRoleList(excludedRaw)
 
 	return &item, nil
 }
@@ -314,6 +352,8 @@ func (s *SpamFilterStore) Update(ctx context.Context, filter SpamFilter) (*SpamF
 	filter.Description = strings.TrimSpace(filter.Description)
 	filter.Action = strings.TrimSpace(filter.Action)
 	filter.ThresholdLabel = strings.TrimSpace(filter.ThresholdLabel)
+	filter.ImpactedRoles = normalizeSpamRoleList(filter.ImpactedRoles)
+	filter.ExcludedRoles = normalizeSpamRoleList(filter.ExcludedRoles)
 	if filter.FilterKey == "" {
 		return nil, fmt.Errorf("filter key is required")
 	}
@@ -338,6 +378,14 @@ func (s *SpamFilterStore) Update(ctx context.Context, filter SpamFilter) (*SpamF
 	if filter.RepeatMemorySeconds < 1 {
 		filter.RepeatMemorySeconds = 1
 	}
+	impactedRaw, err := json.Marshal(filter.ImpactedRoles)
+	if err != nil {
+		return nil, fmt.Errorf("marshal impacted roles: %w", err)
+	}
+	excludedRaw, err := json.Marshal(filter.ExcludedRoles)
+	if err != nil {
+		return nil, fmt.Errorf("marshal excluded roles: %w", err)
+	}
 
 	row := db.QueryRowContext(
 		ctx,
@@ -354,6 +402,8 @@ SET
 	repeat_multiplier = $9,
 	repeat_memory_seconds = $10,
 	repeat_until_stream_end = $11,
+	impacted_roles = $12,
+	excluded_roles = $13,
 	updated_at = NOW()
 WHERE filter_key = $1
 RETURNING
@@ -368,6 +418,8 @@ RETURNING
 	repeat_multiplier,
 	repeat_memory_seconds,
 	repeat_until_stream_end,
+	impacted_roles,
+	excluded_roles,
 	is_builtin,
 	created_at,
 	updated_at
@@ -383,9 +435,13 @@ RETURNING
 		filter.RepeatMultiplier,
 		filter.RepeatMemorySeconds,
 		filter.RepeatUntilStreamEnd,
+		impactedRaw,
+		excludedRaw,
 	)
 
 	var updated SpamFilter
+	var updatedImpacted []byte
+	var updatedExcluded []byte
 	if err := row.Scan(
 		&updated.FilterKey,
 		&updated.Title,
@@ -398,6 +454,8 @@ RETURNING
 		&updated.RepeatMultiplier,
 		&updated.RepeatMemorySeconds,
 		&updated.RepeatUntilStreamEnd,
+		&updatedImpacted,
+		&updatedExcluded,
 		&updated.IsBuiltin,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,
@@ -407,8 +465,41 @@ RETURNING
 		}
 		return nil, fmt.Errorf("update spam filter %q: %w", filter.FilterKey, err)
 	}
+	updated.ImpactedRoles = decodeSpamRoleList(updatedImpacted)
+	updated.ExcludedRoles = decodeSpamRoleList(updatedExcluded)
 
 	return &updated, nil
+}
+
+func decodeSpamRoleList(raw []byte) []string {
+	if len(raw) == 0 {
+		return []string{}
+	}
+	var values []string
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return []string{}
+	}
+	return normalizeSpamRoleList(values)
+}
+
+func normalizeSpamRoleList(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out
 }
 
 func normalizeSpamFilterKey(filterKey string) string {

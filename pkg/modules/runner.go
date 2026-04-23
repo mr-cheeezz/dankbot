@@ -34,6 +34,8 @@ func (r *Runner) Register(module Module) {
 					DisplayName:   ctx.DisplayName,
 					IsModerator:   ctx.IsModerator,
 					IsBroadcaster: ctx.IsBroadcaster,
+					IsVIP:         false,
+					IsSubscriber:  false,
 					CommandPrefix: ctx.CommandPrefix,
 					FirstMessage:  false,
 					MessageID:     "",

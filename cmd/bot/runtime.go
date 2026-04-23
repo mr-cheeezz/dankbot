@@ -92,6 +92,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		nil,
 	)
 	twitchAccountStore := postgres.NewTwitchAccountStore(postgresClient)
+	robloxAccountStore := postgres.NewRobloxAccountStore(postgresClient)
 	modeStore := postgres.NewBotModeStore(postgresClient)
 	stateStore := postgres.NewBotStateStore(postgresClient)
 	socialStore := postgres.NewBotSocialPromotionStore(postgresClient)
@@ -112,6 +113,8 @@ func newRuntime(cfg *config.Config) *runtime {
 	discordModule := discordbotmodule.New(
 		postgres.NewDiscordBotSettingsStore(postgresClient),
 		stateStore,
+		robloxAccountStore,
+		cfg.Roblox.Cookie,
 		"",
 		cfg.Main.AdminID,
 	)
@@ -127,6 +130,7 @@ func newRuntime(cfg *config.Config) *runtime {
 	)
 	spotifyModule.SetStreamLiveChecker(streamChecker.IsLive)
 	spamFiltersModule := spamfiltersmodule.New(postgres.NewSpamFilterStore(postgresClient))
+	spamFiltersModule.SetStreamLiveChecker(streamChecker.IsLive)
 	blockedTermsModule := blockedtermsmodule.New(postgres.NewBlockedTermStore(postgresClient))
 	keywordsModule := keywordsmodule.New(
 		postgres.NewKeywordStore(postgresClient),
@@ -175,6 +179,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		cfg.Main.StreamerID,
 		postgres.NewRobloxPlaytimeStore(postgresClient),
 		gameModuleSettingsStore,
+		robloxAccountStore,
 		twitchOAuthService,
 		twitchAccountStore,
 	))
@@ -658,6 +663,8 @@ func (r *runtime) onPrivateMessage(message chat.Message) {
 			DisplayName:   message.DisplayName,
 			IsModerator:   message.IsModerator,
 			IsBroadcaster: message.IsBroadcaster,
+			IsVIP:         message.IsVIP,
+			IsSubscriber:  message.IsSubscriber,
 			CommandPrefix: r.commandPrefix,
 			FirstMessage:  message.FirstMessage,
 			MessageID:     message.ReplyTo,
@@ -741,6 +748,8 @@ func (r *runtime) onDiscordMessage(message discordbot.Message) {
 			DisplayName:   message.DisplayName,
 			IsModerator:   message.IsModerator || message.IsOwnerOrAdmin,
 			IsBroadcaster: message.IsOwnerOrAdmin,
+			IsVIP:         false,
+			IsSubscriber:  false,
 			CommandPrefix: r.commandPrefix,
 			FirstMessage:  false,
 			MessageID:     "",

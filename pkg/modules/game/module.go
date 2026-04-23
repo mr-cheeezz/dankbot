@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ type Module struct {
 	streamerID     string
 	playtimeStore  *postgres.RobloxPlaytimeStore
 	settingsStore  *postgres.GameModuleSettingsStore
+	robloxAccounts *postgres.RobloxAccountStore
 	twitchOAuth    *twitchoauth.Service
 	twitchAccounts *postgres.TwitchAccountStore
 
@@ -50,13 +52,21 @@ type Module struct {
 	lastLiveChecked    time.Time
 }
 
-func New(cookie, twitchClientID, streamerID string, playtimeStore *postgres.RobloxPlaytimeStore, settingsStore *postgres.GameModuleSettingsStore, twitchOAuth *twitchoauth.Service, twitchAccounts *postgres.TwitchAccountStore) *Module {
+func New(
+	cookie, twitchClientID, streamerID string,
+	playtimeStore *postgres.RobloxPlaytimeStore,
+	settingsStore *postgres.GameModuleSettingsStore,
+	robloxAccounts *postgres.RobloxAccountStore,
+	twitchOAuth *twitchoauth.Service,
+	twitchAccounts *postgres.TwitchAccountStore,
+) *Module {
 	return &Module{
 		configCookie:   strings.TrimSpace(cookie),
 		twitchClientID: strings.TrimSpace(twitchClientID),
 		streamerID:     strings.TrimSpace(streamerID),
 		playtimeStore:  playtimeStore,
 		settingsStore:  settingsStore,
+		robloxAccounts: robloxAccounts,
 		twitchOAuth:    twitchOAuth,
 		twitchAccounts: twitchAccounts,
 	}
@@ -292,7 +302,7 @@ func (m *Module) trackOnce(ctx context.Context) error {
 	}
 
 	robloxClient := robloxapi.NewClient(nil, m.configCookie)
-	authUser, err := robloxClient.GetAuthenticatedUser(ctx)
+	presenceUserID, err := m.presenceUserID(ctx, robloxClient)
 	if err != nil {
 		next := trackerState{
 			UniverseID: syntheticTwitchUniverseID(channel.GameID, channel.GameName),
@@ -303,7 +313,7 @@ func (m *Module) trackOnce(ctx context.Context) error {
 		return nil
 	}
 
-	presences, err := robloxClient.GetPresences(ctx, []int64{authUser.ID})
+	presences, err := robloxClient.GetPresences(ctx, []int64{presenceUserID})
 	if err != nil {
 		next := trackerState{
 			UniverseID: syntheticTwitchUniverseID(channel.GameID, channel.GameName),
@@ -461,12 +471,12 @@ func (m *Module) currentRobloxExperienceName(ctx context.Context) (string, error
 	}
 
 	robloxClient := robloxapi.NewClient(nil, m.configCookie)
-	authUser, err := robloxClient.GetAuthenticatedUser(ctx)
+	presenceUserID, err := m.presenceUserID(ctx, robloxClient)
 	if err != nil {
 		return "", err
 	}
 
-	presences, err := robloxClient.GetPresences(ctx, []int64{authUser.ID})
+	presences, err := robloxClient.GetPresences(ctx, []int64{presenceUserID})
 	if err != nil {
 		return "", err
 	}
@@ -475,6 +485,27 @@ func (m *Module) currentRobloxExperienceName(ctx context.Context) (string, error
 	}
 
 	return cleanRobloxExperienceName(presences[0].LastLocation), nil
+}
+
+func (m *Module) presenceUserID(ctx context.Context, robloxClient *robloxapi.Client) (int64, error) {
+	if m.robloxAccounts != nil {
+		account, err := m.robloxAccounts.Get(ctx, postgres.RobloxAccountKindStreamer)
+		if err == nil && account != nil {
+			if linkedID, parseErr := strconv.ParseInt(strings.TrimSpace(account.RobloxUserID), 10, 64); parseErr == nil && linkedID > 0 {
+				return linkedID, nil
+			}
+		}
+	}
+
+	authUser, err := robloxClient.GetAuthenticatedUser(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if authUser == nil || authUser.ID <= 0 {
+		return 0, fmt.Errorf("roblox authenticated user id is missing")
+	}
+
+	return authUser.ID, nil
 }
 
 func (m *Module) currentState() trackerState {

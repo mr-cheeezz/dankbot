@@ -37,6 +37,8 @@ type CommandContext struct {
 	DisplayName   string
 	IsModerator   bool
 	IsBroadcaster bool
+	IsVIP         bool
+	IsSubscriber  bool
 	CommandPrefix string
 	FirstMessage  bool
 	MessageID     string

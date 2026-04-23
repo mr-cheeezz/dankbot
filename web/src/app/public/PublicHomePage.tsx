@@ -137,6 +137,7 @@ export function PublicHomePage() {
   const hasRobloxJoinTargets =
     summary.robloxGameURL !== "" || summary.robloxProfileURL !== "";
   const streamerTitle = formatStreamerTitle(summary.channelName || summary.channelLogin);
+  const robloxExperienceName = summary.robloxGameName.trim();
   const joinCardTitle = `Join ${streamerTitle}`;
   const showNowPlayingCard =
     loading || (summary.nowPlaying.enabled && summary.nowPlaying.trackName.trim() !== "");
@@ -458,10 +459,7 @@ export function PublicHomePage() {
                     <Stack spacing={1.25} sx={{ mt: 1.5 }}>
                       <Typography sx={{ fontSize: "0.98rem", fontWeight: 700 }}>
                         {summary.currentModeKey === "link" ? (
-                          <>
-                            {streamerTitle} is currently in a <Box component="strong">private</Box>{" "}
-                            server.
-                          </>
+                          `${streamerTitle} is currently playing ${robloxExperienceName || "a Roblox experience"} in a private server.`
                         ) : summary.currentModeKey === "join" ? (
                           <>
                             {streamerTitle} is currently in a <Box component="strong">public</Box>{" "}

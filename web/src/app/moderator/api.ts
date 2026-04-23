@@ -59,6 +59,8 @@ type SpamFiltersResponse = {
     repeat_multiplier?: number;
     repeat_memory_seconds?: number;
     repeat_until_stream_end?: boolean;
+    impacted_roles?: string[];
+    excluded_roles?: string[];
   }>;
 };
 
@@ -1335,6 +1337,12 @@ export async function fetchSpamFilters(
     repeatMultiplier: entry.repeat_multiplier,
     repeatMemorySeconds: entry.repeat_memory_seconds,
     repeatUntilStreamEnd: entry.repeat_until_stream_end,
+    impactedRoles: Array.isArray(entry.impacted_roles)
+      ? entry.impacted_roles
+      : [],
+    excludedRoles: Array.isArray(entry.excluded_roles)
+      ? entry.excluded_roles
+      : [],
   }));
 }
 
@@ -1532,10 +1540,30 @@ function resolveSpamRepeatSettings(entry: SpamFilterEntry): {
   };
 }
 
+function resolveSpamTargetSettings(entry: SpamFilterEntry): {
+  impactedRoles?: string[];
+  excludedRoles?: string[];
+} {
+  const impacted =
+    entry.impactedRoles ??
+    entry.messageFloodSettings?.impactedRoles ??
+    entry.capsSettings?.impactedRoles;
+  const excluded =
+    entry.excludedRoles ??
+    entry.messageFloodSettings?.excludedRoles ??
+    entry.capsSettings?.excludedRoles;
+
+  return {
+    impactedRoles: Array.isArray(impacted) ? impacted : [],
+    excludedRoles: Array.isArray(excluded) ? excluded : [],
+  };
+}
+
 export async function saveSpamFilter(
   entry: SpamFilterEntry,
 ): Promise<SpamFilterEntry> {
   const repeat = resolveSpamRepeatSettings(entry);
+  const targets = resolveSpamTargetSettings(entry);
   const response = await fetch("/api/dashboard/spam-filters", {
     method: "PUT",
     credentials: "same-origin",
@@ -1553,6 +1581,8 @@ export async function saveSpamFilter(
       repeat_multiplier: repeat.multiplier,
       repeat_memory_seconds: repeat.memorySeconds,
       repeat_until_stream_end: repeat.untilStreamEnd,
+      impacted_roles: targets.impactedRoles,
+      excluded_roles: targets.excludedRoles,
     }),
   });
 
@@ -1572,6 +1602,8 @@ export async function saveSpamFilter(
     repeat_multiplier?: number;
     repeat_memory_seconds?: number;
     repeat_until_stream_end?: boolean;
+    impacted_roles?: string[];
+    excluded_roles?: string[];
   };
 
   return {
@@ -1586,6 +1618,12 @@ export async function saveSpamFilter(
     repeatMultiplier: payload.repeat_multiplier,
     repeatMemorySeconds: payload.repeat_memory_seconds,
     repeatUntilStreamEnd: payload.repeat_until_stream_end,
+    impactedRoles: Array.isArray(payload.impacted_roles)
+      ? payload.impacted_roles
+      : [],
+    excludedRoles: Array.isArray(payload.excluded_roles)
+      ? payload.excluded_roles
+      : [],
   };
 }
 

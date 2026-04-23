@@ -858,13 +858,27 @@ function CapsFilterEditor({
     if (next === "" || settings[key].includes(next)) {
       return;
     }
-    updateCapsSettings({ [key]: [...settings[key], next] });
+    const updated = [...settings[key], next];
+    updateCapsSettings({ [key]: updated });
+    if (key === "impactedRoles") {
+      void updateSpamFilter(selectedSpamFilter.id, { impactedRoles: updated });
+    }
+    if (key === "excludedRoles") {
+      void updateSpamFilter(selectedSpamFilter.id, { excludedRoles: updated });
+    }
   };
 
   const removeValue = (key: "impactedRoles" | "excludedRoles" | "exemptUsernames", value: string) => {
+    const updated = settings[key].filter((entry) => entry !== value);
     updateCapsSettings({
-      [key]: settings[key].filter((entry) => entry !== value),
+      [key]: updated,
     });
+    if (key === "impactedRoles") {
+      void updateSpamFilter(selectedSpamFilter.id, { impactedRoles: updated });
+    }
+    if (key === "excludedRoles") {
+      void updateSpamFilter(selectedSpamFilter.id, { excludedRoles: updated });
+    }
   };
 
   return (
@@ -1005,12 +1019,12 @@ function CapsFilterEditor({
           </Box>
 
           <Box>
-            <SectionTitle label="Roles" />
+            <SectionTitle label="Targets" />
             <Stack spacing={2}>
               <ListFieldEditor
-                title="Impacted roles"
-                helperText="Any role in this list can be targeted by the caps filter."
-                placeholder="role name"
+                title="Impacted targets"
+                helperText='Use "user", "vip", "sub", or exact usernames.'
+                placeholder="user, vip, sub, or username"
                 values={settings.impactedRoles}
                 inputValue={impactedRoleInput}
                 onInputChange={setImpactedRoleInput}
@@ -1022,9 +1036,9 @@ function CapsFilterEditor({
                 useLinkIcon={false}
               />
               <ListFieldEditor
-                title="Excluded roles"
-                helperText="These roles will not be targeted by the caps filter."
-                placeholder="role name"
+                title="Excluded targets"
+                helperText='Use "user", "vip", "sub", or exact usernames.'
+                placeholder="user, vip, sub, or username"
                 values={settings.excludedRoles}
                 inputValue={excludedRoleInput}
                 onInputChange={setExcludedRoleInput}
@@ -1211,11 +1225,23 @@ function MessageFloodFilterEditor({
     if (next === "" || settings[key].includes(next)) {
       return;
     }
-    updateSettings({ [key]: [...settings[key], next] });
+    const updated = [...settings[key], next];
+    updateSettings({ [key]: updated });
+    if (key === "impactedRoles") {
+      void updateSpamFilter(selectedSpamFilter.id, { impactedRoles: updated });
+    } else {
+      void updateSpamFilter(selectedSpamFilter.id, { excludedRoles: updated });
+    }
   };
 
   const removeRole = (key: "impactedRoles" | "excludedRoles", value: string) => {
-    updateSettings({ [key]: settings[key].filter((entry) => entry !== value) });
+    const updated = settings[key].filter((entry) => entry !== value);
+    updateSettings({ [key]: updated });
+    if (key === "impactedRoles") {
+      void updateSpamFilter(selectedSpamFilter.id, { impactedRoles: updated });
+    } else {
+      void updateSpamFilter(selectedSpamFilter.id, { excludedRoles: updated });
+    }
   };
 
   return (
@@ -1378,12 +1404,12 @@ function MessageFloodFilterEditor({
           </Box>
 
           <Box>
-            <SectionTitle label="Roles" />
+            <SectionTitle label="Targets" />
             <Stack spacing={2}>
               <ListFieldEditor
-                title="Impacted roles"
-                helperText="If a user has any of these roles, they will always be vulnerable to this filter."
-                placeholder="select a role"
+                title="Impacted targets"
+                helperText='Use "user", "vip", "sub", or exact usernames.'
+                placeholder="user, vip, sub, or username"
                 values={settings.impactedRoles}
                 inputValue={impactedRoleInput}
                 onInputChange={setImpactedRoleInput}
@@ -1395,9 +1421,9 @@ function MessageFloodFilterEditor({
                 useLinkIcon={false}
               />
               <ListFieldEditor
-                title="Excluded roles"
-                helperText="They will not be vulnerable to the filter, even if they have an impacted role."
-                placeholder="select a role"
+                title="Excluded targets"
+                helperText='Use "user", "vip", "sub", or exact usernames.'
+                placeholder="user, vip, sub, or username"
                 values={settings.excludedRoles}
                 inputValue={excludedRoleInput}
                 onInputChange={setExcludedRoleInput}

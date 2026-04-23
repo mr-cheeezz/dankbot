@@ -34,6 +34,8 @@ func (c *Client) registerIRCHandlers() {
 			DisplayName:    message.User.DisplayName,
 			IsModerator:    hasBadge(message.User.Badges, "moderator"),
 			IsBroadcaster:  hasBadge(message.User.Badges, "broadcaster"),
+			IsVIP:          hasBadge(message.User.Badges, "vip"),
+			IsSubscriber:   hasBadge(message.User.Badges, "subscriber"),
 			FirstMessage:   message.FirstMessage,
 			Text:           message.Message,
 			ReplyTo:        message.ID,

@@ -11,29 +11,33 @@ import (
 )
 
 type spamFilterResponse struct {
-	ID                     string  `json:"id"`
-	Name                   string  `json:"name"`
-	Description            string  `json:"description"`
-	Action                 string  `json:"action"`
-	ThresholdLabel         string  `json:"threshold_label"`
-	ThresholdValue         int     `json:"threshold_value"`
-	Enabled                bool    `json:"enabled"`
-	RepeatOffendersEnabled bool    `json:"repeat_offenders_enabled"`
-	RepeatMultiplier       float64 `json:"repeat_multiplier"`
-	RepeatMemorySeconds    int     `json:"repeat_memory_seconds"`
-	RepeatUntilStreamEnd   bool    `json:"repeat_until_stream_end"`
-}
-
-type updateSpamFilterRequest struct {
 	ID                     string   `json:"id"`
+	Name                   string   `json:"name"`
+	Description            string   `json:"description"`
 	Action                 string   `json:"action"`
 	ThresholdLabel         string   `json:"threshold_label"`
 	ThresholdValue         int      `json:"threshold_value"`
 	Enabled                bool     `json:"enabled"`
-	RepeatOffendersEnabled *bool    `json:"repeat_offenders_enabled"`
-	RepeatMultiplier       *float64 `json:"repeat_multiplier"`
-	RepeatMemorySeconds    *int     `json:"repeat_memory_seconds"`
-	RepeatUntilStreamEnd   *bool    `json:"repeat_until_stream_end"`
+	RepeatOffendersEnabled bool     `json:"repeat_offenders_enabled"`
+	RepeatMultiplier       float64  `json:"repeat_multiplier"`
+	RepeatMemorySeconds    int      `json:"repeat_memory_seconds"`
+	RepeatUntilStreamEnd   bool     `json:"repeat_until_stream_end"`
+	ImpactedRoles          []string `json:"impacted_roles"`
+	ExcludedRoles          []string `json:"excluded_roles"`
+}
+
+type updateSpamFilterRequest struct {
+	ID                     string    `json:"id"`
+	Action                 string    `json:"action"`
+	ThresholdLabel         string    `json:"threshold_label"`
+	ThresholdValue         int       `json:"threshold_value"`
+	Enabled                bool      `json:"enabled"`
+	RepeatOffendersEnabled *bool     `json:"repeat_offenders_enabled"`
+	RepeatMultiplier       *float64  `json:"repeat_multiplier"`
+	RepeatMemorySeconds    *int      `json:"repeat_memory_seconds"`
+	RepeatUntilStreamEnd   *bool     `json:"repeat_until_stream_end"`
+	ImpactedRoles          *[]string `json:"impacted_roles"`
+	ExcludedRoles          *[]string `json:"excluded_roles"`
 }
 
 func (h handler) spamFilters(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +132,12 @@ func (h handler) updateSpamFilter(w http.ResponseWriter, r *http.Request) {
 	if request.RepeatUntilStreamEnd != nil {
 		current.RepeatUntilStreamEnd = *request.RepeatUntilStreamEnd
 	}
+	if request.ImpactedRoles != nil {
+		current.ImpactedRoles = append([]string(nil), (*request.ImpactedRoles)...)
+	}
+	if request.ExcludedRoles != nil {
+		current.ExcludedRoles = append([]string(nil), (*request.ExcludedRoles)...)
+	}
 
 	updated, err := h.appState.SpamFilters.Update(r.Context(), *current)
 	if err != nil {
@@ -152,5 +162,7 @@ func spamFilterToResponse(item postgres.SpamFilter) spamFilterResponse {
 		RepeatMultiplier:       item.RepeatMultiplier,
 		RepeatMemorySeconds:    item.RepeatMemorySeconds,
 		RepeatUntilStreamEnd:   item.RepeatUntilStreamEnd,
+		ImpactedRoles:          append([]string(nil), item.ImpactedRoles...),
+		ExcludedRoles:          append([]string(nil), item.ExcludedRoles...),
 	}
 }

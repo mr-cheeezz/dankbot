@@ -7,6 +7,8 @@ type Message struct {
 	DisplayName    string
 	IsModerator    bool
 	IsBroadcaster  bool
+	IsVIP          bool
+	IsSubscriber   bool
 	FirstMessage   bool
 	Text           string
 	ReplyTo        string

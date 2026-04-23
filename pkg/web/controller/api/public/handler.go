@@ -46,6 +46,7 @@ type summaryResponse struct {
 	CurrentModeParam       string              `json:"current_mode_param"`
 	RobloxPrivateServerURL string              `json:"roblox_private_server_url"`
 	RobloxGameURL          string              `json:"roblox_game_url"`
+	RobloxGameName         string              `json:"roblox_game_name"`
 	RobloxProfileURL       string              `json:"roblox_profile_url"`
 	StreamGameURL          string              `json:"stream_game_url"`
 	StreamGameSource       string              `json:"stream_game_source"`
@@ -451,32 +452,57 @@ func enrichWithRobloxPresence(ctx context.Context, appState *state.State, summar
 		return
 	}
 
+	var linkedUserID int64
 	robloxAccount, err := appState.RobloxAccounts.Get(ctx, postgres.RobloxAccountKindStreamer)
-	if err != nil || robloxAccount == nil {
-		return
+	if err == nil && robloxAccount != nil {
+		userID, parseErr := strconv.ParseInt(strings.TrimSpace(robloxAccount.RobloxUserID), 10, 64)
+		if parseErr == nil && userID > 0 {
+			linkedUserID = userID
+			summary.RobloxProfileURL = robloxProfileURL(userID)
+		}
 	}
 
-	userID, err := strconv.ParseInt(strings.TrimSpace(robloxAccount.RobloxUserID), 10, 64)
-	if err != nil || userID <= 0 {
-		return
-	}
-
-	summary.RobloxProfileURL = robloxProfileURL(userID)
-
-	if strings.TrimSpace(appState.Config.Roblox.Cookie) == "" {
+	cookie := strings.TrimSpace(appState.Config.Roblox.Cookie)
+	if cookie == "" {
 		return
 	}
 
 	presenceCtx, cancel := context.WithTimeout(ctx, publicSummaryTimeout)
 	defer cancel()
 
-	client := robloxapi.NewClient(nil, appState.Config.Roblox.Cookie)
-	presences, err := client.GetPresences(presenceCtx, []int64{userID})
+	client := robloxapi.NewClient(nil, cookie)
+	targetUserID := linkedUserID
+
+	if targetUserID == 0 {
+		authUser, authErr := client.GetAuthenticatedUser(presenceCtx)
+		if authErr == nil && authUser != nil && authUser.ID > 0 {
+			targetUserID = authUser.ID
+			if summary.RobloxProfileURL == "" {
+				summary.RobloxProfileURL = robloxProfileURL(authUser.ID)
+			}
+		}
+	}
+
+	if targetUserID == 0 {
+		return
+	}
+
+	presences, err := client.GetPresences(presenceCtx, []int64{targetUserID})
+	if (err != nil || len(presences) == 0) && linkedUserID > 0 {
+		authUser, authErr := client.GetAuthenticatedUser(presenceCtx)
+		if authErr == nil && authUser != nil && authUser.ID > 0 && authUser.ID != linkedUserID {
+			presences, err = client.GetPresences(presenceCtx, []int64{authUser.ID})
+			if err == nil && len(presences) > 0 && summary.RobloxProfileURL == "" {
+				summary.RobloxProfileURL = robloxProfileURL(authUser.ID)
+			}
+		}
+	}
 	if err != nil || len(presences) == 0 {
 		return
 	}
 
 	presence := presences[0]
+	summary.RobloxGameName = strings.TrimSpace(presence.LastLocation)
 	rootPlaceID := presence.RootPlaceID
 	if rootPlaceID == 0 {
 		rootPlaceID = presence.PlaceID

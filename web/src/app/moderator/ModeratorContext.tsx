@@ -243,6 +243,16 @@ function mergeSpamFilterMetadata(
     entry.repeatUntilStreamEnd ??
     existing?.repeatUntilStreamEnd ??
     mergedMessageFloodSettings?.repeatUntilStreamEnd;
+  const resolvedImpactedRoles =
+    entry.impactedRoles ??
+    existing?.impactedRoles ??
+    mergedMessageFloodSettings?.impactedRoles ??
+    mergedCapsSettings?.impactedRoles;
+  const resolvedExcludedRoles =
+    entry.excludedRoles ??
+    existing?.excludedRoles ??
+    mergedMessageFloodSettings?.excludedRoles ??
+    mergedCapsSettings?.excludedRoles;
 
   return {
     ...entry,
@@ -250,9 +260,20 @@ function mergeSpamFilterMetadata(
     repeatMultiplier: resolvedRepeatMultiplier,
     repeatMemorySeconds: resolvedRepeatMemorySeconds,
     repeatUntilStreamEnd: resolvedRepeatUntilStreamEnd,
+    impactedRoles: resolvedImpactedRoles ?? [],
+    excludedRoles: resolvedExcludedRoles ?? [],
     lengthSettings: mergedLengthSettings,
     linkSettings: mergedLinkSettings,
-    capsSettings: mergedCapsSettings,
+    capsSettings:
+      mergedCapsSettings == null
+        ? mergedCapsSettings
+        : {
+            ...mergedCapsSettings,
+            impactedRoles:
+              resolvedImpactedRoles ?? mergedCapsSettings.impactedRoles,
+            excludedRoles:
+              resolvedExcludedRoles ?? mergedCapsSettings.excludedRoles,
+          },
     messageFloodSettings:
       mergedMessageFloodSettings == null
         ? mergedMessageFloodSettings
@@ -270,6 +291,12 @@ function mergeSpamFilterMetadata(
             repeatUntilStreamEnd:
               resolvedRepeatUntilStreamEnd ??
               mergedMessageFloodSettings.repeatUntilStreamEnd,
+            impactedRoles:
+              resolvedImpactedRoles ??
+              mergedMessageFloodSettings.impactedRoles,
+            excludedRoles:
+              resolvedExcludedRoles ??
+              mergedMessageFloodSettings.excludedRoles,
           },
   };
 }

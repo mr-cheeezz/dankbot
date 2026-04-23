@@ -254,7 +254,7 @@ func publicCommandDefinitions() []commands.Definition {
 
 	runner.Register(defaultcommandsmodule.New(time.Now().UTC(), "dev", nil))
 	runner.Register(spotifymodule.New(nil, nil, nil, nil))
-	runner.Register(gamemodule.New("", "", "", nil, nil, nil, nil))
+	runner.Register(gamemodule.New("", "", "", nil, nil, nil, nil, nil))
 	runner.Register(quotesmodule.New(nil, nil))
 	runner.Register(modesmodule.New(nil, nil, nil, nil))
 	runner.Register(tabsmodule.New(nil, nil))

@@ -333,6 +333,8 @@ export type SpamFilterEntry = {
   repeatMultiplier?: number;
   repeatMemorySeconds?: number;
   repeatUntilStreamEnd?: boolean;
+  impactedRoles?: string[];
+  excludedRoles?: string[];
   lengthSettings?: {
     enabledWhenOffline: boolean;
     enabledWhenOnline: boolean;

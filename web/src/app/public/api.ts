@@ -14,6 +14,7 @@ export type PublicSummary = {
   currentModeParam: string;
   robloxPrivateServerURL: string;
   robloxGameURL: string;
+  robloxGameName: string;
   robloxProfileURL: string;
   streamGameURL: string;
   streamGameSource: "steam" | "twitch" | "";
@@ -144,6 +145,7 @@ type PublicSummaryResponse = {
   current_mode_param: string;
   roblox_private_server_url: string;
   roblox_game_url: string;
+  roblox_game_name: string;
   roblox_profile_url: string;
   stream_game_url: string;
   stream_game_source: "steam" | "twitch" | "";
@@ -291,6 +293,7 @@ export const defaultPublicSummary: PublicSummary = {
   currentModeParam: "",
   robloxPrivateServerURL: "",
   robloxGameURL: "",
+  robloxGameName: "",
   robloxProfileURL: "",
   streamGameURL: "",
   streamGameSource: "",
@@ -401,6 +404,7 @@ export async function fetchPublicSummary(signal?: AbortSignal): Promise<PublicSu
     currentModeParam: payload.current_mode_param,
     robloxPrivateServerURL: payload.roblox_private_server_url,
     robloxGameURL: payload.roblox_game_url,
+    robloxGameName: payload.roblox_game_name ?? "",
     robloxProfileURL: payload.roblox_profile_url,
     streamGameURL: payload.stream_game_url,
     streamGameSource: payload.stream_game_source,
