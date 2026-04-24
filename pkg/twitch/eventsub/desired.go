@@ -14,6 +14,7 @@ func DesiredSubscriptions(streamerID string) []DesiredSubscription {
 		{Type: "channel.ad_break.begin", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:ads"}},
 		{Type: "channel.subscribe", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:subscriptions"}},
 		{Type: "channel.subscription.gift", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:subscriptions"}},
+		{Type: "channel.raid", Version: "1", Condition: map[string]string{"to_broadcaster_user_id": streamerID}},
 		{Type: "channel.cheer", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"bits:read"}},
 		{Type: "channel.channel_points_custom_reward_redemption.add", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:redemptions"}},
 		{Type: "channel.poll.begin", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:polls"}},

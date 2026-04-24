@@ -242,7 +242,10 @@ function mergeSpamFilterMetadata(
   const resolvedRepeatUntilStreamEnd =
     entry.repeatUntilStreamEnd ??
     existing?.repeatUntilStreamEnd ??
-    mergedMessageFloodSettings?.repeatUntilStreamEnd;
+    mergedMessageFloodSettings?.repeatUntilStreamEnd ??
+    mergedLengthSettings?.repeatUntilStreamEnd ??
+    mergedCapsSettings?.repeatUntilStreamEnd ??
+    mergedLinkSettings?.repeatUntilStreamEnd;
   const resolvedImpactedRoles =
     entry.impactedRoles ??
     existing?.impactedRoles ??
@@ -262,13 +265,59 @@ function mergeSpamFilterMetadata(
     repeatUntilStreamEnd: resolvedRepeatUntilStreamEnd,
     impactedRoles: resolvedImpactedRoles ?? [],
     excludedRoles: resolvedExcludedRoles ?? [],
-    lengthSettings: mergedLengthSettings,
-    linkSettings: mergedLinkSettings,
+    lengthSettings:
+      mergedLengthSettings == null
+        ? mergedLengthSettings
+        : {
+            ...mergedLengthSettings,
+            repeatOffendersEnabled:
+              resolvedRepeatOffendersEnabled ??
+              mergedLengthSettings.repeatOffendersEnabled,
+            repeatMultiplier:
+              resolvedRepeatMultiplier ??
+              mergedLengthSettings.repeatMultiplier,
+            repeatCooldownSeconds:
+              resolvedRepeatMemorySeconds ??
+              mergedLengthSettings.repeatCooldownSeconds,
+            repeatUntilStreamEnd:
+              resolvedRepeatUntilStreamEnd ??
+              mergedLengthSettings.repeatUntilStreamEnd,
+          },
+    linkSettings:
+      mergedLinkSettings == null
+        ? mergedLinkSettings
+        : {
+            ...mergedLinkSettings,
+            repeatOffendersEnabled:
+              resolvedRepeatOffendersEnabled ??
+              mergedLinkSettings.repeatOffendersEnabled,
+            repeatMultiplier:
+              resolvedRepeatMultiplier ??
+              mergedLinkSettings.repeatMultiplier,
+            repeatCooldownSeconds:
+              resolvedRepeatMemorySeconds ??
+              mergedLinkSettings.repeatCooldownSeconds,
+            repeatUntilStreamEnd:
+              resolvedRepeatUntilStreamEnd ??
+              mergedLinkSettings.repeatUntilStreamEnd,
+          },
     capsSettings:
       mergedCapsSettings == null
         ? mergedCapsSettings
         : {
             ...mergedCapsSettings,
+            repeatOffendersEnabled:
+              resolvedRepeatOffendersEnabled ??
+              mergedCapsSettings.repeatOffendersEnabled,
+            repeatMultiplier:
+              resolvedRepeatMultiplier ??
+              mergedCapsSettings.repeatMultiplier,
+            repeatCooldownSeconds:
+              resolvedRepeatMemorySeconds ??
+              mergedCapsSettings.repeatCooldownSeconds,
+            repeatUntilStreamEnd:
+              resolvedRepeatUntilStreamEnd ??
+              mergedCapsSettings.repeatUntilStreamEnd,
             impactedRoles:
               resolvedImpactedRoles ?? mergedCapsSettings.impactedRoles,
             excludedRoles:
@@ -392,6 +441,7 @@ function mergeFollowersOnlyModuleSettings(
     followersOnlyModuleID,
     settings.enabled,
     {
+      "enabled-when-offline": settings.enabledWhenOffline ? "true" : "false",
       "auto-disable-minutes": String(settings.autoDisableAfterMinutes),
     },
   );
@@ -400,13 +450,19 @@ function mergeFollowersOnlyModuleSettings(
 function followersOnlySettingsFromModule(
   entry: ModuleEntry,
 ): FollowersOnlyModuleSettings {
+  const enabledWhenOfflineSetting = entry.settings.find(
+    (setting) => setting.id === "enabled-when-offline",
+  );
   const autoDisableSetting = entry.settings.find(
     (setting) => setting.id === "auto-disable-minutes",
   );
   const rawValue = Number.parseInt(autoDisableSetting?.value ?? "0", 10);
+  const enabledWhenOffline =
+    (enabledWhenOfflineSetting?.value ?? "false") === "true";
 
   return {
     enabled: entry.enabled,
+    enabledWhenOffline,
     autoDisableAfterMinutes:
       Number.isFinite(rawValue) && rawValue > 0 ? rawValue : 0,
   };
@@ -518,6 +574,14 @@ function mergeNowPlayingModuleSettings(
         ? "true"
         : "false",
       "viewer-question-response": settings.keywordResponse,
+      "song-change-message-template": settings.songChangeMessageTemplate,
+      "song-command-enabled": settings.songCommandEnabled ? "true" : "false",
+      "song-next-command-enabled": settings.songNextCommandEnabled
+        ? "true"
+        : "false",
+      "song-last-command-enabled": settings.songLastCommandEnabled
+        ? "true"
+        : "false",
     },
   );
 }
@@ -525,6 +589,14 @@ function mergeNowPlayingModuleSettings(
 function nowPlayingModuleSettingsFromModule(
   entry: ModuleEntry,
 ): NowPlayingModuleSettings {
+  const getBool = (id: string, fallback: boolean) => {
+    const value = entry.settings.find((setting) => setting.id === id)?.value;
+    if (value == null || value.trim() === "") {
+      return fallback;
+    }
+    return value === "true";
+  };
+
   const aiDetectionEnabled =
     entry.settings.find(
       (setting) => setting.id === "viewer-question-ai-detection",
@@ -532,11 +604,22 @@ function nowPlayingModuleSettingsFromModule(
   const keywordResponse =
     entry.settings.find((setting) => setting.id === "viewer-question-response")
       ?.value ?? "";
+  const songChangeMessageTemplate =
+    entry.settings.find(
+      (setting) => setting.id === "song-change-message-template",
+    )?.value ?? "";
+  const songCommandEnabled = getBool("song-command-enabled", true);
+  const songNextCommandEnabled = getBool("song-next-command-enabled", true);
+  const songLastCommandEnabled = getBool("song-last-command-enabled", true);
 
   return {
     enabled: entry.enabled,
     aiDetectionEnabled,
     keywordResponse,
+    songChangeMessageTemplate,
+    songCommandEnabled,
+    songNextCommandEnabled,
+    songLastCommandEnabled,
   };
 }
 

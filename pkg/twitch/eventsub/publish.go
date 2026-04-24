@@ -31,7 +31,7 @@ func (s *Service) publishNotification(ctx context.Context, envelope *WebhookEnve
 		Source:         SourceTwitchEventSub,
 		Type:           envelope.Subscription.Type,
 		SubscriptionID: envelope.Subscription.ID,
-		BroadcasterID:  strings.TrimSpace(envelope.Subscription.Condition["broadcaster_user_id"]),
+		BroadcasterID:  publishedBroadcasterID(envelope.Subscription.Condition),
 		Event:          envelope.Event,
 		ReceivedAt:     s.now().UTC(),
 	})
@@ -44,4 +44,17 @@ func (s *Service) publishNotification(ctx context.Context, envelope *WebhookEnve
 	}
 
 	return nil
+}
+
+func publishedBroadcasterID(condition map[string]string) string {
+	if len(condition) == 0 {
+		return ""
+	}
+	if value := strings.TrimSpace(condition["broadcaster_user_id"]); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(condition["to_broadcaster_user_id"]); value != "" {
+		return value
+	}
+	return ""
 }

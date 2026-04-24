@@ -81,6 +81,7 @@ func Register(mux *http.ServeMux, appState *state.State) {
 	mux.Handle("/api/dashboard/public-home-settings", http.HandlerFunc(handler{appState: appState}.publicHomeSettings))
 	mux.Handle("/api/dashboard/alerts", http.HandlerFunc(handler{appState: appState}.alerts))
 	mux.Handle("/api/dashboard/spam-filters", http.HandlerFunc(handler{appState: appState}.spamFilters))
+	mux.Handle("/api/dashboard/spam-filters/hype-settings", http.HandlerFunc(handler{appState: appState}.spamFilterHypeSettings))
 	mux.Handle("/api/dashboard/moderation/blocked-terms", http.HandlerFunc(handler{appState: appState}.blockedTerms))
 	mux.Handle("/api/dashboard/moderation/mass-action", http.HandlerFunc(handler{appState: appState}.massModerationAction))
 	mux.Handle("/api/dashboard/moderation/recent-followers", http.HandlerFunc(handler{appState: appState}.massModerationRecentFollowers))

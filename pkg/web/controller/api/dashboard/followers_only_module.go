@@ -12,6 +12,7 @@ import (
 
 type followersOnlyModuleResponse struct {
 	Enabled                 bool `json:"enabled"`
+	EnabledWhenOffline      bool `json:"enabled_when_offline"`
 	AutoDisableAfterMinutes int  `json:"auto_disable_after_minutes"`
 }
 
@@ -89,6 +90,7 @@ func (h handler) updateFollowersOnlyModule(w http.ResponseWriter, r *http.Reques
 
 	updated, err := h.appState.FollowersOnlyModule.Update(r.Context(), postgres.FollowersOnlyModuleSettings{
 		Enabled:                 request.Enabled,
+		EnabledWhenOffline:      request.EnabledWhenOffline,
 		AutoDisableAfterMinutes: request.AutoDisableAfterMinutes,
 		UpdatedBy:               strings.TrimSpace(userSession.Login),
 	})
@@ -108,6 +110,7 @@ func (h handler) updateFollowersOnlyModule(w http.ResponseWriter, r *http.Reques
 func followersOnlyModuleToResponse(settings postgres.FollowersOnlyModuleSettings) followersOnlyModuleResponse {
 	return followersOnlyModuleResponse{
 		Enabled:                 settings.Enabled,
+		EnabledWhenOffline:      settings.EnabledWhenOffline,
 		AutoDisableAfterMinutes: settings.AutoDisableAfterMinutes,
 	}
 }

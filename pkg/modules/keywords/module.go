@@ -18,7 +18,9 @@ type Module struct {
 	store      *postgres.KeywordStore
 	defaults   *postgres.DefaultKeywordSettingStore
 	game       *postgres.GameModuleSettingsStore
+	gameName   func(context.Context) (string, error)
 	nowPlaying *postgres.NowPlayingModuleSettingsStore
+	songReply  func(context.Context) (string, error)
 	state      *postgres.BotStateStore
 	modes      *postgres.BotModeStore
 	accounts   *postgres.TwitchAccountStore
@@ -120,11 +122,25 @@ func (m *Module) SetGameModuleSettingsStore(store *postgres.GameModuleSettingsSt
 	m.game = store
 }
 
+func (m *Module) SetGameNameResolver(resolver func(context.Context) (string, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.gameName = resolver
+}
+
 func (m *Module) SetNowPlayingModuleSettingsStore(store *postgres.NowPlayingModuleSettingsStore) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.nowPlaying = store
+}
+
+func (m *Module) SetSongReplyResolver(resolver func(context.Context) (string, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.songReply = resolver
 }
 
 func (m *Module) Name() string {
@@ -473,6 +489,7 @@ func (m *Module) builtInJoinReply(ctx modules.CommandContext) (string, error) {
 func (m *Module) builtInGameReply(ctx modules.CommandContext) (string, error) {
 	m.mu.RLock()
 	gameStore := m.game
+	gameNameResolver := m.gameName
 	m.mu.RUnlock()
 
 	responseTemplate := postgres.DefaultGameModuleSettings().KeywordResponse
@@ -486,13 +503,31 @@ func (m *Module) builtInGameReply(ctx modules.CommandContext) (string, error) {
 		}
 	}
 
-	return m.renderModuleKeywordResponse(ctx, responseTemplate), nil
+	gameName := "current game"
+	if gameNameResolver != nil {
+		resolvedName, err := gameNameResolver(context.Background())
+		if err == nil && strings.TrimSpace(resolvedName) != "" {
+			gameName = strings.TrimSpace(resolvedName)
+		}
+	}
+
+	return m.renderModuleKeywordResponse(ctx, responseTemplate, map[string]string{
+		"game": gameName,
+	}), nil
 }
 
 func (m *Module) builtInSongReply(ctx modules.CommandContext) (string, error) {
 	m.mu.RLock()
 	nowPlayingStore := m.nowPlaying
+	songReplyResolver := m.songReply
 	m.mu.RUnlock()
+
+	if songReplyResolver != nil {
+		reply, err := songReplyResolver(context.Background())
+		if err == nil && strings.TrimSpace(reply) != "" {
+			return strings.TrimSpace(reply), nil
+		}
+	}
 
 	responseTemplate := postgres.DefaultNowPlayingModuleSettings().KeywordResponse
 	if nowPlayingStore != nil {
@@ -505,18 +540,28 @@ func (m *Module) builtInSongReply(ctx modules.CommandContext) (string, error) {
 		}
 	}
 
-	return m.renderModuleKeywordResponse(ctx, responseTemplate), nil
+	return m.renderModuleKeywordResponse(ctx, responseTemplate, nil), nil
 }
 
-func (m *Module) renderModuleKeywordResponse(ctx modules.CommandContext, template string) string {
+func (m *Module) renderModuleKeywordResponse(ctx modules.CommandContext, template string, extra map[string]string) string {
 	target := targetMention(ctx)
 	streamer := m.streamerName(context.Background())
 	targetName := strings.TrimPrefix(strings.TrimSpace(target), "@")
-	replacer := strings.NewReplacer(
-		"@{target}", "@"+targetName,
+
+	replacements := []string{
+		"@{target}", "@" + targetName,
 		"{target}", targetName,
 		"{streamer}", strings.TrimSpace(streamer),
-	)
+	}
+	for key, value := range extra {
+		normalized := strings.TrimSpace(key)
+		if normalized == "" {
+			continue
+		}
+		replacements = append(replacements, "{"+normalized+"}", strings.TrimSpace(value))
+	}
+
+	replacer := strings.NewReplacer(replacements...)
 
 	return strings.TrimSpace(replacer.Replace(template))
 }

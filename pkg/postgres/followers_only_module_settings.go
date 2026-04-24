@@ -10,6 +10,7 @@ import (
 
 type FollowersOnlyModuleSettings struct {
 	Enabled                 bool
+	EnabledWhenOffline      bool
 	AutoDisableAfterMinutes int
 	UpdatedBy               string
 	CreatedAt               time.Time
@@ -27,6 +28,7 @@ func NewFollowersOnlyModuleSettingsStore(client *Client) *FollowersOnlyModuleSet
 func DefaultFollowersOnlyModuleSettings() FollowersOnlyModuleSettings {
 	return FollowersOnlyModuleSettings{
 		Enabled:                 false,
+		EnabledWhenOffline:      false,
 		AutoDisableAfterMinutes: 30,
 	}
 }
@@ -44,15 +46,17 @@ func (s *FollowersOnlyModuleSettingsStore) EnsureDefault(ctx context.Context) er
 INSERT INTO followers_only_module_settings (
 	id,
 	enabled,
+	enabled_when_offline,
 	auto_disable_after_minutes,
 	updated_by,
 	created_at,
 	updated_at
 )
-VALUES (1, $1, $2, '', NOW(), NOW())
+VALUES (1, $1, $2, $3, '', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
 		defaults.Enabled,
+		defaults.EnabledWhenOffline,
 		defaults.AutoDisableAfterMinutes,
 	)
 	if err != nil {
@@ -74,6 +78,7 @@ func (s *FollowersOnlyModuleSettingsStore) Get(ctx context.Context) (*FollowersO
 		`
 SELECT
 	enabled,
+	enabled_when_offline,
 	auto_disable_after_minutes,
 	updated_by,
 	created_at,
@@ -83,6 +88,7 @@ WHERE id = 1
 `,
 	).Scan(
 		&settings.Enabled,
+		&settings.EnabledWhenOffline,
 		&settings.AutoDisableAfterMinutes,
 		&settings.UpdatedBy,
 		&settings.CreatedAt,
@@ -112,22 +118,26 @@ func (s *FollowersOnlyModuleSettingsStore) Update(ctx context.Context, settings 
 UPDATE followers_only_module_settings
 SET
 	enabled = $1,
-	auto_disable_after_minutes = $2,
-	updated_by = $3,
+	enabled_when_offline = $2,
+	auto_disable_after_minutes = $3,
+	updated_by = $4,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
 	enabled,
+	enabled_when_offline,
 	auto_disable_after_minutes,
 	updated_by,
 	created_at,
 	updated_at
 `,
 		settings.Enabled,
+		settings.EnabledWhenOffline,
 		normalizeFollowersOnlyAutoDisableMinutes(settings.AutoDisableAfterMinutes),
 		strings.TrimSpace(settings.UpdatedBy),
 	).Scan(
 		&updated.Enabled,
+		&updated.EnabledWhenOffline,
 		&updated.AutoDisableAfterMinutes,
 		&updated.UpdatedBy,
 		&updated.CreatedAt,

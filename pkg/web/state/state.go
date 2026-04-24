@@ -48,6 +48,7 @@ type State struct {
 	ModuleCatalog          *postgres.ModuleCatalogStore
 	PublicHomeSettings     *postgres.PublicHomeSettingsStore
 	SpamFilters            *postgres.SpamFilterStore
+	SpamFilterHypeSettings *postgres.SpamFilterHypeSettingsStore
 	BlockedTerms           *postgres.BlockedTermStore
 	AlertSettings          *postgres.AlertSettingsStore
 	AuditLogs              *postgres.AuditLogStore
@@ -132,6 +133,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 	moduleCatalogStore := postgres.NewModuleCatalogStore(postgresClient)
 	publicHomeSettingsStore := postgres.NewPublicHomeSettingsStore(postgresClient)
 	spamFilterStore := postgres.NewSpamFilterStore(postgresClient)
+	spamFilterHypeSettingsStore := postgres.NewSpamFilterHypeSettingsStore(postgresClient)
 	blockedTermStore := postgres.NewBlockedTermStore(postgresClient)
 	alertSettingsStore := postgres.NewAlertSettingsStore(postgresClient)
 	auditLogStore := postgres.NewAuditLogStore(postgresClient)
@@ -169,6 +171,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 		ModuleCatalog:          moduleCatalogStore,
 		PublicHomeSettings:     publicHomeSettingsStore,
 		SpamFilters:            spamFilterStore,
+		SpamFilterHypeSettings: spamFilterHypeSettingsStore,
 		BlockedTerms:           blockedTermStore,
 		AlertSettings:          alertSettingsStore,
 		AuditLogs:              auditLogStore,

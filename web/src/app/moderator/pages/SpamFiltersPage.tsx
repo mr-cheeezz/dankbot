@@ -17,10 +17,15 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import {
+  fetchSpamFilterHypeSettings,
+  saveSpamFilterHypeSettings,
+} from "../api";
 import { useModerator } from "../ModeratorContext";
-import type { SpamFilterEntry } from "../types";
+import { initialSpamFilterHypeSettings } from "../data";
+import type { SpamFilterEntry, SpamFilterHypeSettings } from "../types";
 
 const commonActions = [
   "delete",
@@ -511,6 +516,23 @@ function LengthFilterEditor({
                 }
                 label="Enable repeat offender detection"
               />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={settings.repeatUntilStreamEnd ?? false}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      updateLengthSettings({
+                        repeatUntilStreamEnd: checked,
+                      });
+                      void updateSpamFilter(selectedSpamFilter.id, {
+                        repeatUntilStreamEnd: checked,
+                      });
+                    }}
+                  />
+                }
+                label="Do not forget offenses until stream/session reset"
+              />
 
               <Box
                 sx={{
@@ -540,8 +562,9 @@ function LengthFilterEditor({
                 />
                 <TextField
                   type="number"
-                  label="Cooldown"
+                  label="Forget after (seconds)"
                   value={settings.repeatCooldownSeconds}
+                  disabled={settings.repeatUntilStreamEnd ?? false}
                   inputProps={{ min: 1 }}
                   onChange={(event) => {
                     const value = Math.max(1, Number(event.target.value) || 1);
@@ -1146,6 +1169,21 @@ function CapsFilterEditor({
                 }
                 label="Enable repeat offender detection"
               />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={settings.repeatUntilStreamEnd ?? false}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      updateCapsSettings({ repeatUntilStreamEnd: checked });
+                      void updateSpamFilter(selectedSpamFilter.id, {
+                        repeatUntilStreamEnd: checked,
+                      });
+                    }}
+                  />
+                }
+                label="Do not forget offenses until stream/session reset"
+              />
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
                 <TextField
                   type="number"
@@ -1162,8 +1200,9 @@ function CapsFilterEditor({
                 />
                 <TextField
                   type="number"
-                  label="Cooldown seconds"
+                  label="Forget after (seconds)"
                   value={settings.repeatCooldownSeconds}
+                  disabled={settings.repeatUntilStreamEnd ?? false}
                   inputProps={{ min: 1 }}
                   onChange={(event) => {
                     const value = Math.max(1, Number(event.target.value) || 1);
@@ -1551,6 +1590,7 @@ function GenericSpamFilterEditor({
   selectedSpamFilter,
   toggleSpamFilter,
   updateSpamFilter,
+  updateSpamFilterLocal,
 }: {
   selectedSpamFilter: SpamFilterEntry;
   toggleSpamFilter: (id: string) => Promise<void>;
@@ -1558,6 +1598,7 @@ function GenericSpamFilterEditor({
     id: string,
     next: Partial<SpamFilterEntry>,
   ) => Promise<void>;
+  updateSpamFilterLocal: (id: string, next: Partial<SpamFilterEntry>) => void;
 }) {
   return (
     <Stack spacing={2.5} sx={{ p: 2.5 }}>
@@ -1694,12 +1735,92 @@ function GenericSpamFilterEditor({
             : `This rule is currently disabled, so messages crossing ${selectedSpamFilter.thresholdValue} ${selectedSpamFilter.thresholdLabel} will not trigger moderation.`}
         </Typography>
       </Paper>
+
+      <Box>
+        <SectionTitle label="Repeat Offenders" />
+        <Stack spacing={2}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={selectedSpamFilter.repeatOffendersEnabled ?? false}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  updateSpamFilterLocal(selectedSpamFilter.id, {
+                    repeatOffendersEnabled: checked,
+                  });
+                  void updateSpamFilter(selectedSpamFilter.id, {
+                    repeatOffendersEnabled: checked,
+                  });
+                }}
+              />
+            }
+            label="Enable repeat offender detection"
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={selectedSpamFilter.repeatUntilStreamEnd ?? false}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  updateSpamFilterLocal(selectedSpamFilter.id, {
+                    repeatUntilStreamEnd: checked,
+                  });
+                  void updateSpamFilter(selectedSpamFilter.id, {
+                    repeatUntilStreamEnd: checked,
+                  });
+                }}
+              />
+            }
+            label="Do not forget offenses until stream/session reset"
+          />
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+              gap: 2,
+            }}
+          >
+            <TextField
+              label="Multiplier"
+              type="number"
+              value={selectedSpamFilter.repeatMultiplier ?? 1}
+              inputProps={{ min: 1, step: 0.1 }}
+              onChange={(event) => {
+                const value = Math.max(1, Number(event.target.value) || 1);
+                updateSpamFilterLocal(selectedSpamFilter.id, {
+                  repeatMultiplier: value,
+                });
+                void updateSpamFilter(selectedSpamFilter.id, {
+                  repeatMultiplier: value,
+                });
+              }}
+            />
+            <TextField
+              label="Forget after (seconds)"
+              type="number"
+              value={selectedSpamFilter.repeatMemorySeconds ?? 600}
+              disabled={selectedSpamFilter.repeatUntilStreamEnd ?? false}
+              inputProps={{ min: 1 }}
+              onChange={(event) => {
+                const value = Math.max(1, Number(event.target.value) || 1);
+                updateSpamFilterLocal(selectedSpamFilter.id, {
+                  repeatMemorySeconds: value,
+                });
+                void updateSpamFilter(selectedSpamFilter.id, {
+                  repeatMemorySeconds: value,
+                });
+              }}
+            />
+          </Box>
+        </Stack>
+      </Box>
     </Stack>
   );
 }
 
 export function SpamFiltersPage() {
   const {
+    spamFilters,
     filteredSpamFilters,
     selectedSpamFilter,
     setSelectedSpamFilterId,
@@ -1718,6 +1839,11 @@ export function SpamFiltersPage() {
   const [capsExemptUserInput, setCapsExemptUserInput] = useState("");
   const [floodImpactedRoleInput, setFloodImpactedRoleInput] = useState("");
   const [floodExcludedRoleInput, setFloodExcludedRoleInput] = useState("");
+  const [hypeSettings, setHypeSettings] = useState<SpamFilterHypeSettings>(
+    initialSpamFilterHypeSettings,
+  );
+  const [hypeSettingsLoaded, setHypeSettingsLoaded] = useState(false);
+  const [hypeSettingsSaving, setHypeSettingsSaving] = useState(false);
 
   const isLinkFilter =
     selectedSpamFilter?.id === "links" &&
@@ -1731,6 +1857,80 @@ export function SpamFiltersPage() {
   const isMessageFloodFilter =
     selectedSpamFilter?.id === "message-flood" &&
     selectedSpamFilter.messageFloodSettings != null;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSpamFilterHypeSettings()
+      .then((settings) => {
+        if (!cancelled) {
+          setHypeSettings(settings);
+          setHypeSettingsLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHypeSettings(initialSpamFilterHypeSettings);
+          setHypeSettingsLoaded(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const updateHypeSettings = (next: Partial<SpamFilterHypeSettings>) => {
+    const previous = hypeSettings;
+    const merged: SpamFilterHypeSettings = {
+      ...hypeSettings,
+      ...next,
+      disableDurationSeconds: Math.max(
+        5,
+        Number(next.disableDurationSeconds ?? hypeSettings.disableDurationSeconds) ||
+          5,
+      ),
+      bitsThreshold: Math.max(
+        1,
+        Number(next.bitsThreshold ?? hypeSettings.bitsThreshold) || 1,
+      ),
+      giftedSubsThreshold: Math.max(
+        1,
+        Number(
+          next.giftedSubsThreshold ?? hypeSettings.giftedSubsThreshold,
+        ) || 1,
+      ),
+      raidsThreshold: Math.max(
+        1,
+        Number(next.raidsThreshold ?? hypeSettings.raidsThreshold) || 1,
+      ),
+      donationsThreshold: Math.max(
+        0.01,
+        Number(next.donationsThreshold ?? hypeSettings.donationsThreshold) ||
+          0.01,
+      ),
+    };
+
+    setHypeSettings(merged);
+    setHypeSettingsSaving(true);
+    void saveSpamFilterHypeSettings(merged)
+      .then((saved) => {
+        setHypeSettings(saved);
+      })
+      .catch(() => {
+        setHypeSettings(previous);
+      })
+      .finally(() => {
+        setHypeSettingsSaving(false);
+      });
+  };
+
+  const toggleHypeDisabledFilter = (filterKey: string, checked: boolean) => {
+    const key = filterKey.trim().toLowerCase();
+    const nextKeys = checked
+      ? Array.from(new Set([...hypeSettings.disabledFilterKeys, key]))
+      : hypeSettings.disabledFilterKeys.filter((entry) => entry !== key);
+    updateHypeSettings({ disabledFilterKeys: nextKeys });
+  };
 
   const updateLinkSettings = (
     next: Partial<NonNullable<SpamFilterEntry["linkSettings"]>>,
@@ -1798,6 +1998,219 @@ export function SpamFiltersPage() {
   return (
     <>
       <Stack spacing={2}>
+        <Paper elevation={0} sx={{ p: 2.25 }}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="h5">Hype moment settings</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.45 }}
+              >
+                Auto-disable selected filters for a short window when major
+                stream events hit your thresholds.
+              </Typography>
+            </Box>
+
+            <Stack spacing={1.1}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={hypeSettings.enabled}
+                    disabled={!hypeSettingsLoaded}
+                    onChange={(event) =>
+                      updateHypeSettings({ enabled: event.target.checked })
+                    }
+                  />
+                }
+                label="Enable hype moment auto-disable"
+              />
+            </Stack>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(0, 1fr))" },
+                gap: 2,
+              }}
+            >
+              <TextField
+                type="number"
+                label="Disable filters for (seconds)"
+                value={hypeSettings.disableDurationSeconds}
+                inputProps={{ min: 5 }}
+                disabled={!hypeSettingsLoaded}
+                onChange={(event) =>
+                  updateHypeSettings({
+                    disableDurationSeconds: Math.max(
+                      5,
+                      Number(event.target.value) || 5,
+                    ),
+                  })
+                }
+              />
+              <TextField
+                type="number"
+                label="Bits trigger threshold"
+                value={hypeSettings.bitsThreshold}
+                inputProps={{ min: 1 }}
+                disabled={!hypeSettingsLoaded || !hypeSettings.bitsEnabled}
+                onChange={(event) =>
+                  updateHypeSettings({
+                    bitsThreshold: Math.max(1, Number(event.target.value) || 1),
+                  })
+                }
+              />
+              <TextField
+                type="number"
+                label="Gifted subs trigger threshold"
+                value={hypeSettings.giftedSubsThreshold}
+                inputProps={{ min: 1 }}
+                disabled={
+                  !hypeSettingsLoaded || !hypeSettings.giftedSubsEnabled
+                }
+                onChange={(event) =>
+                  updateHypeSettings({
+                    giftedSubsThreshold: Math.max(
+                      1,
+                      Number(event.target.value) || 1,
+                    ),
+                  })
+                }
+              />
+              <TextField
+                type="number"
+                label="Raid trigger threshold"
+                value={hypeSettings.raidsThreshold}
+                inputProps={{ min: 1 }}
+                disabled={!hypeSettingsLoaded || !hypeSettings.raidsEnabled}
+                onChange={(event) =>
+                  updateHypeSettings({
+                    raidsThreshold: Math.max(1, Number(event.target.value) || 1),
+                  })
+                }
+              />
+              <TextField
+                type="number"
+                label="Donation trigger threshold"
+                value={hypeSettings.donationsThreshold}
+                inputProps={{ min: 0.01, step: 0.01 }}
+                disabled={
+                  !hypeSettingsLoaded || !hypeSettings.donationsEnabled
+                }
+                onChange={(event) =>
+                  updateHypeSettings({
+                    donationsThreshold: Math.max(
+                      0.01,
+                      Number(event.target.value) || 0.01,
+                    ),
+                  })
+                }
+              />
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                  gap: 0.5,
+                  alignContent: "center",
+                }}
+              >
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={hypeSettings.bitsEnabled}
+                      disabled={!hypeSettingsLoaded}
+                      onChange={(event) =>
+                        updateHypeSettings({ bitsEnabled: event.target.checked })
+                      }
+                    />
+                  }
+                  label="Bits trigger"
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={hypeSettings.giftedSubsEnabled}
+                      disabled={!hypeSettingsLoaded}
+                      onChange={(event) =>
+                        updateHypeSettings({
+                          giftedSubsEnabled: event.target.checked,
+                        })
+                      }
+                    />
+                  }
+                  label="Gifted subs trigger"
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={hypeSettings.raidsEnabled}
+                      disabled={!hypeSettingsLoaded}
+                      onChange={(event) =>
+                        updateHypeSettings({ raidsEnabled: event.target.checked })
+                      }
+                    />
+                  }
+                  label="Raid trigger"
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={hypeSettings.donationsEnabled}
+                      disabled={!hypeSettingsLoaded}
+                      onChange={(event) =>
+                        updateHypeSettings({
+                          donationsEnabled: event.target.checked,
+                        })
+                      }
+                    />
+                  }
+                  label="Donation trigger"
+                />
+              </Box>
+            </Box>
+
+            <Box>
+              <SectionTitle label="Filters Disabled During Hype" />
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    sm: "repeat(2, minmax(0, 1fr))",
+                    lg: "repeat(3, minmax(0, 1fr))",
+                  },
+                  gap: 0.75,
+                }}
+              >
+                {spamFilters.map((entry) => (
+                  <FormControlLabel
+                    key={entry.id}
+                    control={
+                      <Checkbox
+                        checked={hypeSettings.disabledFilterKeys.includes(
+                          entry.id,
+                        )}
+                        disabled={!hypeSettingsLoaded}
+                        onChange={(event) =>
+                          toggleHypeDisabledFilter(entry.id, event.target.checked)
+                        }
+                      />
+                    }
+                    label={formatLabel(entry.name)}
+                  />
+                ))}
+              </Box>
+            </Box>
+
+            <Typography color="text.secondary" sx={{ fontSize: "0.82rem" }}>
+              {hypeSettingsSaving
+                ? "Saving hype settings..."
+                : "Hype settings are saved."}
+            </Typography>
+          </Stack>
+        </Paper>
+
         <Box
           sx={{
             display: "grid",
@@ -2459,6 +2872,26 @@ export function SpamFiltersPage() {
                           }
                           label="Enable repeat offender detection"
                         />
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={
+                                selectedSpamFilter.linkSettings
+                                  .repeatUntilStreamEnd ?? false
+                              }
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                updateLinkSettings({
+                                  repeatUntilStreamEnd: checked,
+                                });
+                                void updateSpamFilter(selectedSpamFilter.id, {
+                                  repeatUntilStreamEnd: checked,
+                                });
+                              }}
+                            />
+                          }
+                          label="Do not forget offenses until stream/session reset"
+                        />
 
                         <Box
                           sx={{
@@ -2491,11 +2924,15 @@ export function SpamFiltersPage() {
                             }}
                           />
                           <TextField
-                            label="Cooldown seconds"
+                            label="Forget after (seconds)"
                             type="number"
                             value={
                               selectedSpamFilter.linkSettings
                                 .repeatCooldownSeconds
+                            }
+                            disabled={
+                              selectedSpamFilter.linkSettings
+                                .repeatUntilStreamEnd ?? false
                             }
                             inputProps={{ min: 1 }}
                             onChange={(event) => {
@@ -2531,6 +2968,7 @@ export function SpamFiltersPage() {
                 selectedSpamFilter={selectedSpamFilter}
                 toggleSpamFilter={toggleSpamFilter}
                 updateSpamFilter={updateSpamFilter}
+                updateSpamFilterLocal={updateSpamFilterLocal}
               />
             )}
           </Paper>

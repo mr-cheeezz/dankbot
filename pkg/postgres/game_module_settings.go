@@ -29,7 +29,7 @@ func NewGameModuleSettingsStore(client *Client) *GameModuleSettingsStore {
 
 func DefaultGameModuleSettings() GameModuleSettings {
 	return GameModuleSettings{
-		KeywordResponse:         "@{target}, use !game to see what {streamer} is currently playing.",
+		KeywordResponse:         "{streamer} is currently playing {game}.",
 		PlaytimeTemplate:        "{streamer} has been playing {game} for {duration}.",
 		GamesPlayedTemplate:     "{label}: {items}",
 		GamesPlayedItemTemplate: "{game} ({duration})",
@@ -185,6 +185,9 @@ RETURNING
 func normalizeGameKeywordResponse(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
+		return DefaultGameModuleSettings().KeywordResponse
+	}
+	if strings.EqualFold(value, "@{target}, use !game to see what {streamer} is currently playing.") {
 		return DefaultGameModuleSettings().KeywordResponse
 	}
 	return value

@@ -197,6 +197,7 @@ export type ModuleEntry = {
 
 export type FollowersOnlyModuleSettings = {
   enabled: boolean;
+  enabledWhenOffline: boolean;
   autoDisableAfterMinutes: number;
 };
 
@@ -214,6 +215,10 @@ export type NowPlayingModuleSettings = {
   enabled: boolean;
   aiDetectionEnabled: boolean;
   keywordResponse: string;
+  songChangeMessageTemplate: string;
+  songCommandEnabled: boolean;
+  songNextCommandEnabled: boolean;
+  songLastCommandEnabled: boolean;
 };
 
 export type QuoteModuleSettings = {
@@ -433,6 +438,20 @@ export type SpamFilterEntry = {
     repeatCooldownSeconds: number;
     repeatUntilStreamEnd: boolean;
   };
+};
+
+export type SpamFilterHypeSettings = {
+  enabled: boolean;
+  disableDurationSeconds: number;
+  bitsEnabled: boolean;
+  bitsThreshold: number;
+  giftedSubsEnabled: boolean;
+  giftedSubsThreshold: number;
+  raidsEnabled: boolean;
+  raidsThreshold: number;
+  donationsEnabled: boolean;
+  donationsThreshold: number;
+  disabledFilterKeys: string[];
 };
 
 export type AlertEntry = {

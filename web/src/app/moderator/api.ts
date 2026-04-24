@@ -25,6 +25,7 @@ import type {
   ModuleCatalogEntry,
   PublicHomeSettings,
   SpamFilterEntry,
+  SpamFilterHypeSettings,
   TwitchCategorySearchEntry,
   TwitchUserSearchEntry,
 } from "./types";
@@ -62,6 +63,20 @@ type SpamFiltersResponse = {
     impacted_roles?: string[];
     excluded_roles?: string[];
   }>;
+};
+
+type SpamFilterHypeSettingsResponse = {
+  enabled: boolean;
+  disable_duration_seconds: number;
+  bits_enabled: boolean;
+  bits_threshold: number;
+  gifted_subs_enabled: boolean;
+  gifted_subs_threshold: number;
+  raids_enabled: boolean;
+  raids_threshold: number;
+  donations_enabled: boolean;
+  donations_threshold: number;
+  disabled_filter_keys: string[];
 };
 
 type AuditLogsResponse = {
@@ -137,6 +152,7 @@ type TwitchCategorySearchResponse = {
 
 type FollowersOnlyModuleResponse = {
   enabled: boolean;
+  enabled_when_offline: boolean;
   auto_disable_after_minutes: number;
 };
 
@@ -176,6 +192,10 @@ type NowPlayingModuleResponse = {
   enabled: boolean;
   ai_detection_enabled: boolean;
   keyword_response: string;
+  song_change_message_template: string;
+  song_command_enabled: boolean;
+  song_next_command_enabled: boolean;
+  song_last_command_enabled: boolean;
 };
 
 type QuoteModuleResponse = {
@@ -624,6 +644,7 @@ export async function fetchFollowersOnlyModuleSettings(
   const payload = (await response.json()) as FollowersOnlyModuleResponse;
   return {
     enabled: payload.enabled,
+    enabledWhenOffline: payload.enabled_when_offline,
     autoDisableAfterMinutes: payload.auto_disable_after_minutes,
   };
 }
@@ -640,6 +661,7 @@ export async function saveFollowersOnlyModuleSettings(
     },
     body: JSON.stringify({
       enabled: settings.enabled,
+      enabled_when_offline: settings.enabledWhenOffline,
       auto_disable_after_minutes: settings.autoDisableAfterMinutes,
     }),
   });
@@ -653,6 +675,7 @@ export async function saveFollowersOnlyModuleSettings(
   const payload = (await response.json()) as FollowersOnlyModuleResponse;
   return {
     enabled: payload.enabled,
+    enabledWhenOffline: payload.enabled_when_offline,
     autoDisableAfterMinutes: payload.auto_disable_after_minutes,
   };
 }
@@ -848,6 +871,10 @@ export async function fetchNowPlayingModuleSettings(
     enabled: payload.enabled,
     aiDetectionEnabled: payload.ai_detection_enabled,
     keywordResponse: payload.keyword_response,
+    songChangeMessageTemplate: payload.song_change_message_template ?? "",
+    songCommandEnabled: payload.song_command_enabled,
+    songNextCommandEnabled: payload.song_next_command_enabled,
+    songLastCommandEnabled: payload.song_last_command_enabled,
   };
 }
 
@@ -865,6 +892,10 @@ export async function saveNowPlayingModuleSettings(
       enabled: settings.enabled,
       ai_detection_enabled: settings.aiDetectionEnabled,
       keyword_response: settings.keywordResponse,
+      song_change_message_template: settings.songChangeMessageTemplate,
+      song_command_enabled: settings.songCommandEnabled,
+      song_next_command_enabled: settings.songNextCommandEnabled,
+      song_last_command_enabled: settings.songLastCommandEnabled,
     }),
   });
 
@@ -879,6 +910,10 @@ export async function saveNowPlayingModuleSettings(
     enabled: payload.enabled,
     aiDetectionEnabled: payload.ai_detection_enabled,
     keywordResponse: payload.keyword_response,
+    songChangeMessageTemplate: payload.song_change_message_template ?? "",
+    songCommandEnabled: payload.song_command_enabled,
+    songNextCommandEnabled: payload.song_next_command_enabled,
+    songLastCommandEnabled: payload.song_last_command_enabled,
   };
 }
 
@@ -1175,9 +1210,12 @@ export async function deleteQuoteModuleEntry(id: number): Promise<void> {
   }
 }
 
-export async function importFossabotQuotes(
-  payload: string,
-): Promise<{ imported: number; skipped: number; items: QuoteModuleEntry[] }> {
+export async function importFossabotQuotes(payload: {
+  payload?: string;
+  channel?: string;
+  apiURL?: string;
+  apiToken?: string;
+}): Promise<{ imported: number; skipped: number; items: QuoteModuleEntry[] }> {
   const response = await fetch("/api/dashboard/modules/quotes/import", {
     method: "POST",
     credentials: "same-origin",
@@ -1187,7 +1225,10 @@ export async function importFossabotQuotes(
     },
     body: JSON.stringify({
       source: "fossabot",
-      payload,
+      payload: payload.payload ?? "",
+      channel: payload.channel ?? "",
+      api_url: payload.apiURL ?? "",
+      api_token: payload.apiToken ?? "",
     }),
   });
 
@@ -1395,6 +1436,90 @@ export async function fetchSpamFilters(
   }));
 }
 
+export async function fetchSpamFilterHypeSettings(
+  signal?: AbortSignal,
+): Promise<SpamFilterHypeSettings> {
+  const response = await fetch("/api/dashboard/spam-filters/hype-settings", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to load spam filter hype settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as SpamFilterHypeSettingsResponse;
+  return {
+    enabled: payload.enabled,
+    disableDurationSeconds: payload.disable_duration_seconds,
+    bitsEnabled: payload.bits_enabled,
+    bitsThreshold: payload.bits_threshold,
+    giftedSubsEnabled: payload.gifted_subs_enabled,
+    giftedSubsThreshold: payload.gifted_subs_threshold,
+    raidsEnabled: payload.raids_enabled,
+    raidsThreshold: payload.raids_threshold,
+    donationsEnabled: payload.donations_enabled,
+    donationsThreshold: payload.donations_threshold,
+    disabledFilterKeys: Array.isArray(payload.disabled_filter_keys)
+      ? payload.disabled_filter_keys
+      : [],
+  };
+}
+
+export async function saveSpamFilterHypeSettings(
+  settings: SpamFilterHypeSettings,
+): Promise<SpamFilterHypeSettings> {
+  const response = await fetch("/api/dashboard/spam-filters/hype-settings", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enabled: settings.enabled,
+      disable_duration_seconds: settings.disableDurationSeconds,
+      bits_enabled: settings.bitsEnabled,
+      bits_threshold: settings.bitsThreshold,
+      gifted_subs_enabled: settings.giftedSubsEnabled,
+      gifted_subs_threshold: settings.giftedSubsThreshold,
+      raids_enabled: settings.raidsEnabled,
+      raids_threshold: settings.raidsThreshold,
+      donations_enabled: settings.donationsEnabled,
+      donations_threshold: settings.donationsThreshold,
+      disabled_filter_keys: settings.disabledFilterKeys,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `failed to save spam filter hype settings: ${response.status}`,
+    );
+  }
+
+  const payload = (await response.json()) as SpamFilterHypeSettingsResponse;
+  return {
+    enabled: payload.enabled,
+    disableDurationSeconds: payload.disable_duration_seconds,
+    bitsEnabled: payload.bits_enabled,
+    bitsThreshold: payload.bits_threshold,
+    giftedSubsEnabled: payload.gifted_subs_enabled,
+    giftedSubsThreshold: payload.gifted_subs_threshold,
+    raidsEnabled: payload.raids_enabled,
+    raidsThreshold: payload.raids_threshold,
+    donationsEnabled: payload.donations_enabled,
+    donationsThreshold: payload.donations_threshold,
+    disabledFilterKeys: Array.isArray(payload.disabled_filter_keys)
+      ? payload.disabled_filter_keys
+      : [],
+  };
+}
+
 export async function fetchModes(signal?: AbortSignal): Promise<ModeEntry[]> {
   const response = await fetch("/api/dashboard/modes", {
     credentials: "same-origin",
@@ -1585,7 +1710,10 @@ function resolveSpamRepeatSettings(entry: SpamFilterEntry): {
       repeatFromLinks?.repeatCooldownSeconds,
     untilStreamEnd:
       entry.repeatUntilStreamEnd ??
-      repeatFromFlood?.repeatUntilStreamEnd,
+      repeatFromFlood?.repeatUntilStreamEnd ??
+      repeatFromLength?.repeatUntilStreamEnd ??
+      repeatFromCaps?.repeatUntilStreamEnd ??
+      repeatFromLinks?.repeatUntilStreamEnd,
   };
 }
 

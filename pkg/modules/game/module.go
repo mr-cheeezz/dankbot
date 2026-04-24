@@ -164,35 +164,43 @@ func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 func (m *Module) game(ctx modules.CommandContext) (string, error) {
 	_ = ctx
 
-	channel, err := m.currentChannel(context.Background())
+	gameName, err := m.CurrentGameName(context.Background())
 	if err != nil {
 		return "current game unavailable", nil
 	}
-	if channel == nil {
+	if strings.TrimSpace(gameName) == "" {
 		return "current game unavailable", nil
+	}
+
+	return fmt.Sprintf("%s is currently playing %s.", m.streamerName(context.Background()), gameName), nil
+}
+
+func (m *Module) CurrentGameName(ctx context.Context) (string, error) {
+	channel, err := m.currentChannel(ctx)
+	if err != nil {
+		return "", err
+	}
+	if channel == nil {
+		return "", nil
 	}
 
 	gameName := strings.TrimSpace(channel.GameName)
 	if !strings.EqualFold(gameName, robloxCategoryName) {
-		if gameName == "" {
-			return "current game unavailable", nil
-		}
-
-		return fmt.Sprintf("%s is currently playing %s.", m.streamerName(context.Background()), gameName), nil
+		return gameName, nil
 	}
 
-	experienceName, err := m.currentRobloxExperienceName(context.Background())
+	experienceName, err := m.currentRobloxExperienceName(ctx)
 	if err != nil {
-		return fmt.Sprintf("%s is currently playing Roblox.", m.streamerName(context.Background())), nil
+		return "Roblox", nil
 	}
 	if experienceName == "" {
-		return fmt.Sprintf("%s is currently playing a Roblox experience.", m.streamerName(context.Background())), nil
+		return "a Roblox experience", nil
 	}
 	if strings.EqualFold(strings.TrimSpace(experienceName), "website") {
-		return fmt.Sprintf("%s is switching games.", m.streamerName(context.Background())), nil
+		return "Roblox", nil
 	}
 
-	return fmt.Sprintf("%s is currently playing %s.", m.streamerName(context.Background()), experienceName), nil
+	return experienceName, nil
 }
 
 func (m *Module) gamesPlayed(ctx modules.CommandContext) (string, error) {

@@ -13,9 +13,13 @@ import (
 const builtInSongKeywordName = "what song is this"
 
 type nowPlayingModuleResponse struct {
-	Enabled            bool   `json:"enabled"`
-	AIDetectionEnabled bool   `json:"ai_detection_enabled"`
-	KeywordResponse    string `json:"keyword_response"`
+	Enabled                   bool   `json:"enabled"`
+	AIDetectionEnabled        bool   `json:"ai_detection_enabled"`
+	KeywordResponse           string `json:"keyword_response"`
+	SongChangeMessageTemplate string `json:"song_change_message_template"`
+	SongCommandEnabled        bool   `json:"song_command_enabled"`
+	SongNextCommandEnabled    bool   `json:"song_next_command_enabled"`
+	SongLastCommandEnabled    bool   `json:"song_last_command_enabled"`
 }
 
 func (h handler) nowPlayingModule(w http.ResponseWriter, r *http.Request) {
@@ -125,8 +129,12 @@ func (h handler) updateNowPlayingModule(w http.ResponseWriter, r *http.Request) 
 	}
 
 	updatedSettings, err := h.appState.NowPlayingModule.Update(r.Context(), postgres.NowPlayingModuleSettings{
-		KeywordResponse: strings.TrimSpace(request.KeywordResponse),
-		UpdatedBy:       strings.TrimSpace(userSession.Login),
+		KeywordResponse:           strings.TrimSpace(request.KeywordResponse),
+		SongChangeMessageTemplate: strings.TrimSpace(request.SongChangeMessageTemplate),
+		SongCommandEnabled:        request.SongCommandEnabled,
+		SongNextCommandEnabled:    request.SongNextCommandEnabled,
+		SongLastCommandEnabled:    request.SongLastCommandEnabled,
+		UpdatedBy:                 strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -157,8 +165,12 @@ func nowPlayingModuleToResponse(
 	keywordSetting postgres.DefaultKeywordSetting,
 ) nowPlayingModuleResponse {
 	return nowPlayingModuleResponse{
-		Enabled:            keywordSetting.Enabled,
-		AIDetectionEnabled: keywordSetting.AIDetectionEnabled,
-		KeywordResponse:    settings.KeywordResponse,
+		Enabled:                   keywordSetting.Enabled,
+		AIDetectionEnabled:        keywordSetting.AIDetectionEnabled,
+		KeywordResponse:           settings.KeywordResponse,
+		SongChangeMessageTemplate: settings.SongChangeMessageTemplate,
+		SongCommandEnabled:        settings.SongCommandEnabled,
+		SongNextCommandEnabled:    settings.SongNextCommandEnabled,
+		SongLastCommandEnabled:    settings.SongLastCommandEnabled,
 	}
 }

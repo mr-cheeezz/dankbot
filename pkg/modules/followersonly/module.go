@@ -23,6 +23,7 @@ type Module struct {
 	clientID      string
 	streamerID    string
 	botID         string
+	isLive        func(context.Context) (bool, error)
 
 	mu            sync.Mutex
 	activeSince   time.Time
@@ -68,6 +69,13 @@ func (m *Module) Start(ctx context.Context) error {
 	return nil
 }
 
+func (m *Module) SetStreamLiveChecker(checker func(context.Context) (bool, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.isLive = checker
+}
+
 func (m *Module) run(ctx context.Context) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -93,6 +101,16 @@ func (m *Module) tick(ctx context.Context) error {
 	if settings == nil || !settings.Enabled {
 		m.clearActiveSince()
 		return nil
+	}
+	if !settings.EnabledWhenOffline {
+		live, err := m.isStreamLive(ctx)
+		if err != nil {
+			return err
+		}
+		if !live {
+			m.clearActiveSince()
+			return nil
+		}
 	}
 
 	account, err := m.botAccount(ctx)
@@ -145,6 +163,18 @@ func (m *Module) tick(ctx context.Context) error {
 	m.clearActiveSince()
 	fmt.Printf("auto followers-only module disabled followers-only mode after %d minute(s)\n", settings.AutoDisableAfterMinutes)
 	return nil
+}
+
+func (m *Module) isStreamLive(ctx context.Context) (bool, error) {
+	m.mu.Lock()
+	checker := m.isLive
+	m.mu.Unlock()
+
+	if checker == nil {
+		return false, nil
+	}
+
+	return checker(ctx)
 }
 
 func (m *Module) botAccount(ctx context.Context) (*postgres.TwitchAccount, error) {

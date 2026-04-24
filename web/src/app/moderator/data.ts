@@ -12,6 +12,7 @@ import type {
   NavSection,
   PlaceholderItem,
   SpamFilterEntry,
+  SpamFilterHypeSettings,
   TimerEntry,
   ViewKey,
 } from "./types";
@@ -350,6 +351,10 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
     thresholdLabel: "same message count",
     thresholdValue: 3,
     enabled: true,
+    repeatOffendersEnabled: true,
+    repeatMultiplier: 2,
+    repeatMemorySeconds: 600,
+    repeatUntilStreamEnd: false,
   },
   {
     id: "message-length",
@@ -383,6 +388,7 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
       repeatOffendersEnabled: true,
       repeatMultiplier: 2,
       repeatCooldownSeconds: 60,
+      repeatUntilStreamEnd: false,
     },
   },
   {
@@ -414,6 +420,7 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
       repeatOffendersEnabled: true,
       repeatMultiplier: 3,
       repeatCooldownSeconds: 120,
+      repeatUntilStreamEnd: false,
     },
   },
   {
@@ -452,6 +459,7 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
       repeatOffendersEnabled: false,
       repeatMultiplier: 1.5,
       repeatCooldownSeconds: 600,
+      repeatUntilStreamEnd: false,
     },
   },
   {
@@ -463,6 +471,10 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
     thresholdLabel: "max emotes",
     thresholdValue: 10,
     enabled: false,
+    repeatOffendersEnabled: false,
+    repeatMultiplier: 1,
+    repeatMemorySeconds: 600,
+    repeatUntilStreamEnd: false,
   },
   {
     id: "repeated-characters",
@@ -473,8 +485,26 @@ export const initialSpamFilterEntries: SpamFilterEntry[] = [
     thresholdLabel: "same char run",
     thresholdValue: 12,
     enabled: false,
+    repeatOffendersEnabled: false,
+    repeatMultiplier: 1,
+    repeatMemorySeconds: 600,
+    repeatUntilStreamEnd: false,
   },
 ];
+
+export const initialSpamFilterHypeSettings: SpamFilterHypeSettings = {
+  enabled: false,
+  disableDurationSeconds: 180,
+  bitsEnabled: true,
+  bitsThreshold: 1000,
+  giftedSubsEnabled: true,
+  giftedSubsThreshold: 10,
+  raidsEnabled: true,
+  raidsThreshold: 50,
+  donationsEnabled: false,
+  donationsThreshold: 25,
+  disabledFilterKeys: [],
+};
 
 export const initialAlertEntries: AlertEntry[] = [
   {

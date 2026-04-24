@@ -1,9 +1,13 @@
 package dashboard
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,8 +40,11 @@ type quoteEntryRequest struct {
 }
 
 type quoteImportRequest struct {
-	Source  string `json:"source"`
-	Payload string `json:"payload"`
+	Source   string `json:"source"`
+	Payload  string `json:"payload"`
+	Channel  string `json:"channel"`
+	APIURL   string `json:"api_url"`
+	APIToken string `json:"api_token"`
 }
 
 type quoteImportResponse struct {
@@ -111,6 +118,14 @@ func (h handler) quoteModuleImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parsedMessages := parseFossabotQuotes(request.Payload)
+	if len(parsedMessages) == 0 {
+		var fetchErr error
+		parsedMessages, fetchErr = fetchFossabotQuotesFromAPI(r.Context(), request)
+		if fetchErr != nil {
+			http.Error(w, fetchErr.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 	if len(parsedMessages) == 0 {
 		http.Error(w, "no quotes found to import", http.StatusBadRequest)
 		return
@@ -481,4 +496,119 @@ func parseFossabotQuotes(raw string) []string {
 
 func normalizeQuoteImportMessage(message string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(message)), " "))
+}
+
+func fetchFossabotQuotesFromAPI(ctx context.Context, request quoteImportRequest) ([]string, error) {
+	channel := strings.TrimSpace(strings.ToLower(request.Channel))
+	apiURL := strings.TrimSpace(request.APIURL)
+	apiToken := strings.TrimSpace(request.APIToken)
+
+	candidates := make([]string, 0, 4)
+	if apiURL != "" {
+		candidates = append(candidates, apiURL)
+	}
+	if channel != "" {
+		escaped := url.PathEscape(channel)
+		candidates = append(candidates,
+			"https://api.fossabot.com/v2/channels/"+escaped+"/quotes",
+			"https://api.fossabot.com/v1/channels/"+escaped+"/quotes",
+			"https://fossabot.com/v2/channels/"+escaped+"/quotes",
+		)
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("provide Fossabot channel or API URL")
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	lastErr := ""
+	for _, endpoint := range candidates {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
+		req.Header.Set("Accept", "application/json, text/plain;q=0.8, */*;q=0.5")
+		if apiToken != "" {
+			req.Header.Set("Authorization", "Bearer "+apiToken)
+			req.Header.Set("X-API-Key", apiToken)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr.Error()
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			lastErr = strings.TrimSpace(fmt.Sprintf("%d %s", resp.StatusCode, string(body)))
+			continue
+		}
+
+		quotes := parseFossabotQuotes(string(body))
+		if len(quotes) == 0 {
+			quotes = parseFossabotQuotesJSON(body)
+		}
+		if len(quotes) > 0 {
+			return quotes, nil
+		}
+		lastErr = "response did not contain quote entries"
+	}
+
+	if lastErr == "" {
+		lastErr = "unknown error"
+	}
+	return nil, fmt.Errorf("could not fetch Fossabot quotes via API: %s", lastErr)
+}
+
+func parseFossabotQuotesJSON(raw []byte) []string {
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil
+	}
+
+	collections := []any{
+		data["quotes"],
+		data["items"],
+		data["data"],
+	}
+	for _, collection := range collections {
+		items, ok := collection.([]any)
+		if !ok || len(items) == 0 {
+			continue
+		}
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			object, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			candidates := []string{
+				stringValue(object["quote"]),
+				stringValue(object["message"]),
+				stringValue(object["text"]),
+				stringValue(object["content"]),
+			}
+			for _, candidate := range candidates {
+				if strings.TrimSpace(candidate) != "" {
+					out = append(out, strings.TrimSpace(candidate))
+					break
+				}
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+
+	return nil
+}
+
+func stringValue(value any) string {
+	text, _ := value.(string)
+	return strings.TrimSpace(text)
 }

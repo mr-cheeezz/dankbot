@@ -66,6 +66,9 @@ export function ModuleEditorPage() {
   const [quoteDraft, setQuoteDraft] = useState("");
   const [quoteImportDialogOpen, setQuoteImportDialogOpen] = useState(false);
   const [quoteImportDraft, setQuoteImportDraft] = useState("");
+  const [quoteImportChannel, setQuoteImportChannel] = useState("");
+  const [quoteImportAPIURL, setQuoteImportAPIURL] = useState("");
+  const [quoteImportAPIToken, setQuoteImportAPIToken] = useState("");
   const [quoteImportSaving, setQuoteImportSaving] = useState(false);
   const [editingQuote, setEditingQuote] = useState<QuoteModuleEntry | null>(
     null,
@@ -234,6 +237,9 @@ export function ModuleEditorPage() {
   const openQuoteImportDialog = () => {
     setQuotesNotice("");
     setQuoteImportDraft("");
+    setQuoteImportChannel("");
+    setQuoteImportAPIURL("");
+    setQuoteImportAPIToken("");
     setQuoteImportDialogOpen(true);
   };
 
@@ -243,12 +249,19 @@ export function ModuleEditorPage() {
     }
     setQuoteImportDialogOpen(false);
     setQuoteImportDraft("");
+    setQuoteImportChannel("");
+    setQuoteImportAPIURL("");
+    setQuoteImportAPIToken("");
   };
 
   const saveQuoteImport = () => {
     const payload = quoteImportDraft.trim();
-    if (payload === "") {
-      setQuotesError("Paste Fossabot quotes before importing.");
+    const channel = quoteImportChannel.trim().replace(/^@+/, "");
+    const apiURL = quoteImportAPIURL.trim();
+    const apiToken = quoteImportAPIToken.trim();
+
+    if (payload === "" && channel === "" && apiURL === "") {
+      setQuotesError("Add a Fossabot channel, an API URL, or pasted export text.");
       return;
     }
 
@@ -256,7 +269,12 @@ export function ModuleEditorPage() {
     setQuotesError("");
     setQuotesNotice("");
 
-    void importFossabotQuotes(payload)
+    void importFossabotQuotes({
+      payload,
+      channel,
+      apiURL,
+      apiToken,
+    })
       .then((result) => {
         if (result.items.length > 0) {
           setQuoteEntries((current) => [...result.items, ...current]);
@@ -266,6 +284,9 @@ export function ModuleEditorPage() {
         );
         setQuoteImportDialogOpen(false);
         setQuoteImportDraft("");
+        setQuoteImportChannel("");
+        setQuoteImportAPIURL("");
+        setQuoteImportAPIToken("");
       })
       .catch((error: unknown) => {
         setQuotesError(
@@ -662,14 +683,35 @@ export function ModuleEditorPage() {
         <DialogContent>
           <Stack spacing={1.25} sx={{ mt: 1 }}>
             <Alert severity="info">
-              Paste Fossabot quote export text here. Numbered lines and JSON arrays are both supported.
+              Import from Fossabot API by channel (or custom API URL). Pasted export text is also supported as a fallback.
             </Alert>
             <TextField
               autoFocus
               fullWidth
+              label="Fossabot channel"
+              placeholder="@channelname"
+              value={quoteImportChannel}
+              onChange={(event) => setQuoteImportChannel(event.target.value)}
+            />
+            <TextField
+              fullWidth
+              label="Fossabot API URL (optional override)"
+              placeholder="https://api.fossabot.com/v2/channels/channelname/quotes"
+              value={quoteImportAPIURL}
+              onChange={(event) => setQuoteImportAPIURL(event.target.value)}
+            />
+            <TextField
+              fullWidth
+              type="password"
+              label="Fossabot API token (optional)"
+              value={quoteImportAPIToken}
+              onChange={(event) => setQuoteImportAPIToken(event.target.value)}
+            />
+            <TextField
+              fullWidth
               multiline
-              minRows={10}
-              label="Fossabot quote export"
+              minRows={6}
+              label="Fallback pasted export text (optional)"
               placeholder={"1) First quote\n2) Another quote"}
               value={quoteImportDraft}
               onChange={(event) => setQuoteImportDraft(event.target.value)}

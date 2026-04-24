@@ -2,6 +2,7 @@ package spamfilters
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/mr-cheeezz/dankbot/pkg/modules"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
+	redispkg "github.com/mr-cheeezz/dankbot/pkg/redis"
+	"github.com/mr-cheeezz/dankbot/pkg/twitch/eventsub"
 )
 
 const (
@@ -43,11 +46,14 @@ type repeatOffenseState struct {
 
 type Module struct {
 	store *postgres.SpamFilterStore
+	hype  *postgres.SpamFilterHypeSettingsStore
 
 	mu                sync.RWMutex
 	filters           map[string]postgres.SpamFilter
 	history           map[string][]messageSample
 	repeatOffenses    map[string]repeatOffenseState
+	hypeSettings      postgres.SpamFilterHypeSettings
+	hypeDisabledUntil map[string]time.Time
 	lastOffensePrune  time.Time
 	streamLiveChecker func(context.Context) (bool, error)
 	lastStreamCheck   time.Time
@@ -57,14 +63,18 @@ type Module struct {
 	timeoutUser       timeoutUserFunc
 	warnUser          warnUserFunc
 	banUser           banUserFunc
+	redis             *redispkg.Client
+	streamerID        string
 }
 
 func New(store *postgres.SpamFilterStore) *Module {
 	return &Module{
-		store:          store,
-		filters:        make(map[string]postgres.SpamFilter),
-		history:        make(map[string][]messageSample),
-		repeatOffenses: make(map[string]repeatOffenseState),
+		store:             store,
+		filters:           make(map[string]postgres.SpamFilter),
+		history:           make(map[string][]messageSample),
+		repeatOffenses:    make(map[string]repeatOffenseState),
+		hypeSettings:      postgres.DefaultSpamFilterHypeSettings(),
+		hypeDisabledUntil: make(map[string]time.Time),
 	}
 }
 
@@ -83,10 +93,22 @@ func (m *Module) Start(ctx context.Context) error {
 	if err := m.store.EnsureDefaults(ctx); err != nil {
 		return err
 	}
+	if m.hype != nil {
+		if err := m.hype.EnsureDefault(ctx); err != nil {
+			return err
+		}
+	}
 	if err := m.reload(ctx); err != nil {
 		return err
 	}
 
+	if m.redis != nil {
+		subscription, err := m.redis.Subscribe(ctx, eventsub.AlertsChannel)
+		if err != nil {
+			return err
+		}
+		go m.runEventLoop(ctx, subscription)
+	}
 	go m.runReloadLoop(ctx)
 	return nil
 }
@@ -113,6 +135,21 @@ func (m *Module) SetStreamLiveChecker(checker func(context.Context) (bool, error
 	m.streamLiveChecker = checker
 }
 
+func (m *Module) SetHypeSettingsStore(store *postgres.SpamFilterHypeSettingsStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.hype = store
+}
+
+func (m *Module) SetRedisEventSource(redisClient *redispkg.Client, streamerID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.redis = redisClient
+	m.streamerID = strings.TrimSpace(streamerID)
+}
+
 func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResult, error) {
 	if ctx.Platform != "twitch" {
 		return modules.MessageResult{}, nil
@@ -134,29 +171,29 @@ func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResul
 		return modules.MessageResult{}, nil
 	}
 
-	if matched := enabledFilter(filters, "message-length"); matched != nil && len([]rune(message)) > matched.ThresholdValue {
+	if matched := m.effectiveEnabledFilter(filters, "message-length", now); matched != nil && len([]rune(message)) > matched.ThresholdValue {
 		return m.applyAction(ctx, *matched, "message length", now), nil
 	}
 
-	if matched := enabledFilter(filters, "links"); matched != nil && countLinks(message) > matched.ThresholdValue {
+	if matched := m.effectiveEnabledFilter(filters, "links", now); matched != nil && countLinks(message) > matched.ThresholdValue {
 		return m.applyAction(ctx, *matched, "link filter", now), nil
 	}
 
-	if matched := enabledFilter(filters, "caps"); matched != nil && capsPercentage(message) >= matched.ThresholdValue {
+	if matched := m.effectiveEnabledFilter(filters, "caps", now); matched != nil && capsPercentage(message) >= matched.ThresholdValue {
 		return m.applyAction(ctx, *matched, "caps filter", now), nil
 	}
 
-	if matched := enabledFilter(filters, "repeated-characters"); matched != nil && longestRepeatedRun(message) >= matched.ThresholdValue {
+	if matched := m.effectiveEnabledFilter(filters, "repeated-characters", now); matched != nil && longestRepeatedRun(message) >= matched.ThresholdValue {
 		return m.applyAction(ctx, *matched, "repeated characters filter", now), nil
 	}
 
 	samples := m.recordAndLoadHistory(ctx.SenderID, normalized, now)
 
-	if matched := enabledFilter(filters, "message-flood"); matched != nil && recentCount(samples, floodWindow) >= matched.ThresholdValue {
+	if matched := m.effectiveEnabledFilter(filters, "message-flood", now); matched != nil && recentCount(samples, floodWindow) >= matched.ThresholdValue {
 		return m.applyAction(ctx, *matched, "message flood", now), nil
 	}
 
-	if matched := enabledFilter(filters, "duplicate-messages"); matched != nil && duplicateCount(samples, normalized, duplicateWindow) >= matched.ThresholdValue {
+	if matched := m.effectiveEnabledFilter(filters, "duplicate-messages", now); matched != nil && duplicateCount(samples, normalized, duplicateWindow) >= matched.ThresholdValue {
 		return m.applyAction(ctx, *matched, "duplicate message", now), nil
 	}
 
@@ -193,6 +230,20 @@ func (m *Module) reload(ctx context.Context) error {
 	m.mu.Lock()
 	m.filters = next
 	m.mu.Unlock()
+
+	if m.hype != nil {
+		settings, err := m.hype.Get(ctx)
+		if err != nil {
+			return err
+		}
+		if settings == nil {
+			defaults := postgres.DefaultSpamFilterHypeSettings()
+			settings = &defaults
+		}
+		m.mu.Lock()
+		m.hypeSettings = *settings
+		m.mu.Unlock()
+	}
 
 	return nil
 }
@@ -368,6 +419,225 @@ func (m *Module) pruneRepeatOffensesLocked(now time.Time) {
 		if now.Sub(state.lastAt) > state.memory {
 			delete(m.repeatOffenses, key)
 		}
+	}
+}
+
+func (m *Module) effectiveEnabledFilter(filters map[string]postgres.SpamFilter, key string, now time.Time) *postgres.SpamFilter {
+	filter := enabledFilter(filters, key)
+	if filter == nil {
+		return nil
+	}
+	if m.isTemporarilyDisabledByHype(filter.FilterKey, now) {
+		return nil
+	}
+	return filter
+}
+
+func (m *Module) isTemporarilyDisabledByHype(filterKey string, now time.Time) bool {
+	filterKey = strings.TrimSpace(strings.ToLower(filterKey))
+	if filterKey == "" {
+		return false
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	disabledUntil, ok := m.hypeDisabledUntil[filterKey]
+	if !ok {
+		return false
+	}
+	if now.After(disabledUntil) {
+		delete(m.hypeDisabledUntil, filterKey)
+		return false
+	}
+	return true
+}
+
+func (m *Module) runEventLoop(ctx context.Context, subscription *redispkg.Subscription) {
+	defer func() {
+		if err := subscription.Close(); err != nil {
+			fmt.Printf("spam filter hype subscription close error: %v\n", err)
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case message, ok := <-subscription.Messages():
+			if !ok {
+				return
+			}
+			if err := m.handlePublishedEvent(message.Payload); err != nil {
+				fmt.Printf("spam filter hype event handling error: %v\n", err)
+			}
+		}
+	}
+}
+
+func (m *Module) handlePublishedEvent(payload string) error {
+	var published eventsub.PublishedEvent
+	if err := json.Unmarshal([]byte(payload), &published); err != nil {
+		return fmt.Errorf("decode published event: %w", err)
+	}
+	if published.Source != eventsub.SourceTwitchEventSub {
+		return nil
+	}
+	if !m.matchesStreamerID(strings.TrimSpace(published.BroadcasterID), published.Event) {
+		return nil
+	}
+
+	m.mu.RLock()
+	settings := m.hypeSettings
+	m.mu.RUnlock()
+	if !settings.Enabled || len(settings.DisabledFilterKeys) == 0 {
+		return nil
+	}
+
+	shouldTrigger := false
+	switch strings.TrimSpace(strings.ToLower(published.Type)) {
+	case "channel.cheer":
+		if settings.BitsEnabled {
+			var cheer struct {
+				Bits int `json:"bits"`
+			}
+			if err := json.Unmarshal(published.Event, &cheer); err == nil && cheer.Bits >= settings.BitsThreshold {
+				shouldTrigger = true
+			}
+		}
+	case "channel.subscription.gift":
+		if settings.GiftedSubsEnabled {
+			var gift struct {
+				Total int `json:"total"`
+			}
+			total := 1
+			if err := json.Unmarshal(published.Event, &gift); err == nil && gift.Total > 0 {
+				total = gift.Total
+			}
+			if total >= settings.GiftedSubsThreshold {
+				shouldTrigger = true
+			}
+		}
+	case "channel.raid":
+		if settings.RaidsEnabled {
+			var raid struct {
+				Viewers int `json:"viewers"`
+			}
+			if err := json.Unmarshal(published.Event, &raid); err == nil && raid.Viewers >= settings.RaidsThreshold {
+				shouldTrigger = true
+			}
+		}
+	case "channel.charity_campaign.donate":
+		if settings.DonationsEnabled {
+			donationAmount := extractNestedNumberFromJSON(published.Event, []string{"amount", "value"}, []string{"amount", "decimal_places"})
+			if donationAmount >= settings.DonationsThreshold {
+				shouldTrigger = true
+			}
+		}
+	}
+
+	if !shouldTrigger {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	duration := time.Duration(settings.DisableDurationSeconds) * time.Second
+	if duration < 5*time.Second {
+		duration = 5 * time.Second
+	}
+	until := now.Add(duration)
+
+	m.mu.Lock()
+	for _, rawKey := range settings.DisabledFilterKeys {
+		key := strings.TrimSpace(strings.ToLower(rawKey))
+		if key == "" {
+			continue
+		}
+		existing := m.hypeDisabledUntil[key]
+		if existing.After(until) {
+			continue
+		}
+		m.hypeDisabledUntil[key] = until
+	}
+	m.mu.Unlock()
+
+	return nil
+}
+
+func (m *Module) matchesStreamerID(eventBroadcasterID string, rawEvent json.RawMessage) bool {
+	m.mu.RLock()
+	streamerID := strings.TrimSpace(m.streamerID)
+	m.mu.RUnlock()
+
+	if streamerID == "" {
+		return true
+	}
+	if eventBroadcasterID != "" {
+		return strings.EqualFold(eventBroadcasterID, streamerID)
+	}
+
+	var fallback struct {
+		BroadcasterUserID   string `json:"broadcaster_user_id"`
+		ToBroadcasterUserID string `json:"to_broadcaster_user_id"`
+	}
+	if err := json.Unmarshal(rawEvent, &fallback); err != nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(fallback.BroadcasterUserID), streamerID) {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(fallback.ToBroadcasterUserID), streamerID)
+}
+
+func extractNestedNumberFromJSON(raw json.RawMessage, amountPath []string, decimalPath []string) float64 {
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return 0
+	}
+	amount := nestedNumber(payload, amountPath...)
+	if amount <= 0 {
+		return 0
+	}
+	decimals := nestedNumber(payload, decimalPath...)
+	if decimals <= 0 {
+		return amount
+	}
+	if decimals > 8 {
+		decimals = 8
+	}
+	return amount / math.Pow10(int(decimals))
+}
+
+func nestedNumber(node map[string]any, path ...string) float64 {
+	if len(path) == 0 || node == nil {
+		return 0
+	}
+	current := any(node)
+	for _, key := range path {
+		object, ok := current.(map[string]any)
+		if !ok {
+			return 0
+		}
+		value, exists := object[key]
+		if !exists {
+			return 0
+		}
+		current = value
+	}
+	switch value := current.(type) {
+	case float64:
+		return value
+	case int:
+		return float64(value)
+	case int32:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case json.Number:
+		parsed, _ := value.Float64()
+		return parsed
+	default:
+		return 0
 	}
 }
 

@@ -128,9 +128,21 @@ func newRuntime(cfg *config.Config) *runtime {
 		cfg.Main.AdminID,
 		cfg.Main.StreamerID,
 	)
+	spotifyModule.SetSettingsStore(postgres.NewNowPlayingModuleSettingsStore(postgresClient))
 	spotifyModule.SetStreamLiveChecker(streamChecker.IsLive)
 	spamFiltersModule := spamfiltersmodule.New(postgres.NewSpamFilterStore(postgresClient))
 	spamFiltersModule.SetStreamLiveChecker(streamChecker.IsLive)
+	spamFiltersModule.SetHypeSettingsStore(postgres.NewSpamFilterHypeSettingsStore(postgresClient))
+	spamFiltersModule.SetRedisEventSource(redisClient, cfg.Main.StreamerID)
+	followersOnlyModule := followersonlymodule.New(
+		postgres.NewFollowersOnlyModuleSettingsStore(postgresClient),
+		twitchAccountStore,
+		twitchOAuthService,
+		cfg.Twitch.ClientID,
+		cfg.Main.StreamerID,
+		cfg.Main.BotID,
+	)
+	followersOnlyModule.SetStreamLiveChecker(streamChecker.IsLive)
 	blockedTermsModule := blockedtermsmodule.New(postgres.NewBlockedTermStore(postgresClient))
 	keywordsModule := keywordsmodule.New(
 		postgres.NewKeywordStore(postgresClient),
@@ -143,6 +155,18 @@ func newRuntime(cfg *config.Config) *runtime {
 	keywordsModule.SetModeStore(modeStore)
 	keywordsModule.SetGameModuleSettingsStore(gameModuleSettingsStore)
 	keywordsModule.SetNowPlayingModuleSettingsStore(postgres.NewNowPlayingModuleSettingsStore(postgresClient))
+	keywordsModule.SetSongReplyResolver(spotifyModule.SongKeywordReply)
+	gameModule := robloxmodule.New(
+		cfg.Roblox.Cookie,
+		cfg.Twitch.ClientID,
+		cfg.Main.StreamerID,
+		postgres.NewRobloxPlaytimeStore(postgresClient),
+		gameModuleSettingsStore,
+		robloxAccountStore,
+		twitchOAuthService,
+		twitchAccountStore,
+	)
+	keywordsModule.SetGameNameResolver(gameModule.CurrentGameName)
 	if cfg.OpenAI.Enabled && cfg.OpenAI.KeywordValidation {
 		keywordsModule.SetSemanticValidator(openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, cfg.OpenAI.Timeout))
 	}
@@ -150,14 +174,7 @@ func newRuntime(cfg *config.Config) *runtime {
 	moduleRunner.Register(defaultcommandsmodule.New(time.Now().UTC(), botVersion, defaultCommandStore))
 	moduleRunner.Register(alertsModule)
 	moduleRunner.Register(discordModule)
-	moduleRunner.Register(followersonlymodule.New(
-		postgres.NewFollowersOnlyModuleSettingsStore(postgresClient),
-		twitchAccountStore,
-		twitchOAuthService,
-		cfg.Twitch.ClientID,
-		cfg.Main.StreamerID,
-		cfg.Main.BotID,
-	))
+	moduleRunner.Register(followersOnlyModule)
 	moduleRunner.Register(modeModule)
 	moduleRunner.Register(blockedTermsModule)
 	moduleRunner.Register(spamFiltersModule)
@@ -173,16 +190,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		cfg.Main.AdminID,
 		cfg.Main.StreamerID,
 	))
-	moduleRunner.Register(robloxmodule.New(
-		cfg.Roblox.Cookie,
-		cfg.Twitch.ClientID,
-		cfg.Main.StreamerID,
-		postgres.NewRobloxPlaytimeStore(postgresClient),
-		gameModuleSettingsStore,
-		robloxAccountStore,
-		twitchOAuthService,
-		twitchAccountStore,
-	))
+	moduleRunner.Register(gameModule)
 	moduleRunner.Register(spotifyModule)
 
 	return &runtime{

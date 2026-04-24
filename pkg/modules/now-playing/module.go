@@ -19,6 +19,7 @@ import (
 type Module struct {
 	accounts       *postgres.SpotifyAccountStore
 	twitchAccounts *postgres.TwitchAccountStore
+	settings       *postgres.NowPlayingModuleSettingsStore
 	auditStore     *postgres.AuditLogStore
 	oauth          *spotifyoauth.Service
 	allowedIDs     map[string]struct{}
@@ -90,15 +91,40 @@ func (m *Module) SetStreamLiveChecker(checker func(context.Context) (bool, error
 	m.isLive = checker
 }
 
+func (m *Module) SetSettingsStore(store *postgres.NowPlayingModuleSettingsStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.settings = store
+}
+
+func (m *Module) SongKeywordReply(ctx context.Context) (string, error) {
+	return m.currentSong(ctx)
+}
+
 func (m *Module) song(ctx modules.CommandContext) (string, error) {
+	settings, err := m.getSettings(context.Background())
+	if err != nil {
+		return "", err
+	}
+
 	if len(ctx.Args) == 0 {
+		if !settings.SongCommandEnabled {
+			return "", nil
+		}
 		return m.currentSong(context.Background())
 	}
 
 	switch strings.ToLower(strings.TrimSpace(ctx.Args[0])) {
 	case "next":
+		if !settings.SongNextCommandEnabled {
+			return "", nil
+		}
 		return m.nextSong(context.Background())
 	case "last":
+		if !settings.SongLastCommandEnabled {
+			return "", nil
+		}
 		return m.lastSong(context.Background())
 	case "add":
 		if !m.canControlPlayback(ctx) {
@@ -450,6 +476,11 @@ func (m *Module) tickAnnouncement(ctx context.Context) error {
 	}
 
 	streamer := m.streamerName(ctx)
+	track := formatTrack(*playing.Item)
+	settings, err := m.getSettings(ctx)
+	if err != nil {
+		return err
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -464,7 +495,7 @@ func (m *Module) tickAnnouncement(ctx context.Context) error {
 	}
 
 	m.lastAnnouncedTrack = trackID
-	return say(m.channel, fmt.Sprintf("%s is now listening to %s PogU", streamer, formatTrack(*playing.Item)))
+	return say(channel, renderSongChangeTemplate(settings.SongChangeMessageTemplate, streamer, track))
 }
 
 func (m *Module) output() (string, func(channel, message string) error, func(context.Context) (bool, error)) {
@@ -472,6 +503,41 @@ func (m *Module) output() (string, func(channel, message string) error, func(con
 	defer m.mu.RUnlock()
 
 	return m.channel, m.say, m.isLive
+}
+
+func (m *Module) getSettings(ctx context.Context) (postgres.NowPlayingModuleSettings, error) {
+	defaults := postgres.DefaultNowPlayingModuleSettings()
+
+	m.mu.RLock()
+	settingsStore := m.settings
+	m.mu.RUnlock()
+	if settingsStore == nil {
+		return defaults, nil
+	}
+
+	settings, err := settingsStore.Get(ctx)
+	if err != nil {
+		return defaults, err
+	}
+	if settings == nil {
+		return defaults, nil
+	}
+
+	return *settings, nil
+}
+
+func renderSongChangeTemplate(template, streamer, song string) string {
+	template = strings.TrimSpace(template)
+	if template == "" {
+		template = postgres.DefaultNowPlayingModuleSettings().SongChangeMessageTemplate
+	}
+
+	replacer := strings.NewReplacer(
+		"{streamer}", strings.TrimSpace(streamer),
+		"{song}", strings.TrimSpace(song),
+		"{track}", strings.TrimSpace(song),
+	)
+	return strings.TrimSpace(replacer.Replace(template))
 }
 
 func resolveTrackURI(ctx context.Context, client *spotifyapi.Client, input string) (string, string, error) {
