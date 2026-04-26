@@ -80,6 +80,7 @@ export function ModuleEditorPage() {
     useState<GameSettingsTab>("viewer");
   const isQuotesModule = moduleEntry?.id === "quotes";
   const isGameModule = moduleEntry?.id === "game";
+  const isTabsModule = moduleEntry?.id === "tabs";
   const sections = useMemo<Array<{ key: ModuleEditorSection; label: string }>>(
     () =>
       isQuotesModule
@@ -496,6 +497,44 @@ export function ModuleEditorPage() {
                               />
                             ))}
                         </>
+                      ) : isTabsModule ? (
+                        <>
+                          {(() => {
+                            const startDelayMode =
+                              draft.settings.find(
+                                (setting) =>
+                                  setting.id === "interest-start-delay-mode",
+                              )?.value ?? "week";
+                            const visibleSettingIDs = [
+                              "enabled",
+                              "interest-rate-percent",
+                              "interest-every-days",
+                              "interest-start-delay-mode",
+                            ];
+                            if (startDelayMode === "custom") {
+                              visibleSettingIDs.push(
+                                "interest-start-delay-value",
+                              );
+                              visibleSettingIDs.push(
+                                "interest-start-delay-unit",
+                              );
+                            }
+
+                            return draft.settings
+                              .filter((setting) =>
+                                visibleSettingIDs.includes(setting.id),
+                              )
+                              .map((setting) => (
+                                <ModuleSettingField
+                                  key={setting.id}
+                                  setting={setting}
+                                  onChange={(value) =>
+                                    updateSetting(setting.id, value)
+                                  }
+                                />
+                              ));
+                          })()}
+                        </>
                       ) : (
                         draft.settings.map((setting) => (
                           <ModuleSettingField
@@ -803,6 +842,17 @@ function ModuleSettingField({
   setting: ModuleSettingEntry;
   onChange: (value: string) => void;
 }) {
+  const numberInputProps =
+    setting.type !== "number"
+      ? undefined
+      : setting.id === "interest-rate-percent"
+        ? { step: "0.01", min: 0, max: 500 }
+        : setting.id === "interest-every-days"
+          ? { step: 1, min: 1, max: 365 }
+          : setting.id === "interest-start-delay-value"
+            ? { step: 1, min: 1, max: 3650 }
+          : undefined;
+
   if (setting.type === "boolean") {
     return (
       <Paper sx={{ p: 2 }}>
@@ -872,6 +922,7 @@ function ModuleSettingField({
       multiline={setting.type === "textarea"}
       minRows={setting.type === "textarea" ? 3 : undefined}
       helperText={setting.helperText}
+      inputProps={numberInputProps}
     />
   );
 }

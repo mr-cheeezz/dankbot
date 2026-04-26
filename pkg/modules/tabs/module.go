@@ -96,8 +96,19 @@ func (m *Module) tab(ctx modules.CommandContext) (string, error) {
 	if !settings.Enabled {
 		return "", nil
 	}
+	interestStartDelayDays := postgres.ResolveTabsInterestStartDelayDays(
+		settings.InterestStartDelayMode,
+		settings.InterestStartDelayValue,
+		settings.InterestStartDelayUnit,
+	)
 
-	entry, interestApplied, err := m.tabsStore.Get(context.Background(), login)
+	entry, interestApplied, err := m.tabsStore.GetWithInterest(
+		context.Background(),
+		login,
+		settings.InterestRatePct,
+		settings.InterestEveryDays,
+		interestStartDelayDays,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -130,6 +141,11 @@ func (m *Module) tabAdd(ctx modules.CommandContext) (string, error) {
 	if !settings.Enabled {
 		return "", nil
 	}
+	interestStartDelayDays := postgres.ResolveTabsInterestStartDelayDays(
+		settings.InterestStartDelayMode,
+		settings.InterestStartDelayValue,
+		settings.InterestStartDelayUnit,
+	)
 
 	login := normalizeLogin(ctx.Args[0])
 	if login == "" {
@@ -150,6 +166,7 @@ func (m *Module) tabAdd(ctx modules.CommandContext) (string, error) {
 		amountCents,
 		settings.InterestRatePct,
 		settings.InterestEveryDays,
+		interestStartDelayDays,
 	)
 	if err != nil {
 		return "", err
@@ -186,6 +203,11 @@ func (m *Module) tabSet(ctx modules.CommandContext) (string, error) {
 	if !settings.Enabled {
 		return "", nil
 	}
+	interestStartDelayDays := postgres.ResolveTabsInterestStartDelayDays(
+		settings.InterestStartDelayMode,
+		settings.InterestStartDelayValue,
+		settings.InterestStartDelayUnit,
+	)
 
 	login := normalizeLogin(ctx.Args[0])
 	if login == "" {
@@ -206,6 +228,7 @@ func (m *Module) tabSet(ctx modules.CommandContext) (string, error) {
 		amountCents,
 		settings.InterestRatePct,
 		settings.InterestEveryDays,
+		interestStartDelayDays,
 	)
 	if err != nil {
 		return "", err
@@ -236,6 +259,11 @@ func (m *Module) tabPaid(ctx modules.CommandContext) (string, error) {
 	if !settings.Enabled {
 		return "", nil
 	}
+	interestStartDelayDays := postgres.ResolveTabsInterestStartDelayDays(
+		settings.InterestStartDelayMode,
+		settings.InterestStartDelayValue,
+		settings.InterestStartDelayUnit,
+	)
 
 	login := normalizeLogin(ctx.Args[0])
 	if login == "" {
@@ -248,6 +276,7 @@ func (m *Module) tabPaid(ctx modules.CommandContext) (string, error) {
 		login,
 		settings.InterestRatePct,
 		settings.InterestEveryDays,
+		interestStartDelayDays,
 	)
 	if err != nil {
 		return "", err
@@ -270,6 +299,11 @@ func (m *Module) tabGive(ctx modules.CommandContext) (string, error) {
 	if !settings.Enabled {
 		return "", nil
 	}
+	interestStartDelayDays := postgres.ResolveTabsInterestStartDelayDays(
+		settings.InterestStartDelayMode,
+		settings.InterestStartDelayValue,
+		settings.InterestStartDelayUnit,
+	)
 
 	login := normalizeLogin(ctx.Args[0])
 	if login == "" {
@@ -282,6 +316,7 @@ func (m *Module) tabGive(ctx modules.CommandContext) (string, error) {
 		login,
 		settings.InterestRatePct,
 		settings.InterestEveryDays,
+		interestStartDelayDays,
 	)
 	if err != nil {
 		return "", err

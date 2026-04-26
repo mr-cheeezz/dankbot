@@ -11,9 +11,12 @@ import (
 )
 
 type tabsModuleResponse struct {
-	Enabled           bool    `json:"enabled"`
-	InterestRatePct   float64 `json:"interest_rate_percent"`
-	InterestEveryDays int     `json:"interest_every_days"`
+	Enabled                 bool    `json:"enabled"`
+	InterestRatePct         float64 `json:"interest_rate_percent"`
+	InterestEveryDays       int     `json:"interest_every_days"`
+	InterestStartDelayMode  string  `json:"interest_start_delay_mode"`
+	InterestStartDelayValue int     `json:"interest_start_delay_value"`
+	InterestStartDelayUnit  string  `json:"interest_start_delay_unit"`
 }
 
 func (h handler) tabsModule(w http.ResponseWriter, r *http.Request) {
@@ -89,10 +92,13 @@ func (h handler) updateTabsModule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, err := h.appState.TabsModule.Update(r.Context(), postgres.TabsModuleSettings{
-		Enabled:           request.Enabled,
-		InterestRatePct:   request.InterestRatePct,
-		InterestEveryDays: request.InterestEveryDays,
-		UpdatedBy:         strings.TrimSpace(userSession.Login),
+		Enabled:                 request.Enabled,
+		InterestRatePct:         request.InterestRatePct,
+		InterestEveryDays:       request.InterestEveryDays,
+		InterestStartDelayMode:  strings.TrimSpace(request.InterestStartDelayMode),
+		InterestStartDelayValue: request.InterestStartDelayValue,
+		InterestStartDelayUnit:  strings.TrimSpace(request.InterestStartDelayUnit),
+		UpdatedBy:               strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -109,8 +115,11 @@ func (h handler) updateTabsModule(w http.ResponseWriter, r *http.Request) {
 
 func tabsModuleToResponse(settings postgres.TabsModuleSettings) tabsModuleResponse {
 	return tabsModuleResponse{
-		Enabled:           settings.Enabled,
-		InterestRatePct:   settings.InterestRatePct,
-		InterestEveryDays: settings.InterestEveryDays,
+		Enabled:                 settings.Enabled,
+		InterestRatePct:         settings.InterestRatePct,
+		InterestEveryDays:       settings.InterestEveryDays,
+		InterestStartDelayMode:  settings.InterestStartDelayMode,
+		InterestStartDelayValue: settings.InterestStartDelayValue,
+		InterestStartDelayUnit:  settings.InterestStartDelayUnit,
 	}
 }

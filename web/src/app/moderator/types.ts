@@ -229,6 +229,9 @@ export type TabsModuleSettings = {
   enabled: boolean;
   interestRatePercent: number;
   interestEveryDays: number;
+  interestStartDelayMode: "day" | "week" | "month" | "custom";
+  interestStartDelayValue: number;
+  interestStartDelayUnit: "days" | "weeks" | "months";
 };
 
 export type UserProfileModuleSettings = {

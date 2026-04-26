@@ -37,31 +37,35 @@ func NewUserTabStore(client *Client) *UserTabStore {
 }
 
 func (s *UserTabStore) Get(ctx context.Context, login string) (*UserTab, int64, error) {
-	return s.getWithInterest(ctx, login, 0, 0)
+	return s.getWithInterest(ctx, login, 0, 0, 0)
 }
 
-func (s *UserTabStore) Add(ctx context.Context, login, displayName string, deltaCents int64, interestRatePct float64, interestEveryDays int) (*UserTab, int64, error) {
-	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, "add", deltaCents, "", func(current int64) int64 {
+func (s *UserTabStore) GetWithInterest(ctx context.Context, login string, interestRatePct float64, interestEveryDays int, interestStartDelayDays int) (*UserTab, int64, error) {
+	return s.getWithInterest(ctx, login, interestRatePct, interestEveryDays, interestStartDelayDays)
+}
+
+func (s *UserTabStore) Add(ctx context.Context, login, displayName string, deltaCents int64, interestRatePct float64, interestEveryDays int, interestStartDelayDays int) (*UserTab, int64, error) {
+	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, interestStartDelayDays, "add", deltaCents, "", func(current int64) int64 {
 		return current + deltaCents
 	})
 }
 
-func (s *UserTabStore) Set(ctx context.Context, login, displayName string, nextCents int64, interestRatePct float64, interestEveryDays int) (*UserTab, int64, error) {
-	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, "set", nextCents, "", func(current int64) int64 {
+func (s *UserTabStore) Set(ctx context.Context, login, displayName string, nextCents int64, interestRatePct float64, interestEveryDays int, interestStartDelayDays int) (*UserTab, int64, error) {
+	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, interestStartDelayDays, "set", nextCents, "", func(current int64) int64 {
 		_ = current
 		return nextCents
 	})
 }
 
-func (s *UserTabStore) MarkPaid(ctx context.Context, login, displayName string, interestRatePct float64, interestEveryDays int) (*UserTab, int64, error) {
-	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, "paid", 0, "paid off", func(current int64) int64 {
+func (s *UserTabStore) MarkPaid(ctx context.Context, login, displayName string, interestRatePct float64, interestEveryDays int, interestStartDelayDays int) (*UserTab, int64, error) {
+	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, interestStartDelayDays, "paid", 0, "paid off", func(current int64) int64 {
 		_ = current
 		return 0
 	})
 }
 
-func (s *UserTabStore) Ensure(ctx context.Context, login, displayName string, interestRatePct float64, interestEveryDays int) (*UserTab, int64, error) {
-	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, "give", 0, "opened tab", func(current int64) int64 {
+func (s *UserTabStore) Ensure(ctx context.Context, login, displayName string, interestRatePct float64, interestEveryDays int, interestStartDelayDays int) (*UserTab, int64, error) {
+	return s.mutate(ctx, login, displayName, interestRatePct, interestEveryDays, interestStartDelayDays, "give", 0, "opened tab", func(current int64) int64 {
 		return current
 	})
 }
@@ -127,7 +131,7 @@ LIMIT $2 OFFSET $3
 	return items, nil
 }
 
-func (s *UserTabStore) getWithInterest(ctx context.Context, login string, interestRatePct float64, interestEveryDays int) (*UserTab, int64, error) {
+func (s *UserTabStore) getWithInterest(ctx context.Context, login string, interestRatePct float64, interestEveryDays int, interestStartDelayDays int) (*UserTab, int64, error) {
 	db, err := s.client.DB(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -159,7 +163,13 @@ func (s *UserTabStore) getWithInterest(ctx context.Context, login string, intere
 		return nil, 0, nil
 	}
 
-	interestCents, changed := applyInterest(row, normalizeTabsInterestRate(interestRatePct), normalizeTabsInterestEveryDays(interestEveryDays), time.Now().UTC())
+	interestCents, changed := applyInterest(
+		row,
+		normalizeTabsInterestRate(interestRatePct),
+		normalizeTabsInterestEveryDays(interestEveryDays),
+		normalizeTabsInterestStartDelayValue(interestStartDelayDays),
+		time.Now().UTC(),
+	)
 	if changed {
 		if err := updateTabFields(ctx, tx, row); err != nil {
 			return nil, 0, err
@@ -179,6 +189,7 @@ func (s *UserTabStore) mutate(
 	displayName string,
 	interestRatePct float64,
 	interestEveryDays int,
+	interestStartDelayDays int,
 	action string,
 	amountCents int64,
 	note string,
@@ -221,13 +232,24 @@ func (s *UserTabStore) mutate(
 		}
 	}
 
-	interestCents, _ := applyInterest(row, normalizeTabsInterestRate(interestRatePct), normalizeTabsInterestEveryDays(interestEveryDays), now)
+	interestCents, _ := applyInterest(
+		row,
+		normalizeTabsInterestRate(interestRatePct),
+		normalizeTabsInterestEveryDays(interestEveryDays),
+		normalizeTabsInterestStartDelayValue(interestStartDelayDays),
+		now,
+	)
+	wasZeroBeforeMutation := row.BalanceCents <= 0
 	row.BalanceCents = nextBalance(row.BalanceCents)
 	if row.BalanceCents < 0 {
 		row.BalanceCents = 0
 	}
 	if displayName != "" {
 		row.DisplayName = displayName
+	}
+	if wasZeroBeforeMutation && row.BalanceCents > 0 {
+		row.CreatedAt = now
+		row.LastInterestAt = now
 	}
 	row.UpdatedAt = now
 	if row.BalanceCents == 0 {
@@ -289,7 +311,7 @@ FOR UPDATE
 	return &row, nil
 }
 
-func applyInterest(row *UserTab, interestRatePct float64, interestEveryDays int, now time.Time) (int64, bool) {
+func applyInterest(row *UserTab, interestRatePct float64, interestEveryDays int, interestStartDelayDays int, now time.Time) (int64, bool) {
 	if row == nil || row.BalanceCents <= 0 || interestRatePct <= 0 || interestEveryDays <= 0 {
 		return 0, false
 	}
@@ -313,9 +335,23 @@ func applyInterest(row *UserTab, interestRatePct float64, interestEveryDays int,
 		return 0, false
 	}
 
-	periods := int(now.Sub(base) / interval)
-	if periods < 1 {
-		return 0, false
+	startDelay := time.Duration(normalizeTabsInterestStartDelayValue(interestStartDelayDays)) * 24 * time.Hour
+	isFirstInterestCycle := !row.CreatedAt.IsZero() && base.Equal(row.CreatedAt)
+
+	periods := 0
+	effectiveAnchor := base
+	if isFirstInterestCycle {
+		firstInterestAt := base.Add(startDelay)
+		if now.Before(firstInterestAt) {
+			return 0, false
+		}
+		periods = 1 + int(now.Sub(firstInterestAt)/interval)
+		effectiveAnchor = firstInterestAt
+	} else {
+		periods = int(now.Sub(base) / interval)
+		if periods < 1 {
+			return 0, false
+		}
 	}
 
 	rateFactor := 1 + (interestRatePct / 100.0)
@@ -329,7 +365,11 @@ func applyInterest(row *UserTab, interestRatePct float64, interestEveryDays int,
 
 	interestCents := newBalance - row.BalanceCents
 	row.BalanceCents = newBalance
-	row.LastInterestAt = base.Add(time.Duration(periods) * interval)
+	if isFirstInterestCycle {
+		row.LastInterestAt = effectiveAnchor.Add(time.Duration(periods-1) * interval)
+	} else {
+		row.LastInterestAt = base.Add(time.Duration(periods) * interval)
+	}
 	row.UpdatedAt = now
 	return interestCents, true
 }
@@ -381,6 +421,7 @@ ON CONFLICT (login) DO UPDATE SET
 	display_name = EXCLUDED.display_name,
 	balance_cents = EXCLUDED.balance_cents,
 	last_interest_at = EXCLUDED.last_interest_at,
+	created_at = EXCLUDED.created_at,
 	updated_at = EXCLUDED.updated_at
 `,
 		row.Login,

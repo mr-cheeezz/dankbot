@@ -206,6 +206,9 @@ type TabsModuleResponse = {
   enabled: boolean;
   interest_rate_percent: number;
   interest_every_days: number;
+  interest_start_delay_mode: string;
+  interest_start_delay_value: number;
+  interest_start_delay_unit: string;
 };
 
 type UserProfileModuleResponse = {
@@ -966,6 +969,24 @@ export async function fetchTabsModuleSettings(
       payload.interest_every_days > 0
         ? payload.interest_every_days
         : 7,
+    interestStartDelayMode:
+      payload.interest_start_delay_mode === "day" ||
+      payload.interest_start_delay_mode === "week" ||
+      payload.interest_start_delay_mode === "month" ||
+      payload.interest_start_delay_mode === "custom"
+        ? payload.interest_start_delay_mode
+        : "week",
+    interestStartDelayValue:
+      Number.isFinite(payload.interest_start_delay_value) &&
+      payload.interest_start_delay_value > 0
+        ? Math.trunc(payload.interest_start_delay_value)
+        : 1,
+    interestStartDelayUnit:
+      payload.interest_start_delay_unit === "days" ||
+      payload.interest_start_delay_unit === "weeks" ||
+      payload.interest_start_delay_unit === "months"
+        ? payload.interest_start_delay_unit
+        : "weeks",
   };
 }
 
@@ -983,6 +1004,9 @@ export async function saveTabsModuleSettings(
       enabled: settings.enabled,
       interest_rate_percent: settings.interestRatePercent,
       interest_every_days: settings.interestEveryDays,
+      interest_start_delay_mode: settings.interestStartDelayMode,
+      interest_start_delay_value: settings.interestStartDelayValue,
+      interest_start_delay_unit: settings.interestStartDelayUnit,
     }),
   });
 
@@ -1003,6 +1027,24 @@ export async function saveTabsModuleSettings(
       payload.interest_every_days > 0
         ? payload.interest_every_days
         : 7,
+    interestStartDelayMode:
+      payload.interest_start_delay_mode === "day" ||
+      payload.interest_start_delay_mode === "week" ||
+      payload.interest_start_delay_mode === "month" ||
+      payload.interest_start_delay_mode === "custom"
+        ? payload.interest_start_delay_mode
+        : "week",
+    interestStartDelayValue:
+      Number.isFinite(payload.interest_start_delay_value) &&
+      payload.interest_start_delay_value > 0
+        ? Math.trunc(payload.interest_start_delay_value)
+        : 1,
+    interestStartDelayUnit:
+      payload.interest_start_delay_unit === "days" ||
+      payload.interest_start_delay_unit === "weeks" ||
+      payload.interest_start_delay_unit === "months"
+        ? payload.interest_start_delay_unit
+        : "weeks",
   };
 }
 

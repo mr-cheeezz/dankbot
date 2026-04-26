@@ -646,6 +646,9 @@ function mergeTabsModuleSettings(
     enabled: settings.enabled ? "true" : "false",
     "interest-rate-percent": String(settings.interestRatePercent),
     "interest-every-days": String(settings.interestEveryDays),
+    "interest-start-delay-mode": settings.interestStartDelayMode,
+    "interest-start-delay-value": String(settings.interestStartDelayValue),
+    "interest-start-delay-unit": settings.interestStartDelayUnit,
   });
 }
 
@@ -662,6 +665,35 @@ function tabsModuleSettingsFromModule(entry: ModuleEntry): TabsModuleSettings {
       ?.value ?? "7",
     10,
   );
+  const interestStartDelayModeRaw =
+    entry.settings.find((setting) => setting.id === "interest-start-delay-mode")
+      ?.value ?? "week";
+  const interestStartDelayValueRaw = Number.parseInt(
+    entry.settings.find((setting) => setting.id === "interest-start-delay-value")
+      ?.value ?? "1",
+    10,
+  );
+  const interestStartDelayUnitRaw =
+    entry.settings.find((setting) => setting.id === "interest-start-delay-unit")
+      ?.value ?? "weeks";
+
+  const interestStartDelayMode =
+    interestStartDelayModeRaw === "day" ||
+    interestStartDelayModeRaw === "week" ||
+    interestStartDelayModeRaw === "month" ||
+    interestStartDelayModeRaw === "custom"
+      ? interestStartDelayModeRaw
+      : "week";
+  const interestStartDelayUnit =
+    interestStartDelayUnitRaw === "days" ||
+    interestStartDelayUnitRaw === "weeks" ||
+    interestStartDelayUnitRaw === "months"
+      ? interestStartDelayUnitRaw
+      : "weeks";
+  const interestStartDelayValue =
+    Number.isFinite(interestStartDelayValueRaw) && interestStartDelayValueRaw > 0
+      ? interestStartDelayValueRaw
+      : 1;
 
   return {
     enabled,
@@ -673,6 +705,9 @@ function tabsModuleSettingsFromModule(entry: ModuleEntry): TabsModuleSettings {
       Number.isFinite(interestEveryDaysRaw) && interestEveryDaysRaw > 0
         ? interestEveryDaysRaw
         : 7,
+    interestStartDelayMode,
+    interestStartDelayValue,
+    interestStartDelayUnit,
   };
 }
 
