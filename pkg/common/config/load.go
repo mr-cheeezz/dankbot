@@ -71,6 +71,7 @@ func Load(path string) (*Config, error) {
 		BindAddr:           bindAddr,
 		BindUnixSocket:     bindUnixSocket,
 		CORSAllowedOrigins: splitCommaList(webSection.Key("cors_allowed_origins").String()),
+		KillswitchChatAnnouncementsEnabled: parseBool01(webSection.Key("killswitch_chat_announcements_enabled").MustString("1")),
 	}
 
 	redisSection := file.Section("redis")

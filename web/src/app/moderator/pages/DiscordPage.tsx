@@ -9,10 +9,13 @@ import SportsEsportsRoundedIcon from "@mui/icons-material/SportsEsportsRounded";
 import TagRoundedIcon from "@mui/icons-material/TagRounded";
 import {
   Alert,
+  Autocomplete,
+  Avatar,
   Box,
   Button,
   Checkbox,
   Chip,
+  CircularProgress,
   InputAdornment,
   MenuItem,
   Paper,
@@ -24,14 +27,14 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
-import { fetchDiscordBotSettings, saveDiscordBotSettings } from "../api";
+import { fetchDiscordBotSettings, saveDiscordBotSettings, searchDashboardTwitchUsers } from "../api";
 import {
   CommandEditorDialog,
   type CommandEditorDraft,
 } from "../components/CommandEditorDialog";
 import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
 import { useModerator } from "../ModeratorContext";
-import type { CommandEntry, DiscordBotPingRole, DiscordBotSettings } from "../types";
+import type { CommandEntry, DiscordBotSettings, TwitchUserSearchEntry } from "../types";
 
 const defaultDraft: CommandEditorDraft = {
   name: "",
@@ -81,16 +84,6 @@ const defaultDiscordBotSettings: DiscordBotSettings = {
 
 type DiscordCommandCategory = "commands" | "moderation";
 
-function normalizeAlias(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/_/g, "-")
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 function normalizeCommandToken(value: string): string {
   return value
     .trim()
@@ -130,8 +123,11 @@ function useDiscordBotState() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [settingsSaved, setSettingsSaved] = useState("");
-  const [newPingRoleID, setNewPingRoleID] = useState("");
-  const [newPingAlias, setNewPingAlias] = useState("");
+  const [gamePingUserSearch, setGamePingUserSearch] = useState("");
+  const [gamePingUserOptions, setGamePingUserOptions] = useState<TwitchUserSearchEntry[]>([]);
+  const [gamePingUserLoading, setGamePingUserLoading] = useState(false);
+  const [gamePingUserError, setGamePingUserError] = useState("");
+  const [gamePingSelectedUser, setGamePingSelectedUser] = useState<TwitchUserSearchEntry | null>(null);
 
   const normalizedSearch = search.trim().toLowerCase();
   const discordIntegration = summary.integrations.find((entry) => entry.id === "discord");
@@ -173,6 +169,37 @@ function useDiscordBotState() {
     return () => controller.abort();
   }, [discordReady]);
 
+  useEffect(() => {
+    const query = gamePingUserSearch.trim();
+    if (query.length < 2) {
+      setGamePingUserOptions([]);
+      setGamePingUserError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutID = window.setTimeout(() => {
+      setGamePingUserLoading(true);
+      setGamePingUserError("");
+      searchDashboardTwitchUsers(query, controller.signal)
+        .then((results) => {
+          setGamePingUserOptions(results);
+        })
+        .catch(() => {
+          setGamePingUserOptions([]);
+          setGamePingUserError("Could not search Twitch users right now.");
+        })
+        .finally(() => {
+          setGamePingUserLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutID);
+    };
+  }, [gamePingUserSearch]);
+
   const allDiscordCommands = useMemo(() => {
     return commands.filter((entry) => {
       if (entry.platform !== "discord") {
@@ -196,16 +223,6 @@ function useDiscordBotState() {
         .includes(normalizedSearch);
     });
   }, [commands, normalizedSearch]);
-
-  const configuredRoleIDs = useMemo(
-    () => new Set(botSettingsDraft.pingRoles.map((entry) => entry.roleID)),
-    [botSettingsDraft.pingRoles],
-  );
-
-  const addableRoles = useMemo(
-    () => botSettingsDraft.roles.filter((role) => !configuredRoleIDs.has(role.id)),
-    [botSettingsDraft.roles, configuredRoleIDs],
-  );
 
   const openCreateDialog = (category: DiscordCommandCategory) => {
     setEditingCommandId(null);
@@ -268,60 +285,14 @@ function useDiscordBotState() {
     closeDialog();
   };
 
-  const addPingRole = () => {
-    const role = botSettingsDraft.roles.find((entry) => entry.id === newPingRoleID);
-    const alias = normalizeAlias(newPingAlias);
-    if (role == null || alias === "") {
-      return;
-    }
-
-    setBotSettingsDraft((current) => ({
-      ...current,
-      pingRoles: [
-        ...current.pingRoles,
-        {
-          alias,
-          roleID: role.id,
-          roleName: role.name,
-          enabled: true,
-        },
-      ],
-    }));
-    setNewPingRoleID("");
-    setNewPingAlias("");
-    setSettingsSaved("");
-  };
-
-  const updatePingRole = (roleID: string, next: Partial<DiscordBotPingRole>) => {
-    setBotSettingsDraft((current) => ({
-      ...current,
-      pingRoles: current.pingRoles.map((entry) =>
-        entry.roleID === roleID
-          ? {
-              ...entry,
-              ...next,
-              alias: next.alias != null ? normalizeAlias(next.alias) : entry.alias,
-            }
-          : entry,
-      ),
-    }));
-    setSettingsSaved("");
-  };
-
-  const removePingRole = (roleID: string) => {
-    setBotSettingsDraft((current) => ({
-      ...current,
-      pingRoles: current.pingRoles.filter((entry) => entry.roleID !== roleID),
-    }));
-    setSettingsSaved("");
-  };
-
   const resetBotSettings = () => {
     setBotSettingsDraft(botSettings);
-    setNewPingRoleID("");
-    setNewPingAlias("");
     setSettingsError("");
     setSettingsSaved("");
+    setGamePingUserSearch("");
+    setGamePingSelectedUser(null);
+    setGamePingUserOptions([]);
+    setGamePingUserError("");
   };
 
   const saveBotSettings = async () => {
@@ -362,11 +333,6 @@ function useDiscordBotState() {
     settingsSaving,
     settingsError,
     settingsSaved,
-    newPingRoleID,
-    setNewPingRoleID,
-    newPingAlias,
-    setNewPingAlias,
-    addableRoles,
     allDiscordCommands,
     setDefaultChannelID: (defaultChannelID: string) => {
       setBotSettingsDraft((current) => ({
@@ -437,24 +403,45 @@ function useDiscordBotState() {
       }));
       setSettingsSaved("");
     },
-    setGamePingAllowedUsers: (raw: string) => {
-      const seen = new Set<string>();
-      const allowedUsers = raw
-        .split(/\r?\n/)
-        .map((entry) => entry.trim().toLowerCase().replace(/^@+/, ""))
-        .filter((entry) => entry !== "")
-        .filter((entry) => {
-          if (seen.has(entry)) {
-            return false;
-          }
-          seen.add(entry);
-          return true;
-        });
+    gamePingUserSearch,
+    setGamePingUserSearch,
+    gamePingUserOptions,
+    gamePingUserLoading,
+    gamePingUserError,
+    gamePingSelectedUser,
+    setGamePingSelectedUser,
+    addGamePingAllowedUser: () => {
+      if (gamePingSelectedUser == null) {
+        return;
+      }
+      const nextLogin = gamePingSelectedUser.login.trim().toLowerCase();
+      if (nextLogin === "") {
+        return;
+      }
+      setBotSettingsDraft((current) => {
+        if (current.gamePing.allowedUsers.some((item) => item.toLowerCase() === nextLogin)) {
+          return current;
+        }
+        return {
+          ...current,
+          gamePing: {
+            ...current.gamePing,
+            allowedUsers: [...current.gamePing.allowedUsers, nextLogin],
+          },
+        };
+      });
+      setGamePingSelectedUser(null);
+      setGamePingUserSearch("");
+      setGamePingUserOptions([]);
+      setSettingsSaved("");
+    },
+    removeGamePingAllowedUser: (login: string) => {
+      const normalized = login.trim().toLowerCase();
       setBotSettingsDraft((current) => ({
         ...current,
         gamePing: {
           ...current.gamePing,
-          allowedUsers,
+          allowedUsers: current.gamePing.allowedUsers.filter((entry) => entry.toLowerCase() !== normalized),
         },
       }));
       setSettingsSaved("");
@@ -515,9 +502,6 @@ function useDiscordBotState() {
     saveDraft,
     toggleCommand,
     deleteCommand,
-    addPingRole,
-    updatePingRole,
-    removePingRole,
     resetBotSettings,
     saveBotSettings,
   };
@@ -634,6 +618,15 @@ function DiscordCommandList({
         <DiscordNotLinkedState />
       ) : (
         <>
+          {category === "moderation" ? (
+            <Box sx={{ px: 3, pt: 2.5 }}>
+              <Alert severity="info" icon={<ShieldRoundedIcon fontSize="inherit" />}>
+                Moderation commands are best kept short and explicit. Suggested starts:{" "}
+                <strong>!modwarn</strong>, <strong>!modtimeout</strong>, <strong>!modban</strong>,{" "}
+                <strong>!slowmode</strong>, and <strong>!followers</strong>.
+              </Alert>
+            </Box>
+          ) : null}
           <Box
             sx={{
               px: 3,
@@ -897,29 +890,22 @@ function DiscordCommandList({
   );
 }
 
-function DiscordRolePingsPageInner() {
+function DiscordLogsPageInner() {
   const state = useDiscordBotState();
 
   return (
     <DiscordPageShell
-      title="Discord Role Pings"
-      subtitle="pick the Discord channel and role aliases that Twitch chat can trigger"
+      title="Discord Logs"
+      subtitle="route Twitch chat logs, moderation actions, and dashboard audit events into Discord"
     >
       {!state.discordReady ? (
         <DiscordNotLinkedState />
       ) : (
         <Box sx={{ px: 3, py: 3 }}>
           <Stack spacing={2}>
-            <Alert
-              icon={<SmartToyRoundedIcon fontSize="inherit" />}
-              severity="info"
-              sx={{ alignItems: "center" }}
-            >
-              Use <strong>{state.botSettingsDraft.commandName}</strong> in Twitch chat to ping one of
-              these Discord roles. Example:{" "}
-              <strong>
-                {state.botSettingsDraft.commandName} announcements private server is live
-              </strong>
+            <Alert icon={<SmartToyRoundedIcon fontSize="inherit" />} severity="info">
+              Enable only what you need. Logging chat messages can be high volume, while mod actions
+              and audit logs are usually lower noise.
             </Alert>
 
             {state.settingsError !== "" ? <Alert severity="error">{state.settingsError}</Alert> : null}
@@ -927,20 +913,16 @@ function DiscordRolePingsPageInner() {
 
             <Paper elevation={0} sx={{ p: 2.5, backgroundColor: "background.default" }}>
               <Stack spacing={2}>
-                <Box>
-                  <Typography sx={{ fontWeight: 800 }}>Discord target channel</Typography>
-                  <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
-                    This is where Twitch-triggered role pings will be sent.
-                  </Typography>
-                </Box>
+                <Typography sx={{ fontWeight: 800 }}>Default Discord Channel</Typography>
                 <TextField
                   select
                   label="Channel"
                   value={state.botSettingsDraft.defaultChannelID}
                   onChange={(event) => state.setDefaultChannelID(event.target.value)}
                   disabled={state.settingsLoading}
+                  helperText="Fallback channel used by modules when a specific channel is not set."
                 >
-                  <MenuItem value="">No channel selected</MenuItem>
+                  <MenuItem value="">No default channel selected</MenuItem>
                   {state.botSettingsDraft.channels.map((channel) => (
                     <MenuItem key={channel.id} value={channel.id}>
                       {channel.name}
@@ -1004,170 +986,6 @@ function DiscordRolePingsPageInner() {
               </Stack>
             </Paper>
 
-            <Paper elevation={0} sx={{ p: 2.5, backgroundColor: "background.default" }}>
-              <Stack spacing={2}>
-                <Stack
-                  direction={{ xs: "column", md: "row" }}
-                  spacing={2}
-                  alignItems={{ xs: "stretch", md: "center" }}
-                  justifyContent="space-between"
-                >
-                  <Box>
-                    <Typography sx={{ fontWeight: 800 }}>Role ping aliases</Typography>
-                    <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
-                      Pull from the connected guild and decide which roles can be pinged from
-                      Twitch chat.
-                    </Typography>
-                  </Box>
-                  <Chip
-                    size="small"
-                    label={`${state.botSettingsDraft.roles.length} guild roles`}
-                    sx={{
-                      height: 26,
-                      backgroundColor: "rgba(255,255,255,0.04)",
-                      color: "text.secondary",
-                      fontWeight: 700,
-                    }}
-                  />
-                </Stack>
-
-                <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
-                  <TextField
-                    select
-                    fullWidth
-                    label="Discord role"
-                    value={state.newPingRoleID}
-                    onChange={(event) => state.setNewPingRoleID(event.target.value)}
-                    disabled={state.settingsLoading || state.addableRoles.length === 0}
-                  >
-                    <MenuItem value="">Select a role</MenuItem>
-                    {state.addableRoles.map((role) => (
-                      <MenuItem key={role.id} value={role.id}>
-                        {role.name}
-                        {role.mentionable ? "" : " (not marked mentionable)"}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    fullWidth
-                    label="Alias"
-                    placeholder="announcements"
-                    value={state.newPingAlias}
-                    onChange={(event) => state.setNewPingAlias(event.target.value)}
-                    helperText="This becomes the Twitch command alias used with !dping."
-                  />
-                  <Button
-                    variant="contained"
-                    startIcon={<AddRoundedIcon />}
-                    onClick={state.addPingRole}
-                    disabled={state.newPingRoleID === "" || normalizeAlias(state.newPingAlias) === ""}
-                    sx={{ minWidth: 140 }}
-                  >
-                    Add role
-                  </Button>
-                </Stack>
-
-                {state.botSettingsDraft.pingRoles.length === 0 ? (
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      px: 2,
-                      py: 2.5,
-                      backgroundColor: "background.paper",
-                      borderStyle: "dashed",
-                    }}
-                  >
-                    <Typography sx={{ fontWeight: 700 }}>No ping roles configured yet</Typography>
-                    <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
-                      Add a Discord role above, then Twitch mods can use{" "}
-                      {state.botSettingsDraft.commandName} to ping it from chat.
-                    </Typography>
-                  </Paper>
-                ) : (
-                  <Stack spacing={1.25}>
-                    {state.botSettingsDraft.pingRoles.map((entry) => {
-                      const role = state.botSettingsDraft.roles.find((item) => item.id === entry.roleID);
-                      return (
-                        <Paper
-                          key={entry.roleID}
-                          elevation={0}
-                          sx={{
-                            p: 2,
-                            backgroundColor: "background.paper",
-                          }}
-                        >
-                          <Stack spacing={1.5}>
-                            <Stack
-                              direction={{ xs: "column", md: "row" }}
-                              spacing={1}
-                              justifyContent="space-between"
-                              alignItems={{ xs: "flex-start", md: "center" }}
-                            >
-                              <Stack direction="row" spacing={0.75} flexWrap="wrap">
-                                <Chip
-                                  size="small"
-                                  label={entry.roleName}
-                                  sx={{
-                                    height: 24,
-                                    backgroundColor: "rgba(88,101,242,0.14)",
-                                    color: "#8ea1ff",
-                                    fontWeight: 700,
-                                  }}
-                                />
-                                <Chip
-                                  size="small"
-                                  label={role?.mentionable ? "mentionable" : "bot-permission only"}
-                                  sx={{
-                                    height: 24,
-                                    backgroundColor: "rgba(255,255,255,0.04)",
-                                    color: "text.secondary",
-                                    fontWeight: 700,
-                                  }}
-                                />
-                              </Stack>
-                              <Button
-                                variant="outlined"
-                                color="inherit"
-                                size="small"
-                                startIcon={<DeleteOutlineRoundedIcon fontSize="small" />}
-                                onClick={() => state.removePingRole(entry.roleID)}
-                              >
-                                Remove
-                              </Button>
-                            </Stack>
-                            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                              <TextField
-                                fullWidth
-                                label="Alias"
-                                value={entry.alias}
-                                onChange={(event) =>
-                                  state.updatePingRole(entry.roleID, { alias: event.target.value })
-                                }
-                                helperText={`Twitch command: ${state.botSettingsDraft.commandName} ${entry.alias}`}
-                              />
-                              <Stack justifyContent="center" sx={{ minWidth: 180 }}>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  <Checkbox
-                                    checked={entry.enabled}
-                                    onChange={(event) =>
-                                      state.updatePingRole(entry.roleID, { enabled: event.target.checked })
-                                    }
-                                  />
-                                  <Typography sx={{ fontWeight: 700 }}>
-                                    {entry.enabled ? "Enabled" : "Disabled"}
-                                  </Typography>
-                                </Stack>
-                              </Stack>
-                            </Stack>
-                          </Stack>
-                        </Paper>
-                      );
-                    })}
-                  </Stack>
-                )}
-              </Stack>
-            </Paper>
-
             <Stack direction="row" spacing={1.25} justifyContent="flex-end">
               <Button variant="text" onClick={state.resetBotSettings} disabled={state.settingsSaving}>
                 Reset
@@ -1193,7 +1011,7 @@ function DiscordGamePingsPageInner() {
   return (
     <DiscordPageShell
       title="Discord Game Ping"
-      subtitle="separate from role pings, this sends an embed-style game change announcement from Twitch chat"
+      subtitle="send an embed-style game change announcement from Twitch chat"
     >
       {!state.discordReady ? (
         <DiscordNotLinkedState />
@@ -1228,9 +1046,9 @@ function DiscordGamePingsPageInner() {
                   label="Target channel"
                   value={state.botSettingsDraft.gamePing.channelID}
                   onChange={(event) => state.setGamePingChannelID(event.target.value)}
-                  helperText="If blank, the Discord target channel from Role Pings is used."
+                  helperText="If blank, the Discord default channel is used."
                 >
-                  <MenuItem value="">Use role ping default channel</MenuItem>
+                  <MenuItem value="">Use default Discord channel</MenuItem>
                   {state.botSettingsDraft.channels.map((channel) => (
                     <MenuItem key={channel.id} value={channel.id}>
                       {channel.name}
@@ -1258,18 +1076,85 @@ function DiscordGamePingsPageInner() {
                   label="Embed message template"
                   value={state.botSettingsDraft.gamePing.messageTemplate}
                   onChange={(event) => state.setGamePingMessageTemplate(event.target.value)}
-                  helperText={`Use {game}. Twitch usage: ${state.botSettingsDraft.gamePingCommandName} [role-alias] [game]`}
+                  helperText={`Use {game}. Twitch usage: ${state.botSettingsDraft.gamePingCommandName} [game]`}
                 />
 
-                <TextField
-                  fullWidth
-                  multiline
-                  minRows={3}
-                  label="Allowed Twitch users"
-                  value={state.botSettingsDraft.gamePing.allowedUsers.join("\n")}
-                  onChange={(event) => state.setGamePingAllowedUsers(event.target.value)}
-                  helperText="One Twitch username per line. Broadcaster/mod/admin can still run it."
-                />
+                <Stack spacing={1.25}>
+                  <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
+                    <Autocomplete
+                      fullWidth
+                      options={state.gamePingUserOptions}
+                      value={state.gamePingSelectedUser}
+                      loading={state.gamePingUserLoading}
+                      onChange={(_, next) => state.setGamePingSelectedUser(next)}
+                      getOptionLabel={(option) =>
+                        option.displayName.trim() === ""
+                          ? `@${option.login}`
+                          : `${option.displayName} (@${option.login})`
+                      }
+                      filterOptions={(options) => options}
+                      renderOption={(props, option) => (
+                        <Box component="li" {...props}>
+                          <Stack direction="row" spacing={1.25} alignItems="center">
+                            <Avatar src={option.avatarURL || undefined} sx={{ width: 24, height: 24 }} />
+                            <Typography sx={{ fontSize: "0.9rem" }}>
+                              {option.displayName || option.login}
+                              <Typography component="span" sx={{ color: "text.secondary", ml: 0.75 }}>
+                                @{option.login}
+                              </Typography>
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      )}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Add allowed Twitch user"
+                          value={state.gamePingUserSearch}
+                          onChange={(event) => state.setGamePingUserSearch(event.target.value)}
+                          helperText="Search Twitch usernames. Broadcaster/mod/admin can always run !gameping."
+                          InputProps={{
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {state.gamePingUserLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                                {params.InputProps.endAdornment}
+                              </>
+                            ),
+                          }}
+                        />
+                      )}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={state.addGamePingAllowedUser}
+                      disabled={state.gamePingSelectedUser == null}
+                      sx={{ minWidth: 132 }}
+                    >
+                      Add user
+                    </Button>
+                  </Stack>
+                  {state.gamePingUserError !== "" ? (
+                    <Alert severity="warning">{state.gamePingUserError}</Alert>
+                  ) : null}
+
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                    {state.botSettingsDraft.gamePing.allowedUsers.map((login) => {
+                      const profile =
+                        state.gamePingUserOptions.find((entry) => entry.login.toLowerCase() === login.toLowerCase()) ??
+                        null;
+                      return (
+                        <Chip
+                          key={login}
+                          avatar={<Avatar src={profile?.avatarURL || undefined}>{login[0]?.toUpperCase()}</Avatar>}
+                          label={profile?.displayName ? `${profile.displayName} (@${login})` : `@${login}`}
+                          onDelete={() => state.removeGamePingAllowedUser(login)}
+                          sx={{ height: 30 }}
+                        />
+                      );
+                    })}
+                  </Stack>
+                </Stack>
 
                 <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -1319,7 +1204,7 @@ export function DiscordPage() {
   return (
     <DiscordPageShell
       title="Discord Bot"
-      subtitle="use this as the control surface for discord-side commands, moderation tools, and role pings"
+      subtitle="use this as the control surface for discord-side commands, moderation tools, game pings, and logs"
     >
       {!state.discordReady ? (
         <DiscordNotLinkedState />
@@ -1345,16 +1230,16 @@ export function DiscordPage() {
               icon={<ShieldRoundedIcon fontSize="small" />}
             />
             <DiscordOverviewCard
-              title="Role Pings"
-              copy="Choose the Discord channel and role aliases that Twitch chat can trigger."
-              to="/d/discord/role-pings"
-              icon={<TagRoundedIcon fontSize="small" />}
-            />
-            <DiscordOverviewCard
               title="Game Ping"
-              copy="Send a separate embed-style game change ping with a dedicated !gameping command."
+              copy="Send an embed-style game change ping with a dedicated !gameping command."
               to="/d/discord/game-pings"
               icon={<SportsEsportsRoundedIcon fontSize="small" />}
+            />
+            <DiscordOverviewCard
+              title="Logs"
+              copy="Send Twitch chat logs, moderation events, and bot audit logs into a Discord channel."
+              to="/d/discord/logs"
+              icon={<TagRoundedIcon fontSize="small" />}
             />
           </Box>
         </Box>
@@ -1371,8 +1256,8 @@ export function DiscordModerationPage() {
   return <DiscordCommandList category="moderation" />;
 }
 
-export function DiscordRolePingsPage() {
-  return <DiscordRolePingsPageInner />;
+export function DiscordLogsPage() {
+  return <DiscordLogsPageInner />;
 }
 
 export function DiscordGamePingsPage() {

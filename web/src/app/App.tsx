@@ -12,13 +12,14 @@ import { BlockedTermsPage } from "./moderator/pages/BlockedTermsPage";
 import { ChannelPointsPage } from "./moderator/pages/ChannelPointsPage";
 import { CommandsPage } from "./moderator/pages/CommandsPage";
 import { DashboardOverviewPage } from "./moderator/pages/DashboardOverviewPage";
+import { DashboardV2Page } from "./moderator/pages/DashboardV2Page";
 import { DashboardNotFoundPage } from "./moderator/pages/DashboardNotFoundPage";
 import {
   DiscordCommandsPage,
   DiscordGamePingsPage,
+  DiscordLogsPage,
   DiscordModerationPage,
   DiscordPage,
-  DiscordRolePingsPage,
 } from "./moderator/pages/DiscordPage";
 import { GiveawayDashboardPage } from "./moderator/pages/GiveawayDashboardPage";
 import { GiveawaysPage } from "./moderator/pages/GiveawaysPage";
@@ -80,7 +81,9 @@ export function App() {
               </RequireModerator>
             }
           >
-            <Route index element={<DashboardOverviewPage />} />
+            <Route index element={<DashboardV2Page />} />
+            <Route path="dashboard-v2" element={<DashboardV2Page />} />
+            <Route path="dashboard-v1" element={<DashboardOverviewPage />} />
             <Route path="commands" element={<CommandsPage />} />
             <Route path="keywords" element={<KeywordsPage />} />
             <Route
@@ -119,18 +122,18 @@ export function App() {
               }
             />
             <Route
-              path="discord/role-pings"
-              element={
-                <RequireDashboardView view="discord">
-                  <DiscordRolePingsPage />
-                </RequireDashboardView>
-              }
-            />
-            <Route
               path="discord/game-pings"
               element={
                 <RequireDashboardView view="discord">
                   <DiscordGamePingsPage />
+                </RequireDashboardView>
+              }
+            />
+            <Route
+              path="discord/logs"
+              element={
+                <RequireDashboardView view="discord">
+                  <DiscordLogsPage />
                 </RequireDashboardView>
               }
             />

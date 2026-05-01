@@ -26,6 +26,7 @@ import {
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 
 import {
   fetchDashboardSpotify,
@@ -302,13 +303,16 @@ export function DashboardOverviewPage() {
 
   return (
     <Stack spacing={2}>
-      {hiddenPanels.length > 0 ? (
-        <Stack direction="row" justifyContent="flex-end">
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Button component={RouterLink} to="/d/dashboard-v2" variant="outlined" color="inherit">
+          Switch to Dashboard V2
+        </Button>
+        {hiddenPanels.length > 0 ? (
           <Button variant="outlined" onClick={restorePanels}>
             Restore hidden widgets
           </Button>
-        </Stack>
-      ) : null}
+        ) : <Box />}
+      </Stack>
 
       <Box
         sx={{

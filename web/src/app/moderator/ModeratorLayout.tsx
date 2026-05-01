@@ -64,8 +64,8 @@ const discordSidebarTabs = [
   { key: "overview", label: "Overview", to: "/d/discord" },
   { key: "commands", label: "Commands", to: "/d/discord/commands" },
   { key: "moderation", label: "Moderation", to: "/d/discord/moderation" },
-  { key: "role-pings", label: "Role Pings", to: "/d/discord/role-pings" },
   { key: "game-pings", label: "Game Ping", to: "/d/discord/game-pings" },
+  { key: "logs", label: "Logs", to: "/d/discord/logs" },
 ] as const;
 
 function initialsForName(name: string): string {
@@ -170,10 +170,10 @@ export function ModeratorLayout() {
     currentView === "discord"
       ? location.pathname === "/d/discord/moderation"
         ? "moderation"
-        : location.pathname === "/d/discord/role-pings"
-          ? "role-pings"
-          : location.pathname === "/d/discord/game-pings"
+        : location.pathname === "/d/discord/game-pings"
             ? "game-pings"
+          : location.pathname === "/d/discord/logs"
+            ? "logs"
           : location.pathname === "/d/discord/commands"
             ? "commands"
             : "overview"

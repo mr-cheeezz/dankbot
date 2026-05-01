@@ -32,6 +32,7 @@ type WebConfig struct {
 	BindAddr           string
 	BindUnixSocket     string
 	CORSAllowedOrigins []string
+	KillswitchChatAnnouncementsEnabled bool
 }
 
 type RedisConfig struct {

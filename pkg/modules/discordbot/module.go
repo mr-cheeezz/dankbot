@@ -53,15 +53,6 @@ func (m *Module) Name() string {
 
 func (m *Module) RegisterCommands() map[string]modules.CommandDefinition {
 	return map[string]modules.CommandDefinition{
-		"dping": {
-			Handler:        m.pingRole,
-			Description:    "Ping a configured Discord role in the linked server.",
-			Usage:          "!dping <alias> [message]",
-			Example:        "!dping @everyone Stream is live!",
-			CanDisable:     false,
-			Configurable:   false,
-			DefaultEnabled: true,
-		},
 		"gameping": {
 			Handler:        m.gamePing,
 			Description:    "Sends a Discord game-change embed ping in the configured channel.",
@@ -105,57 +96,6 @@ func (m *Module) SetSteamResolver(resolver func(context.Context, string) (string
 	m.steamResolver = resolver
 }
 
-func (m *Module) pingRole(ctx modules.CommandContext) (string, error) {
-	if !m.canManageDiscord(ctx) {
-		return "", nil
-	}
-	if m.settings == nil {
-		return "Discord Bot settings are not configured yet.", nil
-	}
-	if m.sendToChan == nil {
-		return "Discord Bot is not online right now.", nil
-	}
-
-	settings, err := m.settings.Get(context.Background())
-	if err != nil {
-		return "", err
-	}
-	if settings == nil {
-		return "Discord Bot settings are not configured yet.", nil
-	}
-	if strings.TrimSpace(settings.DefaultChannelID) == "" {
-		return "Set a Discord channel in the Discord Bot page first.", nil
-	}
-	if len(ctx.Args) == 0 {
-		return "Use !dping <alias> [message].", nil
-	}
-
-	alias := normalizeAlias(ctx.Args[0])
-	role := findPingRole(settings.PingRoles, alias)
-	if role == nil || !role.Enabled {
-		return fmt.Sprintf("No enabled Discord ping role is configured for %q.", alias), nil
-	}
-
-	message := strings.TrimSpace(strings.Join(ctx.Args[1:], " "))
-	if len(message) > 400 {
-		message = strings.TrimSpace(message[:400])
-	}
-
-	content := "<@&" + role.RoleID + ">"
-	if message != "" {
-		content += " " + message
-	}
-
-	if err := m.sendToChan(settings.DefaultChannelID, content); err != nil {
-		return "", err
-	}
-
-	if strings.TrimSpace(role.RoleName) != "" {
-		return "Pinged Discord role " + role.RoleName + ".", nil
-	}
-	return "Pinged Discord role " + alias + ".", nil
-}
-
 func (m *Module) canManageDiscord(ctx modules.CommandContext) bool {
 	if ctx.IsBroadcaster || ctx.IsModerator {
 		return true
@@ -195,38 +135,15 @@ func (m *Module) gamePing(ctx modules.CommandContext) (string, error) {
 	if channelID == "" {
 		return "Set a Discord channel in the Discord Bot page first.", nil
 	}
-	args := append([]string(nil), ctx.Args...)
 	roleID := strings.TrimSpace(settings.GamePing.RoleID)
 	roleName := strings.TrimSpace(settings.GamePing.RoleName)
-	aliasFallbackGameName := ""
-	if len(args) > 0 {
-		firstArgRaw := strings.TrimSpace(args[0])
-		alias := normalizeAlias(args[0])
-		if aliasRole := findPingRole(settings.PingRoles, alias); aliasRole != nil {
-			roleID = strings.TrimSpace(aliasRole.RoleID)
-			roleName = strings.TrimSpace(aliasRole.RoleName)
-			aliasFallbackGameName = firstArgRaw
-			args = args[1:]
-		} else if derivedRole := findPingRoleByName(settings.PingRoles, alias); derivedRole != nil {
-			roleID = strings.TrimSpace(derivedRole.RoleID)
-			roleName = strings.TrimSpace(derivedRole.RoleName)
-			aliasFallbackGameName = firstArgRaw
-			args = args[1:]
-		}
-	}
-
-	gameName := strings.TrimSpace(strings.Join(args, " "))
+	gameName := strings.TrimSpace(strings.Join(ctx.Args, " "))
 	currentLive, currentGame, err := m.currentStreamState(context.Background())
 	if err != nil {
 		return "", err
 	}
 	if !currentLive {
 		return "Game ping only works while the stream is live.", nil
-	}
-	if gameName == "" {
-		if aliasFallbackGameName != "" {
-			gameName = aliasFallbackGameName
-		}
 	}
 	if gameName == "" {
 		gameName = currentGame
@@ -517,68 +434,6 @@ func buildGamePingLinkButtons(watchURL, joinURL, joinLabel string) []discordgo.M
 
 var timeNowUTC = func() time.Time {
 	return time.Now().UTC()
-}
-
-func findPingRole(items []postgres.DiscordPingRole, alias string) *postgres.DiscordPingRole {
-	for _, item := range items {
-		if !item.Enabled {
-			continue
-		}
-		if normalizeAlias(item.Alias) == alias {
-			role := item
-			return &role
-		}
-	}
-	return nil
-}
-
-func normalizeAlias(value string) string {
-	value = strings.TrimSpace(strings.ToLower(value))
-	value = strings.ReplaceAll(value, "_", "-")
-	fields := strings.FieldsFunc(value, func(r rune) bool {
-		switch {
-		case r >= 'a' && r <= 'z':
-			return false
-		case r >= '0' && r <= '9':
-			return false
-		case r == '-':
-			return false
-		default:
-			return true
-		}
-	})
-	return strings.Trim(strings.Join(fields, "-"), "-")
-}
-
-func findPingRoleByName(items []postgres.DiscordPingRole, key string) *postgres.DiscordPingRole {
-	key = normalizeAlias(key)
-	if key == "" {
-		return nil
-	}
-
-	for _, item := range items {
-		if !item.Enabled {
-			continue
-		}
-
-		roleName := normalizeAlias(item.RoleName)
-		if roleName == "" {
-			continue
-		}
-		if roleName == key {
-			role := item
-			return &role
-		}
-
-		base := strings.TrimSuffix(roleName, "-ping")
-		base = strings.TrimSpace(strings.Trim(base, "-"))
-		if base != "" && base == key {
-			role := item
-			return &role
-		}
-	}
-
-	return nil
 }
 
 func canMentionGamePingRole(guildID, roleID, roleName string) bool {
