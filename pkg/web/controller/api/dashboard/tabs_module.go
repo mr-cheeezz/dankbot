@@ -11,12 +11,11 @@ import (
 )
 
 type tabsModuleResponse struct {
-	Enabled                 bool    `json:"enabled"`
-	InterestRatePct         float64 `json:"interest_rate_percent"`
-	InterestEveryDays       int     `json:"interest_every_days"`
-	InterestStartDelayMode  string  `json:"interest_start_delay_mode"`
-	InterestStartDelayValue int     `json:"interest_start_delay_value"`
-	InterestStartDelayUnit  string  `json:"interest_start_delay_unit"`
+	Enabled                    bool    `json:"enabled"`
+	InterestRatePct            float64 `json:"interest_rate_percent"`
+	InterestIntervalMode       string  `json:"interest_interval_mode"`
+	InterestIntervalCustomDays int     `json:"interest_interval_custom_days"`
+	GracePeriodDays            int     `json:"grace_period_days"`
 }
 
 func (h handler) tabsModule(w http.ResponseWriter, r *http.Request) {
@@ -92,13 +91,12 @@ func (h handler) updateTabsModule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, err := h.appState.TabsModule.Update(r.Context(), postgres.TabsModuleSettings{
-		Enabled:                 request.Enabled,
-		InterestRatePct:         request.InterestRatePct,
-		InterestEveryDays:       request.InterestEveryDays,
-		InterestStartDelayMode:  strings.TrimSpace(request.InterestStartDelayMode),
-		InterestStartDelayValue: request.InterestStartDelayValue,
-		InterestStartDelayUnit:  strings.TrimSpace(request.InterestStartDelayUnit),
-		UpdatedBy:               strings.TrimSpace(userSession.Login),
+		Enabled:                    request.Enabled,
+		InterestRatePct:            request.InterestRatePct,
+		InterestIntervalMode:       strings.TrimSpace(request.InterestIntervalMode),
+		InterestIntervalCustomDays: request.InterestIntervalCustomDays,
+		GracePeriodDays:            request.GracePeriodDays,
+		UpdatedBy:                  strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -115,11 +113,10 @@ func (h handler) updateTabsModule(w http.ResponseWriter, r *http.Request) {
 
 func tabsModuleToResponse(settings postgres.TabsModuleSettings) tabsModuleResponse {
 	return tabsModuleResponse{
-		Enabled:                 settings.Enabled,
-		InterestRatePct:         settings.InterestRatePct,
-		InterestEveryDays:       settings.InterestEveryDays,
-		InterestStartDelayMode:  settings.InterestStartDelayMode,
-		InterestStartDelayValue: settings.InterestStartDelayValue,
-		InterestStartDelayUnit:  settings.InterestStartDelayUnit,
+		Enabled:                    settings.Enabled,
+		InterestRatePct:            settings.InterestRatePct,
+		InterestIntervalMode:       settings.InterestIntervalMode,
+		InterestIntervalCustomDays: settings.InterestIntervalCustomDays,
+		GracePeriodDays:            settings.GracePeriodDays,
 	}
 }

@@ -182,6 +182,18 @@ func Load(path string) (*Config, error) {
 		RedirectURI:  streamElementsSection.Key("redirect_uri").String(),
 	}
 
+	rustLogSection := file.Section("rustlog")
+	// Backward-compat: if [rustlog] is not configured, fall back to legacy [justlog].
+	if len(rustLogSection.KeysHash()) == 0 {
+		rustLogSection = file.Section("justlog")
+	}
+	cfg.RustLog = RustLogConfig{
+		Enabled:    parseBool01(rustLogSection.Key("enabled").String()),
+		BaseURL:    rustLogSection.Key("base_url").String(),
+		APIKey:     rustLogSection.Key("api_key").String(),
+		ConfigPath: rustLogSection.Key("config_path").String(),
+	}
+
 	workerSection := file.Section("worker")
 
 	leaseTTL, err := parseDuration(workerSection.Key("lease_ttl").String())

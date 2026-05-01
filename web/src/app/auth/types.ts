@@ -4,6 +4,7 @@ export type AuthUser = {
   displayName: string;
   avatarURL: string;
   isModerator: boolean;
+  isLeadModerator: boolean;
   isBroadcaster: boolean;
   isBotAccount: boolean;
   isEditor: boolean;

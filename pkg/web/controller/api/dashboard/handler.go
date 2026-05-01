@@ -74,6 +74,7 @@ func Register(mux *http.ServeMux, appState *state.State) {
 	mux.Handle("/api/dashboard/modules/game", http.HandlerFunc(handler{appState: appState}.gameModule))
 	mux.Handle("/api/dashboard/modules/now-playing", http.HandlerFunc(handler{appState: appState}.nowPlayingModule))
 	mux.Handle("/api/dashboard/modules/quotes", http.HandlerFunc(handler{appState: appState}.quoteModule))
+	mux.Handle("/api/dashboard/modules/rustlog", http.HandlerFunc(handler{appState: appState}.rustLogModule))
 	mux.Handle("/api/dashboard/modules/tabs", http.HandlerFunc(handler{appState: appState}.tabsModule))
 	mux.Handle("/api/dashboard/modules/user-profile", http.HandlerFunc(handler{appState: appState}.userProfileModule))
 	mux.Handle("/api/dashboard/modules/quotes/items", http.HandlerFunc(handler{appState: appState}.quoteModuleEntries))

@@ -111,7 +111,7 @@ func CanLinkBotIntegration(access DashboardAccess) bool {
 }
 
 func CanAccessEditorFeatures(access DashboardAccess) bool {
-	return access.IsBroadcaster || access.IsAdmin || access.IsEditor
+	return access.IsBroadcaster || access.IsAdmin || access.IsEditor || access.IsLeadModerator
 }
 
 func LoadDashboardSession(

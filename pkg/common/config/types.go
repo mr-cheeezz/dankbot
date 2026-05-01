@@ -16,6 +16,7 @@ type Config struct {
 	Discord        DiscordConfig
 	Streamlabs     StreamlabsConfig
 	StreamElements StreamElementsConfig
+	RustLog        RustLogConfig
 	Worker         WorkerConfig
 }
 
@@ -113,6 +114,13 @@ type StreamElementsConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURI  string
+}
+
+type RustLogConfig struct {
+	Enabled    bool
+	BaseURL    string
+	APIKey     string
+	ConfigPath string
 }
 
 type WorkerConfig struct {

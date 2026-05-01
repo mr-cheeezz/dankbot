@@ -225,13 +225,22 @@ export type QuoteModuleSettings = {
   enabled: boolean;
 };
 
+export type RustLogModuleSettings = {
+  enabled: boolean;
+};
+
 export type TabsModuleSettings = {
   enabled: boolean;
   interestRatePercent: number;
-  interestEveryDays: number;
-  interestStartDelayMode: "day" | "week" | "month" | "custom";
-  interestStartDelayValue: number;
-  interestStartDelayUnit: "days" | "weeks" | "months";
+  interestIntervalMode:
+    | "daily"
+    | "bi-daily"
+    | "weekly"
+    | "bi-weekly"
+    | "monthly"
+    | "custom";
+  interestIntervalCustomDays: number;
+  gracePeriodDays: number;
 };
 
 export type UserProfileModuleSettings = {
@@ -297,6 +306,13 @@ export type DiscordBotSettings = {
   defaultChannelID: string;
   pingRoles: DiscordBotPingRole[];
   gamePing: DiscordBotGamePingSettings;
+  logs: {
+    enabled: boolean;
+    channelID: string;
+    logChatMessages: boolean;
+    logModActions: boolean;
+    logAuditLogs: boolean;
+  };
   channels: DiscordBotChannelOption[];
   roles: DiscordBotRoleOption[];
   commandName: string;

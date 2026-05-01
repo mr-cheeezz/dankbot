@@ -12,6 +12,7 @@ import type {
   NowPlayingModuleSettings,
   QuoteModuleEntry,
   QuoteModuleSettings,
+  RustLogModuleSettings,
   TabsModuleSettings,
   UserProfileModuleSettings,
   DashboardSpotifyState,
@@ -202,13 +203,16 @@ type QuoteModuleResponse = {
   enabled: boolean;
 };
 
+type RustLogModuleResponse = {
+  enabled: boolean;
+};
+
 type TabsModuleResponse = {
   enabled: boolean;
   interest_rate_percent: number;
-  interest_every_days: number;
-  interest_start_delay_mode: string;
-  interest_start_delay_value: number;
-  interest_start_delay_unit: string;
+  interest_interval_mode: string;
+  interest_interval_custom_days: number;
+  grace_period_days: number;
 };
 
 type UserProfileModuleResponse = {
@@ -279,6 +283,13 @@ type DiscordBotSettingsResponse = {
     include_watch_link: boolean;
     include_join_link: boolean;
     allowed_users: string[];
+  };
+  logs?: {
+    enabled: boolean;
+    channel_id: string;
+    log_chat_messages: boolean;
+    log_mod_actions: boolean;
+    log_audit_logs: boolean;
   };
 };
 
@@ -941,6 +952,52 @@ export async function fetchQuoteModuleSettings(
   };
 }
 
+export async function fetchRustLogModuleSettings(
+  signal?: AbortSignal,
+): Promise<RustLogModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/rustlog", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load rustlog module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as RustLogModuleResponse;
+  return {
+    enabled: payload.enabled,
+  };
+}
+
+export async function saveRustLogModuleSettings(
+  settings: RustLogModuleSettings,
+): Promise<RustLogModuleSettings> {
+  const response = await fetch("/api/dashboard/modules/rustlog", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enabled: settings.enabled,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to save rustlog module settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as RustLogModuleResponse;
+  return {
+    enabled: payload.enabled,
+  };
+}
+
 export async function fetchTabsModuleSettings(
   signal?: AbortSignal,
 ): Promise<TabsModuleSettings> {
@@ -964,29 +1021,25 @@ export async function fetchTabsModuleSettings(
       payload.interest_rate_percent >= 0
         ? payload.interest_rate_percent
         : 0,
-    interestEveryDays:
-      Number.isFinite(payload.interest_every_days) &&
-      payload.interest_every_days > 0
-        ? payload.interest_every_days
+    interestIntervalMode:
+      payload.interest_interval_mode === "daily" ||
+      payload.interest_interval_mode === "bi-daily" ||
+      payload.interest_interval_mode === "weekly" ||
+      payload.interest_interval_mode === "bi-weekly" ||
+      payload.interest_interval_mode === "monthly" ||
+      payload.interest_interval_mode === "custom"
+        ? payload.interest_interval_mode
+        : "weekly",
+    interestIntervalCustomDays:
+      Number.isFinite(payload.interest_interval_custom_days) &&
+      payload.interest_interval_custom_days > 0
+        ? Math.min(30, Math.trunc(payload.interest_interval_custom_days))
         : 7,
-    interestStartDelayMode:
-      payload.interest_start_delay_mode === "day" ||
-      payload.interest_start_delay_mode === "week" ||
-      payload.interest_start_delay_mode === "month" ||
-      payload.interest_start_delay_mode === "custom"
-        ? payload.interest_start_delay_mode
-        : "week",
-    interestStartDelayValue:
-      Number.isFinite(payload.interest_start_delay_value) &&
-      payload.interest_start_delay_value > 0
-        ? Math.trunc(payload.interest_start_delay_value)
-        : 1,
-    interestStartDelayUnit:
-      payload.interest_start_delay_unit === "days" ||
-      payload.interest_start_delay_unit === "weeks" ||
-      payload.interest_start_delay_unit === "months"
-        ? payload.interest_start_delay_unit
-        : "weeks",
+    gracePeriodDays:
+      Number.isFinite(payload.grace_period_days) &&
+      payload.grace_period_days > 0
+        ? Math.min(30, Math.trunc(payload.grace_period_days))
+        : 7,
   };
 }
 
@@ -1003,10 +1056,9 @@ export async function saveTabsModuleSettings(
     body: JSON.stringify({
       enabled: settings.enabled,
       interest_rate_percent: settings.interestRatePercent,
-      interest_every_days: settings.interestEveryDays,
-      interest_start_delay_mode: settings.interestStartDelayMode,
-      interest_start_delay_value: settings.interestStartDelayValue,
-      interest_start_delay_unit: settings.interestStartDelayUnit,
+      interest_interval_mode: settings.interestIntervalMode,
+      interest_interval_custom_days: settings.interestIntervalCustomDays,
+      grace_period_days: settings.gracePeriodDays,
     }),
   });
 
@@ -1022,29 +1074,25 @@ export async function saveTabsModuleSettings(
       payload.interest_rate_percent >= 0
         ? payload.interest_rate_percent
         : 0,
-    interestEveryDays:
-      Number.isFinite(payload.interest_every_days) &&
-      payload.interest_every_days > 0
-        ? payload.interest_every_days
+    interestIntervalMode:
+      payload.interest_interval_mode === "daily" ||
+      payload.interest_interval_mode === "bi-daily" ||
+      payload.interest_interval_mode === "weekly" ||
+      payload.interest_interval_mode === "bi-weekly" ||
+      payload.interest_interval_mode === "monthly" ||
+      payload.interest_interval_mode === "custom"
+        ? payload.interest_interval_mode
+        : "weekly",
+    interestIntervalCustomDays:
+      Number.isFinite(payload.interest_interval_custom_days) &&
+      payload.interest_interval_custom_days > 0
+        ? Math.min(30, Math.trunc(payload.interest_interval_custom_days))
         : 7,
-    interestStartDelayMode:
-      payload.interest_start_delay_mode === "day" ||
-      payload.interest_start_delay_mode === "week" ||
-      payload.interest_start_delay_mode === "month" ||
-      payload.interest_start_delay_mode === "custom"
-        ? payload.interest_start_delay_mode
-        : "week",
-    interestStartDelayValue:
-      Number.isFinite(payload.interest_start_delay_value) &&
-      payload.interest_start_delay_value > 0
-        ? Math.trunc(payload.interest_start_delay_value)
-        : 1,
-    interestStartDelayUnit:
-      payload.interest_start_delay_unit === "days" ||
-      payload.interest_start_delay_unit === "weeks" ||
-      payload.interest_start_delay_unit === "months"
-        ? payload.interest_start_delay_unit
-        : "weeks",
+    gracePeriodDays:
+      Number.isFinite(payload.grace_period_days) &&
+      payload.grace_period_days > 0
+        ? Math.min(30, Math.trunc(payload.grace_period_days))
+        : 7,
   };
 }
 
@@ -1336,11 +1384,18 @@ export async function fetchDiscordBotSettings(
         ? payload.game_ping.allowed_users
         : [],
     },
+    logs: {
+      enabled: payload.logs?.enabled ?? false,
+      channelID: payload.logs?.channel_id ?? "",
+      logChatMessages: payload.logs?.log_chat_messages ?? false,
+      logModActions: payload.logs?.log_mod_actions ?? true,
+      logAuditLogs: payload.logs?.log_audit_logs ?? true,
+    },
   };
 }
 
 export async function saveDiscordBotSettings(
-  settings: Pick<DiscordBotSettings, "defaultChannelID" | "pingRoles" | "gamePing">,
+  settings: Pick<DiscordBotSettings, "defaultChannelID" | "pingRoles" | "gamePing" | "logs">,
 ): Promise<DiscordBotSettings> {
   const response = await fetch("/api/dashboard/discord-bot", {
     method: "PUT",
@@ -1366,6 +1421,13 @@ export async function saveDiscordBotSettings(
         include_watch_link: settings.gamePing.includeWatchLink,
         include_join_link: settings.gamePing.includeJoinLink,
         allowed_users: settings.gamePing.allowedUsers,
+      },
+      logs: {
+        enabled: settings.logs.enabled,
+        channel_id: settings.logs.channelID,
+        log_chat_messages: settings.logs.logChatMessages,
+        log_mod_actions: settings.logs.logModActions,
+        log_audit_logs: settings.logs.logAuditLogs,
       },
     }),
   });
@@ -1401,6 +1463,13 @@ export async function saveDiscordBotSettings(
       allowedUsers: Array.isArray(payload.game_ping?.allowed_users)
         ? payload.game_ping.allowed_users
         : [],
+    },
+    logs: {
+      enabled: payload.logs?.enabled ?? false,
+      channelID: payload.logs?.channel_id ?? "",
+      logChatMessages: payload.logs?.log_chat_messages ?? false,
+      logModActions: payload.logs?.log_mod_actions ?? true,
+      logAuditLogs: payload.logs?.log_audit_logs ?? true,
     },
   };
 }

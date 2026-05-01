@@ -101,6 +101,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.RustLog.Enabled {
+		if strings.TrimSpace(c.RustLog.BaseURL) == "" && strings.TrimSpace(c.RustLog.ConfigPath) == "" {
+			problems = append(problems, "rustlog.base_url or rustlog.config_path is required when rustlog.enabled = 1")
+		}
+	}
+
 	if c.Worker.HeartbeatInterval > 0 && c.Worker.LeaseTTL > 0 && c.Worker.HeartbeatInterval >= c.Worker.LeaseTTL {
 		problems = append(problems, "worker.heartbeat_interval must be less than worker.lease_ttl")
 	}

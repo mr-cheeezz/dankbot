@@ -25,6 +25,7 @@ type State struct {
 	DiscordOAuth           *discordoauth.Service
 	DiscordBotInstallation *postgres.DiscordBotInstallationStore
 	DiscordBotSettings     *postgres.DiscordBotSettingsStore
+	DiscordLogSettings     *postgres.DiscordLogSettingsStore
 	TwitchOAuth            *twitchoauth.Service
 	TwitchAccounts         *postgres.TwitchAccountStore
 	SpotifyOAuth           *spotifyoauth.Service
@@ -42,6 +43,7 @@ type State struct {
 	GameModule             *postgres.GameModuleSettingsStore
 	NowPlayingModule       *postgres.NowPlayingModuleSettingsStore
 	QuoteModule            *postgres.QuoteModuleSettingsStore
+	RustLogModule          *postgres.RustLogModuleSettingsStore
 	TabsModule             *postgres.TabsModuleSettingsStore
 	UserProfileModule      *postgres.UserProfileModuleSettingsStore
 	ModesModule            *postgres.ModesModuleSettingsStore
@@ -107,6 +109,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 	discordOAuthService := discordoauth.NewService(discordClient, discordoauth.NewRedisStateStore(redisClient))
 	discordBotInstallationStore := postgres.NewDiscordBotInstallationStore(postgresClient)
 	discordBotSettingsStore := postgres.NewDiscordBotSettingsStore(postgresClient)
+	discordLogSettingsStore := postgres.NewDiscordLogSettingsStore(postgresClient)
 	twitchAccountStore := postgres.NewTwitchAccountStore(postgresClient)
 	spotifyClient := spotifyoauth.NewClient(nil, cfg.Spotify.ClientID, cfg.Spotify.ClientSecret, spotifyRedirectURI)
 	spotifyOAuthService := spotifyoauth.NewService(spotifyClient, spotifyoauth.NewRedisStateStore(redisClient))
@@ -127,6 +130,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 	gameModuleStore := postgres.NewGameModuleSettingsStore(postgresClient)
 	nowPlayingModuleStore := postgres.NewNowPlayingModuleSettingsStore(postgresClient)
 	quoteModuleStore := postgres.NewQuoteModuleSettingsStore(postgresClient)
+	rustLogModuleStore := postgres.NewRustLogModuleSettingsStore(postgresClient)
 	tabsModuleStore := postgres.NewTabsModuleSettingsStore(postgresClient)
 	userProfileModuleStore := postgres.NewUserProfileModuleSettingsStore(postgresClient)
 	modesModuleStore := postgres.NewModesModuleSettingsStore(postgresClient)
@@ -148,6 +152,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 		DiscordOAuth:           discordOAuthService,
 		DiscordBotInstallation: discordBotInstallationStore,
 		DiscordBotSettings:     discordBotSettingsStore,
+		DiscordLogSettings:     discordLogSettingsStore,
 		TwitchOAuth:            twitchOAuthService,
 		TwitchAccounts:         twitchAccountStore,
 		SpotifyOAuth:           spotifyOAuthService,
@@ -165,6 +170,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 		GameModule:             gameModuleStore,
 		NowPlayingModule:       nowPlayingModuleStore,
 		QuoteModule:            quoteModuleStore,
+		RustLogModule:          rustLogModuleStore,
 		TabsModule:             tabsModuleStore,
 		UserProfileModule:      userProfileModuleStore,
 		ModesModule:            modesModuleStore,

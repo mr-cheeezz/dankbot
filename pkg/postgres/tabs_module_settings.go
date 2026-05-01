@@ -9,15 +9,14 @@ import (
 )
 
 type TabsModuleSettings struct {
-	Enabled                 bool
-	InterestRatePct         float64
-	InterestEveryDays       int
-	InterestStartDelayMode  string
-	InterestStartDelayValue int
-	InterestStartDelayUnit  string
-	UpdatedBy               string
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
+	Enabled                    bool
+	InterestRatePct            float64
+	InterestIntervalMode       string
+	InterestIntervalCustomDays int
+	GracePeriodDays            int
+	UpdatedBy                  string
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 type TabsModuleSettingsStore struct {
@@ -30,12 +29,11 @@ func NewTabsModuleSettingsStore(client *Client) *TabsModuleSettingsStore {
 
 func DefaultTabsModuleSettings() TabsModuleSettings {
 	return TabsModuleSettings{
-		Enabled:                 true,
-		InterestRatePct:         0,
-		InterestEveryDays:       7,
-		InterestStartDelayMode:  "week",
-		InterestStartDelayValue: 1,
-		InterestStartDelayUnit:  "weeks",
+		Enabled:                    true,
+		InterestRatePct:            0,
+		InterestIntervalMode:       "weekly",
+		InterestIntervalCustomDays: 7,
+		GracePeriodDays:            7,
 	}
 }
 
@@ -53,23 +51,21 @@ INSERT INTO tabs_module_settings (
 	id,
 	enabled,
 	interest_rate_percent,
-	interest_every_days,
-	interest_start_delay_mode,
-	interest_start_delay_value,
-	interest_start_delay_unit,
+	interest_interval_mode,
+	interest_interval_custom_days,
+	grace_period_days,
 	updated_by,
 	created_at,
 	updated_at
 )
-VALUES (1, $1, $2, $3, $4, $5, $6, '', NOW(), NOW())
+VALUES (1, $1, $2, $3, $4, $5, '', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
 		defaults.Enabled,
 		normalizeTabsInterestRate(defaults.InterestRatePct),
-		normalizeTabsInterestEveryDays(defaults.InterestEveryDays),
-		normalizeTabsInterestStartDelayMode(defaults.InterestStartDelayMode),
-		normalizeTabsInterestStartDelayValue(defaults.InterestStartDelayValue),
-		normalizeTabsInterestStartDelayUnit(defaults.InterestStartDelayUnit),
+		normalizeTabsInterestIntervalMode(defaults.InterestIntervalMode),
+		normalizeTabsInterestIntervalCustomDays(defaults.InterestIntervalCustomDays),
+		normalizeTabsGracePeriodDays(defaults.GracePeriodDays),
 	)
 	if err != nil {
 		return fmt.Errorf("ensure tabs module settings defaults: %w", err)
@@ -91,10 +87,9 @@ func (s *TabsModuleSettingsStore) Get(ctx context.Context) (*TabsModuleSettings,
 SELECT
 	enabled,
 	interest_rate_percent,
-	interest_every_days,
-	interest_start_delay_mode,
-	interest_start_delay_value,
-	interest_start_delay_unit,
+	interest_interval_mode,
+	interest_interval_custom_days,
+	grace_period_days,
 	updated_by,
 	created_at,
 	updated_at
@@ -104,10 +99,9 @@ WHERE id = 1
 	).Scan(
 		&settings.Enabled,
 		&settings.InterestRatePct,
-		&settings.InterestEveryDays,
-		&settings.InterestStartDelayMode,
-		&settings.InterestStartDelayValue,
-		&settings.InterestStartDelayUnit,
+		&settings.InterestIntervalMode,
+		&settings.InterestIntervalCustomDays,
+		&settings.GracePeriodDays,
 		&settings.UpdatedBy,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -120,10 +114,9 @@ WHERE id = 1
 	}
 
 	settings.InterestRatePct = normalizeTabsInterestRate(settings.InterestRatePct)
-	settings.InterestEveryDays = normalizeTabsInterestEveryDays(settings.InterestEveryDays)
-	settings.InterestStartDelayMode = normalizeTabsInterestStartDelayMode(settings.InterestStartDelayMode)
-	settings.InterestStartDelayValue = normalizeTabsInterestStartDelayValue(settings.InterestStartDelayValue)
-	settings.InterestStartDelayUnit = normalizeTabsInterestStartDelayUnit(settings.InterestStartDelayUnit)
+	settings.InterestIntervalMode = normalizeTabsInterestIntervalMode(settings.InterestIntervalMode)
+	settings.InterestIntervalCustomDays = normalizeTabsInterestIntervalCustomDays(settings.InterestIntervalCustomDays)
+	settings.GracePeriodDays = normalizeTabsGracePeriodDays(settings.GracePeriodDays)
 	return &settings, nil
 }
 
@@ -141,38 +134,34 @@ UPDATE tabs_module_settings
 SET
 	enabled = $1,
 	interest_rate_percent = $2,
-	interest_every_days = $3,
-	interest_start_delay_mode = $4,
-	interest_start_delay_value = $5,
-	interest_start_delay_unit = $6,
-	updated_by = $7,
+	interest_interval_mode = $3,
+	interest_interval_custom_days = $4,
+	grace_period_days = $5,
+	updated_by = $6,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
 	enabled,
 	interest_rate_percent,
-	interest_every_days,
-	interest_start_delay_mode,
-	interest_start_delay_value,
-	interest_start_delay_unit,
+	interest_interval_mode,
+	interest_interval_custom_days,
+	grace_period_days,
 	updated_by,
 	created_at,
 	updated_at
 `,
 		settings.Enabled,
 		normalizeTabsInterestRate(settings.InterestRatePct),
-		normalizeTabsInterestEveryDays(settings.InterestEveryDays),
-		normalizeTabsInterestStartDelayMode(settings.InterestStartDelayMode),
-		normalizeTabsInterestStartDelayValue(settings.InterestStartDelayValue),
-		normalizeTabsInterestStartDelayUnit(settings.InterestStartDelayUnit),
+		normalizeTabsInterestIntervalMode(settings.InterestIntervalMode),
+		normalizeTabsInterestIntervalCustomDays(settings.InterestIntervalCustomDays),
+		normalizeTabsGracePeriodDays(settings.GracePeriodDays),
 		strings.TrimSpace(settings.UpdatedBy),
 	).Scan(
 		&updated.Enabled,
 		&updated.InterestRatePct,
-		&updated.InterestEveryDays,
-		&updated.InterestStartDelayMode,
-		&updated.InterestStartDelayValue,
-		&updated.InterestStartDelayUnit,
+		&updated.InterestIntervalMode,
+		&updated.InterestIntervalCustomDays,
+		&updated.GracePeriodDays,
 		&updated.UpdatedBy,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,
@@ -185,10 +174,9 @@ RETURNING
 	}
 
 	updated.InterestRatePct = normalizeTabsInterestRate(updated.InterestRatePct)
-	updated.InterestEveryDays = normalizeTabsInterestEveryDays(updated.InterestEveryDays)
-	updated.InterestStartDelayMode = normalizeTabsInterestStartDelayMode(updated.InterestStartDelayMode)
-	updated.InterestStartDelayValue = normalizeTabsInterestStartDelayValue(updated.InterestStartDelayValue)
-	updated.InterestStartDelayUnit = normalizeTabsInterestStartDelayUnit(updated.InterestStartDelayUnit)
+	updated.InterestIntervalMode = normalizeTabsInterestIntervalMode(updated.InterestIntervalMode)
+	updated.InterestIntervalCustomDays = normalizeTabsInterestIntervalCustomDays(updated.InterestIntervalCustomDays)
+	updated.GracePeriodDays = normalizeTabsGracePeriodDays(updated.GracePeriodDays)
 	return &updated, nil
 }
 
@@ -202,6 +190,64 @@ func normalizeTabsInterestRate(value float64) float64 {
 	return value
 }
 
+func normalizeTabsInterestIntervalMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "daily", "bi-daily", "weekly", "bi-weekly", "monthly", "custom":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return DefaultTabsModuleSettings().InterestIntervalMode
+	}
+}
+
+func normalizeTabsInterestIntervalCustomDays(value int) int {
+	switch {
+	case value < 1:
+		return 1
+	case value > 30:
+		return 30
+	default:
+		return value
+	}
+}
+
+func normalizeTabsGracePeriodDays(value int) int {
+	switch {
+	case value < 1:
+		return 1
+	case value > 30:
+		return 30
+	default:
+		return value
+	}
+}
+
+func ResolveTabsInterestEveryDays(mode string, customDays int) int {
+	mode = normalizeTabsInterestIntervalMode(mode)
+	customDays = normalizeTabsInterestIntervalCustomDays(customDays)
+
+	switch mode {
+	case "daily":
+		return 1
+	case "bi-daily":
+		return 2
+	case "weekly":
+		return 7
+	case "bi-weekly":
+		return 14
+	case "monthly":
+		return 30
+	case "custom":
+		return customDays
+	default:
+		return 7
+	}
+}
+
+func ResolveTabsGracePeriodDays(days int) int {
+	return normalizeTabsGracePeriodDays(days)
+}
+
+// Backward-compatible normalizers used by user_tabs interest math.
 func normalizeTabsInterestEveryDays(value int) int {
 	switch {
 	case value < 1:
@@ -213,15 +259,6 @@ func normalizeTabsInterestEveryDays(value int) int {
 	}
 }
 
-func normalizeTabsInterestStartDelayMode(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "day", "week", "month", "custom":
-		return strings.ToLower(strings.TrimSpace(value))
-	default:
-		return DefaultTabsModuleSettings().InterestStartDelayMode
-	}
-}
-
 func normalizeTabsInterestStartDelayValue(value int) int {
 	switch {
 	case value < 1:
@@ -230,47 +267,5 @@ func normalizeTabsInterestStartDelayValue(value int) int {
 		return 3650
 	default:
 		return value
-	}
-}
-
-func normalizeTabsInterestStartDelayUnit(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "days", "weeks", "months":
-		return strings.ToLower(strings.TrimSpace(value))
-	default:
-		return DefaultTabsModuleSettings().InterestStartDelayUnit
-	}
-}
-
-func ResolveTabsInterestStartDelayDays(mode string, value int, unit string) int {
-	mode = normalizeTabsInterestStartDelayMode(mode)
-	value = normalizeTabsInterestStartDelayValue(value)
-	unit = normalizeTabsInterestStartDelayUnit(unit)
-
-	switch mode {
-	case "day":
-		return 1
-	case "week":
-		return 7
-	case "month":
-		return 30
-	case "custom":
-		multiplier := 1
-		switch unit {
-		case "weeks":
-			multiplier = 7
-		case "months":
-			multiplier = 30
-		}
-		delayDays := value * multiplier
-		if delayDays < 1 {
-			return 1
-		}
-		if delayDays > 3650 {
-			return 3650
-		}
-		return delayDays
-	default:
-		return 7
 	}
 }

@@ -7,7 +7,7 @@ export function canManageIntegrations(session: AuthSession): boolean {
     return false;
   }
 
-  return user.isBroadcaster || user.isAdmin || user.isBotAccount;
+  return user.isBroadcaster || user.isAdmin || user.isBotAccount || user.isLeadModerator;
 }
 
 export function canLinkStreamerIntegrations(session: AuthSession): boolean {
@@ -16,7 +16,7 @@ export function canLinkStreamerIntegrations(session: AuthSession): boolean {
     return false;
   }
 
-  return user.isBroadcaster;
+  return user.isBroadcaster || user.isAdmin || user.isBotAccount || user.isLeadModerator;
 }
 
 export function canLinkBotIntegration(session: AuthSession): boolean {
@@ -25,7 +25,7 @@ export function canLinkBotIntegration(session: AuthSession): boolean {
     return false;
   }
 
-  return user.isBroadcaster || user.isAdmin || user.isBotAccount;
+  return user.isBroadcaster || user.isAdmin || user.isBotAccount || user.isLeadModerator;
 }
 
 export function canAccessEditorFeatureViews(session: AuthSession): boolean {
@@ -34,7 +34,7 @@ export function canAccessEditorFeatureViews(session: AuthSession): boolean {
     return false;
   }
 
-  return user.isBroadcaster || user.isAdmin || user.isEditor;
+  return user.isBroadcaster || user.isAdmin || user.isEditor || user.isLeadModerator;
 }
 
 export function canAccessDashboardView(session: AuthSession, view: ViewKey): boolean {

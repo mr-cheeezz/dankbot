@@ -9,6 +9,7 @@ type AuthSessionResponse = {
     display_name: string;
     avatar_url: string;
     is_moderator: boolean;
+    is_lead_moderator: boolean;
     is_broadcaster: boolean;
     is_bot_account: boolean;
     is_editor: boolean;
@@ -42,6 +43,7 @@ export async function fetchAuthSession(signal?: AbortSignal): Promise<AuthSessio
           displayName: payload.user.display_name,
           avatarURL: payload.user.avatar_url,
           isModerator: payload.user.is_moderator,
+          isLeadModerator: payload.user.is_lead_moderator,
           isBroadcaster: payload.user.is_broadcaster,
           isBotAccount: payload.user.is_bot_account,
           isEditor: payload.user.is_editor,

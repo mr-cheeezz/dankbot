@@ -20,6 +20,7 @@ import (
 	discordbotmodule "github.com/mr-cheeezz/dankbot/pkg/modules/discordbot"
 	followersonlymodule "github.com/mr-cheeezz/dankbot/pkg/modules/followersonly"
 	robloxmodule "github.com/mr-cheeezz/dankbot/pkg/modules/game"
+	justlogmodule "github.com/mr-cheeezz/dankbot/pkg/modules/justlog"
 	keywordsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/keywords"
 	modesmodule "github.com/mr-cheeezz/dankbot/pkg/modules/modes"
 	newchattergreetingmodule "github.com/mr-cheeezz/dankbot/pkg/modules/newchattergreeting"
@@ -42,6 +43,7 @@ type runtime struct {
 	redis              *redispkg.Client
 	chat               *chat.Client
 	discord            *discordbot.Client
+	discordLogSettings *postgres.DiscordLogSettingsStore
 	dispatcher         *commands.Dispatcher
 	modules            *modules.Runner
 	accounts           *postgres.TwitchAccountStore
@@ -61,6 +63,7 @@ type runtime struct {
 	chatActivityStore  *postgres.TwitchUserChatActivityStore
 	chatActivityMu     sync.Mutex
 	chatActivityLast   map[string]time.Time
+	discordAuditSeenID int64
 	botAccount         *postgres.TwitchAccount
 	streamer           *postgres.TwitchAccount
 	onConnectOnce      sync.Once
@@ -184,6 +187,16 @@ func newRuntime(cfg *config.Config) *runtime {
 	quotesModule := quotesmodule.New(postgres.NewQuoteStore(postgresClient), auditStore, cfg.Main.AdminID, cfg.Main.StreamerID)
 	quotesModule.SetSettingsStore(postgres.NewQuoteModuleSettingsStore(postgresClient))
 	moduleRunner.Register(quotesModule)
+	rustLogModule := justlogmodule.New(
+		cfg.RustLog.Enabled,
+		cfg.RustLog.BaseURL,
+		cfg.RustLog.APIKey,
+		cfg.RustLog.ConfigPath,
+		cfg.Main.AdminID,
+		cfg.Main.StreamerID,
+	)
+	rustLogModule.SetSettingsStore(postgres.NewRustLogModuleSettingsStore(postgresClient))
+	moduleRunner.Register(rustLogModule)
 	moduleRunner.Register(tabsmodule.New(
 		postgres.NewUserTabStore(postgresClient),
 		postgres.NewTabsModuleSettingsStore(postgresClient),
@@ -209,6 +222,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		modeModule:         modeModule,
 		alertsModule:       alertsModule,
 		discordBotModule:   discordModule,
+		discordLogSettings: postgres.NewDiscordLogSettingsStore(postgresClient),
 		greetingModule:     greetingModule,
 		spotifyModule:      spotifyModule,
 		spamFiltersModule:  spamFiltersModule,
@@ -242,6 +256,7 @@ func (r *runtime) Run(ctx context.Context) error {
 		return err
 	}
 
+	go r.runDiscordAuditRelay(ctx)
 	go r.runTwitchTokenRefresh(ctx)
 	go r.runBotHeartbeat(ctx)
 
@@ -657,6 +672,7 @@ func (r *runtime) onPrivateMessage(message chat.Message) {
 		return
 	}
 	r.trackChatActivity(message)
+	r.sendDiscordChatLog(message)
 
 	if r.killswitchEnabled(message.Text) {
 		return
@@ -710,6 +726,26 @@ func (r *runtime) onPrivateMessage(message chat.Message) {
 	}
 
 	r.sendChatReply(message, result.Reply)
+}
+
+func (r *runtime) sendDiscordChatLog(message chat.Message) {
+	if !r.discordLogEnabled("chat") {
+		return
+	}
+	text := strings.TrimSpace(message.Text)
+	if text == "" {
+		return
+	}
+	if isCommandMessage(text, r.commandPrefix) {
+		return
+	}
+	actor := strings.TrimSpace(message.DisplayName)
+	if actor == "" {
+		actor = strings.TrimSpace(message.Sender)
+	}
+	channel := strings.TrimSpace(strings.TrimPrefix(message.Channel, "#"))
+	content := fmt.Sprintf("[Twitch Chat][#%s] %s: %s", channel, actor, text)
+	r.sendDiscordLogMessage(content)
 }
 
 func (r *runtime) trackChatActivity(message chat.Message) {
@@ -1113,7 +1149,11 @@ func (r *runtime) deleteChatMessage(ctx context.Context, messageID string) error
 	if r.streamer == nil || r.botAccount == nil {
 		return fmt.Errorf("moderation requires linked bot and streamer accounts")
 	}
-	return client.DeleteChatMessages(ctx, r.streamer.TwitchUserID, r.botAccount.TwitchUserID, messageID)
+	err = client.DeleteChatMessages(ctx, r.streamer.TwitchUserID, r.botAccount.TwitchUserID, messageID)
+	if err == nil && r.discordLogEnabled("mod") {
+		r.sendDiscordLogMessage(fmt.Sprintf("[Mod Action] Deleted message id `%s`", messageID))
+	}
+	return err
 }
 
 func (r *runtime) timeoutChatUser(ctx context.Context, userID string, duration time.Duration, reason string) error {
@@ -1139,6 +1179,9 @@ func (r *runtime) timeoutChatUser(ctx context.Context, userID string, duration t
 		Duration: &seconds,
 		Reason:   strings.TrimSpace(reason),
 	})
+	if err == nil && r.discordLogEnabled("mod") {
+		r.sendDiscordLogMessage(fmt.Sprintf("[Mod Action] Timeout user `%s` for %ds. Reason: %s", userID, seconds, strings.TrimSpace(reason)))
+	}
 	return err
 }
 
@@ -1159,6 +1202,9 @@ func (r *runtime) warnChatUser(ctx context.Context, userID string, reason string
 		UserID: userID,
 		Reason: strings.TrimSpace(reason),
 	})
+	if err == nil && r.discordLogEnabled("mod") {
+		r.sendDiscordLogMessage(fmt.Sprintf("[Mod Action] Warned user `%s`. Reason: %s", userID, strings.TrimSpace(reason)))
+	}
 	return err
 }
 
@@ -1179,7 +1225,96 @@ func (r *runtime) banChatUser(ctx context.Context, userID string, reason string)
 		UserID: userID,
 		Reason: strings.TrimSpace(reason),
 	})
+	if err == nil && r.discordLogEnabled("mod") {
+		r.sendDiscordLogMessage(fmt.Sprintf("[Mod Action] Banned user `%s`. Reason: %s", userID, strings.TrimSpace(reason)))
+	}
 	return err
+}
+
+func (r *runtime) discordLogEnabled(kind string) bool {
+	channelID, enabled := r.discordLogChannelFor(kind)
+	return enabled && channelID != ""
+}
+
+func (r *runtime) discordLogChannelFor(kind string) (string, bool) {
+	if r.discord == nil || r.discordLogSettings == nil {
+		return "", false
+	}
+	settings, err := r.discordLogSettings.Get(context.Background())
+	if err != nil || settings == nil || !settings.Enabled {
+		return "", false
+	}
+	channelID := strings.TrimSpace(settings.ChannelID)
+	if channelID == "" {
+		return "", false
+	}
+
+	switch kind {
+	case "chat":
+		return channelID, settings.LogChatMessages
+	case "mod":
+		return channelID, settings.LogModActions
+	case "audit":
+		return channelID, settings.LogAuditLogs
+	default:
+		return channelID, false
+	}
+}
+
+func (r *runtime) sendDiscordLogMessage(content string) {
+	channelID, enabled := r.discordLogChannelFor("chat")
+	if !enabled {
+		channelID, enabled = r.discordLogChannelFor("mod")
+	}
+	if !enabled {
+		channelID, enabled = r.discordLogChannelFor("audit")
+	}
+	if !enabled || channelID == "" || strings.TrimSpace(content) == "" || r.discord == nil {
+		return
+	}
+	if err := r.discord.SendMessage(channelID, content); err != nil {
+		fmt.Printf("discord logs send error: %v\n", err)
+	}
+}
+
+func (r *runtime) runDiscordAuditRelay(ctx context.Context) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			r.flushAuditLogsToDiscord()
+		}
+	}
+}
+
+func (r *runtime) flushAuditLogsToDiscord() {
+	channelID, enabled := r.discordLogChannelFor("audit")
+	if !enabled || channelID == "" || r.auditStore == nil || r.discord == nil {
+		return
+	}
+	items, err := r.auditStore.ListRecent(context.Background(), 20)
+	if err != nil {
+		return
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		if item.ID <= r.discordAuditSeenID {
+			continue
+		}
+		actor := strings.TrimSpace(item.ActorName)
+		if actor == "" {
+			actor = strings.TrimSpace(item.ActorID)
+		}
+		content := fmt.Sprintf("[Audit][%s] %s -> %s | %s", strings.TrimSpace(item.Platform), actor, strings.TrimSpace(item.Command), strings.TrimSpace(item.Detail))
+		if err := r.discord.SendMessage(channelID, content); err != nil {
+			continue
+		}
+		r.discordAuditSeenID = item.ID
+	}
 }
 
 func (r *runtime) userHelixClient(ctx context.Context) (*twitchhelix.Client, error) {

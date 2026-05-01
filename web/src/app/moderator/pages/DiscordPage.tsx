@@ -66,6 +66,13 @@ const defaultDiscordBotSettings: DiscordBotSettings = {
     includeJoinLink: true,
     allowedUsers: [],
   },
+  logs: {
+    enabled: false,
+    channelID: "",
+    logChatMessages: false,
+    logModActions: true,
+    logAuditLogs: true,
+  },
   channels: [],
   roles: [],
   commandName: "!dping",
@@ -326,6 +333,7 @@ function useDiscordBotState() {
         defaultChannelID: botSettingsDraft.defaultChannelID,
         pingRoles: botSettingsDraft.pingRoles,
         gamePing: botSettingsDraft.gamePing,
+        logs: botSettingsDraft.logs,
       });
       setBotSettings(saved);
       setBotSettingsDraft(saved);
@@ -447,6 +455,56 @@ function useDiscordBotState() {
         gamePing: {
           ...current.gamePing,
           allowedUsers,
+        },
+      }));
+      setSettingsSaved("");
+    },
+    setLogsEnabled: (enabled: boolean) => {
+      setBotSettingsDraft((current) => ({
+        ...current,
+        logs: {
+          ...current.logs,
+          enabled,
+        },
+      }));
+      setSettingsSaved("");
+    },
+    setLogsChannelID: (channelID: string) => {
+      setBotSettingsDraft((current) => ({
+        ...current,
+        logs: {
+          ...current.logs,
+          channelID,
+        },
+      }));
+      setSettingsSaved("");
+    },
+    setLogsChat: (logChatMessages: boolean) => {
+      setBotSettingsDraft((current) => ({
+        ...current,
+        logs: {
+          ...current.logs,
+          logChatMessages,
+        },
+      }));
+      setSettingsSaved("");
+    },
+    setLogsMod: (logModActions: boolean) => {
+      setBotSettingsDraft((current) => ({
+        ...current,
+        logs: {
+          ...current.logs,
+          logModActions,
+        },
+      }));
+      setSettingsSaved("");
+    },
+    setLogsAudit: (logAuditLogs: boolean) => {
+      setBotSettingsDraft((current) => ({
+        ...current,
+        logs: {
+          ...current.logs,
+          logAuditLogs,
         },
       }));
       setSettingsSaved("");
@@ -889,6 +947,60 @@ function DiscordRolePingsPageInner() {
                     </MenuItem>
                   ))}
                 </TextField>
+              </Stack>
+            </Paper>
+
+            <Paper elevation={0} sx={{ p: 2.5, backgroundColor: "background.default" }}>
+              <Stack spacing={2}>
+                <Typography sx={{ fontWeight: 800 }}>Discord Logs</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Checkbox
+                    checked={state.botSettingsDraft.logs.enabled}
+                    onChange={(event) => state.setLogsEnabled(event.target.checked)}
+                  />
+                  <Typography sx={{ fontWeight: 700 }}>
+                    {state.botSettingsDraft.logs.enabled ? "Enabled" : "Disabled"}
+                  </Typography>
+                </Stack>
+
+                <TextField
+                  select
+                  label="Logs channel"
+                  value={state.botSettingsDraft.logs.channelID}
+                  onChange={(event) => state.setLogsChannelID(event.target.value)}
+                  helperText="Where Twitch chat logs, moderation actions, and bot audit logs get posted."
+                >
+                  <MenuItem value="">No logs channel selected</MenuItem>
+                  {state.botSettingsDraft.channels.map((channel) => (
+                    <MenuItem key={channel.id} value={channel.id}>
+                      {channel.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Checkbox
+                      checked={state.botSettingsDraft.logs.logChatMessages}
+                      onChange={(event) => state.setLogsChat(event.target.checked)}
+                    />
+                    <Typography>Log Twitch chat messages</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Checkbox
+                      checked={state.botSettingsDraft.logs.logModActions}
+                      onChange={(event) => state.setLogsMod(event.target.checked)}
+                    />
+                    <Typography>Log moderation actions</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Checkbox
+                      checked={state.botSettingsDraft.logs.logAuditLogs}
+                      onChange={(event) => state.setLogsAudit(event.target.checked)}
+                    />
+                    <Typography>Log bot audit events</Typography>
+                  </Stack>
+                </Stack>
               </Stack>
             </Paper>
 

@@ -500,23 +500,20 @@ export function ModuleEditorPage() {
                       ) : isTabsModule ? (
                         <>
                           {(() => {
-                            const startDelayMode =
+                            const intervalMode =
                               draft.settings.find(
                                 (setting) =>
-                                  setting.id === "interest-start-delay-mode",
-                              )?.value ?? "week";
+                                  setting.id === "interest-interval",
+                              )?.value ?? "weekly";
                             const visibleSettingIDs = [
                               "enabled",
                               "interest-rate-percent",
-                              "interest-every-days",
-                              "interest-start-delay-mode",
+                              "interest-interval",
+                              "grace-period-days",
                             ];
-                            if (startDelayMode === "custom") {
+                            if (intervalMode === "custom") {
                               visibleSettingIDs.push(
-                                "interest-start-delay-value",
-                              );
-                              visibleSettingIDs.push(
-                                "interest-start-delay-unit",
+                                "interest-interval-custom-days",
                               );
                             }
 
@@ -847,10 +844,10 @@ function ModuleSettingField({
       ? undefined
       : setting.id === "interest-rate-percent"
         ? { step: "0.01", min: 0, max: 500 }
-        : setting.id === "interest-every-days"
-          ? { step: 1, min: 1, max: 365 }
-          : setting.id === "interest-start-delay-value"
-            ? { step: 1, min: 1, max: 3650 }
+        : setting.id === "interest-interval-custom-days"
+          ? { step: 1, min: 1, max: 30 }
+          : setting.id === "grace-period-days"
+            ? { step: 1, min: 1, max: 30 }
           : undefined;
 
   if (setting.type === "boolean") {

@@ -35,6 +35,7 @@ type discordBotSettingsResponse struct {
 	DefaultChannelID string                       `json:"default_channel_id"`
 	PingRoles        []discordBotPingRoleResponse `json:"ping_roles"`
 	GamePing         discordBotGamePingResponse   `json:"game_ping"`
+	Logs             discordBotLogsResponse       `json:"logs"`
 	Channels         []discordBotChannelResponse  `json:"channels"`
 	Roles            []discordBotRoleResponse     `json:"roles"`
 	CommandName      string                       `json:"command_name"`
@@ -50,6 +51,14 @@ type discordBotGamePingResponse struct {
 	IncludeWatchLink bool     `json:"include_watch_link"`
 	IncludeJoinLink  bool     `json:"include_join_link"`
 	AllowedUsers     []string `json:"allowed_users"`
+}
+
+type discordBotLogsResponse struct {
+	Enabled         bool   `json:"enabled"`
+	ChannelID       string `json:"channel_id"`
+	LogChatMessages bool   `json:"log_chat_messages"`
+	LogModActions   bool   `json:"log_mod_actions"`
+	LogAuditLogs    bool   `json:"log_audit_logs"`
 }
 
 func (h handler) discordBot(w http.ResponseWriter, r *http.Request) {
@@ -73,14 +82,14 @@ func (h handler) getDiscordBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings, channels, roles, err := h.loadDiscordBotState(r)
+	settings, logSettings, channels, roles, err := h.loadDiscordBotState(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(discordBotSettingsToResponse(settings, channels, roles))
+	_ = json.NewEncoder(w).Encode(discordBotSettingsToResponse(settings, logSettings, channels, roles))
 }
 
 func (h handler) updateDiscordBot(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +102,7 @@ func (h handler) updateDiscordBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings, channels, roles, err := h.loadDiscordBotState(r)
+	settings, logSettings, channels, roles, err := h.loadDiscordBotState(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -118,6 +127,12 @@ func (h handler) updateDiscordBot(w http.ResponseWriter, r *http.Request) {
 	if defaultChannelID != "" {
 		if _, ok := validChannels[defaultChannelID]; !ok {
 			http.Error(w, "selected discord channel is not available in the connected guild", http.StatusBadRequest)
+			return
+		}
+	}
+	if request.Logs.ChannelID != "" {
+		if _, ok := validChannels[strings.TrimSpace(request.Logs.ChannelID)]; !ok {
+			http.Error(w, "selected logs channel is not available in the connected guild", http.StatusBadRequest)
 			return
 		}
 	}
@@ -163,6 +178,16 @@ func (h handler) updateDiscordBot(w http.ResponseWriter, r *http.Request) {
 		}
 		nextGamePing.RoleName = roleName
 	}
+	nextLogs := postgres.DiscordLogSettings{
+		Enabled:         request.Logs.Enabled,
+		ChannelID:       strings.TrimSpace(request.Logs.ChannelID),
+		LogChatMessages: request.Logs.LogChatMessages,
+		LogModActions:   request.Logs.LogModActions,
+		LogAuditLogs:    request.Logs.LogAuditLogs,
+	}
+	if nextLogs.ChannelID == "" {
+		nextLogs.ChannelID = strings.TrimSpace(logSettings.ChannelID)
+	}
 
 	updated, err := h.appState.DiscordBotSettings.Update(r.Context(), postgres.DiscordBotSettings{
 		GuildID:          settings.GuildID,
@@ -178,36 +203,50 @@ func (h handler) updateDiscordBot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "discord bot settings not found", http.StatusNotFound)
 		return
 	}
+	if h.appState != nil && h.appState.DiscordLogSettings != nil {
+		if err := h.appState.DiscordLogSettings.EnsureDefault(r.Context()); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		updatedLogs, err := h.appState.DiscordLogSettings.Update(r.Context(), nextLogs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if updatedLogs != nil {
+			logSettings = updatedLogs
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(discordBotSettingsToResponse(updated, channels, roles))
+	_ = json.NewEncoder(w).Encode(discordBotSettingsToResponse(updated, logSettings, channels, roles))
 }
 
-func (h handler) loadDiscordBotState(r *http.Request) (*postgres.DiscordBotSettings, []discordBotChannelResponse, []discordBotRoleResponse, error) {
+func (h handler) loadDiscordBotState(r *http.Request) (*postgres.DiscordBotSettings, *postgres.DiscordLogSettings, []discordBotChannelResponse, []discordBotRoleResponse, error) {
 	if h.appState == nil || h.appState.Config == nil || h.appState.DiscordBotInstallation == nil || h.appState.DiscordBotSettings == nil {
-		return nil, nil, nil, errors.New("discord bot settings are not configured")
+		return nil, nil, nil, nil, errors.New("discord bot settings are not configured")
 	}
 
 	token := strings.TrimSpace(h.appState.Config.Discord.BotToken)
 	if token == "" || strings.EqualFold(token, "your_discord_bot_token") {
-		return nil, nil, nil, errors.New("discord bot token is not configured")
+		return nil, nil, nil, nil, errors.New("discord bot token is not configured")
 	}
 
 	installation, err := h.appState.DiscordBotInstallation.Get(r.Context())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if installation == nil || strings.TrimSpace(installation.GuildID) == "" {
-		return nil, nil, nil, errors.New("discord bot is not installed in a server yet")
+		return nil, nil, nil, nil, errors.New("discord bot is not installed in a server yet")
 	}
 
 	if err := h.appState.DiscordBotSettings.EnsureDefault(r.Context(), installation.GuildID); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	settings, err := h.appState.DiscordBotSettings.Get(r.Context())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if settings == nil {
 		defaults := postgres.DefaultDiscordBotSettings(installation.GuildID)
@@ -216,13 +255,26 @@ func (h handler) loadDiscordBotState(r *http.Request) (*postgres.DiscordBotSetti
 	if strings.TrimSpace(settings.GuildID) == "" {
 		settings.GuildID = strings.TrimSpace(installation.GuildID)
 	}
+	logSettings := postgres.DefaultDiscordLogSettings()
+	if h.appState.DiscordLogSettings != nil {
+		if err := h.appState.DiscordLogSettings.EnsureDefault(r.Context()); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		loadedLogs, err := h.appState.DiscordLogSettings.Get(r.Context())
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if loadedLogs != nil {
+			logSettings = *loadedLogs
+		}
+	}
 
 	channels, roles, err := fetchDiscordGuildResources(token, settings.GuildID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return settings, channels, roles, nil
+	return settings, &logSettings, channels, roles, nil
 }
 
 func fetchDiscordGuildResources(token, guildID string) ([]discordBotChannelResponse, []discordBotRoleResponse, error) {
@@ -280,6 +332,7 @@ func fetchDiscordGuildResources(token, guildID string) ([]discordBotChannelRespo
 
 func discordBotSettingsToResponse(
 	settings *postgres.DiscordBotSettings,
+	logSettings *postgres.DiscordLogSettings,
 	channels []discordBotChannelResponse,
 	roles []discordBotRoleResponse,
 ) discordBotSettingsResponse {
@@ -311,6 +364,15 @@ func discordBotSettingsToResponse(
 			IncludeWatchLink: settings.GamePing.IncludeWatchLink,
 			IncludeJoinLink:  settings.GamePing.IncludeJoinLink,
 			AllowedUsers:     settings.GamePing.AllowedUsers,
+		}
+	}
+	if logSettings != nil {
+		response.Logs = discordBotLogsResponse{
+			Enabled:         logSettings.Enabled,
+			ChannelID:       strings.TrimSpace(logSettings.ChannelID),
+			LogChatMessages: logSettings.LogChatMessages,
+			LogModActions:   logSettings.LogModActions,
+			LogAuditLogs:    logSettings.LogAuditLogs,
 		}
 	}
 

@@ -21,6 +21,7 @@ import {
   fetchNewChatterGreetingModuleSettings,
   fetchNowPlayingModuleSettings,
   fetchQuoteModuleSettings,
+  fetchRustLogModuleSettings,
   fetchTabsModuleSettings,
   fetchUserProfileModuleSettings,
   fetchModes,
@@ -33,6 +34,7 @@ import {
   saveNewChatterGreetingModuleSettings,
   saveNowPlayingModuleSettings,
   saveQuoteModuleSettings,
+  saveRustLogModuleSettings,
   saveTabsModuleSettings,
   saveUserProfileModuleSettings,
   saveSpamFilter,
@@ -64,6 +66,7 @@ import type {
   GameModuleSettings,
   NewChatterGreetingModuleSettings,
   NowPlayingModuleSettings,
+  RustLogModuleSettings,
   TabsModuleSettings,
   UserProfileModuleSettings,
   GiveawayEntry,
@@ -355,6 +358,7 @@ const newChatterGreetingModuleID = "new-chatter-greeting";
 const gameModuleID = "game";
 const nowPlayingModuleID = "now-playing";
 const quoteModuleID = "quotes";
+const rustLogModuleID = "rustlog";
 const tabsModuleID = "tabs";
 const userProfileModuleID = "user-profile";
 type ModuleCatalogByID = Map<string, ModuleCatalogEntry>;
@@ -637,6 +641,22 @@ function mergeQuoteModuleSettings(
   );
 }
 
+function mergeRustLogModuleSettings(
+  current: ModuleEntry[],
+  settings: RustLogModuleSettings,
+  catalogByID: ModuleCatalogByID,
+): ModuleEntry[] {
+  return upsertModuleFromCatalog(
+    current,
+    catalogByID,
+    rustLogModuleID,
+    settings.enabled,
+    {
+      enabled: settings.enabled ? "true" : "false",
+    },
+  );
+}
+
 function mergeTabsModuleSettings(
   current: ModuleEntry[],
   settings: TabsModuleSettings,
@@ -645,10 +665,9 @@ function mergeTabsModuleSettings(
   return upsertModuleFromCatalog(current, catalogByID, tabsModuleID, settings.enabled, {
     enabled: settings.enabled ? "true" : "false",
     "interest-rate-percent": String(settings.interestRatePercent),
-    "interest-every-days": String(settings.interestEveryDays),
-    "interest-start-delay-mode": settings.interestStartDelayMode,
-    "interest-start-delay-value": String(settings.interestStartDelayValue),
-    "interest-start-delay-unit": settings.interestStartDelayUnit,
+    "interest-interval": settings.interestIntervalMode,
+    "interest-interval-custom-days": String(settings.interestIntervalCustomDays),
+    "grace-period-days": String(settings.gracePeriodDays),
   });
 }
 
@@ -660,40 +679,36 @@ function tabsModuleSettingsFromModule(entry: ModuleEntry): TabsModuleSettings {
     entry.settings.find((setting) => setting.id === "interest-rate-percent")
       ?.value ?? "0",
   );
-  const interestEveryDaysRaw = Number.parseInt(
-    entry.settings.find((setting) => setting.id === "interest-every-days")
+  const interestIntervalModeRaw =
+    entry.settings.find((setting) => setting.id === "interest-interval")
+      ?.value ?? "weekly";
+  const interestIntervalCustomDaysRaw = Number.parseInt(
+    entry.settings.find((setting) => setting.id === "interest-interval-custom-days")
       ?.value ?? "7",
     10,
   );
-  const interestStartDelayModeRaw =
-    entry.settings.find((setting) => setting.id === "interest-start-delay-mode")
-      ?.value ?? "week";
-  const interestStartDelayValueRaw = Number.parseInt(
-    entry.settings.find((setting) => setting.id === "interest-start-delay-value")
-      ?.value ?? "1",
+  const gracePeriodDaysRaw = Number.parseInt(
+    entry.settings.find((setting) => setting.id === "grace-period-days")
+      ?.value ?? "7",
     10,
   );
-  const interestStartDelayUnitRaw =
-    entry.settings.find((setting) => setting.id === "interest-start-delay-unit")
-      ?.value ?? "weeks";
-
-  const interestStartDelayMode =
-    interestStartDelayModeRaw === "day" ||
-    interestStartDelayModeRaw === "week" ||
-    interestStartDelayModeRaw === "month" ||
-    interestStartDelayModeRaw === "custom"
-      ? interestStartDelayModeRaw
-      : "week";
-  const interestStartDelayUnit =
-    interestStartDelayUnitRaw === "days" ||
-    interestStartDelayUnitRaw === "weeks" ||
-    interestStartDelayUnitRaw === "months"
-      ? interestStartDelayUnitRaw
-      : "weeks";
-  const interestStartDelayValue =
-    Number.isFinite(interestStartDelayValueRaw) && interestStartDelayValueRaw > 0
-      ? interestStartDelayValueRaw
-      : 1;
+  const interestIntervalMode =
+    interestIntervalModeRaw === "daily" ||
+    interestIntervalModeRaw === "bi-daily" ||
+    interestIntervalModeRaw === "weekly" ||
+    interestIntervalModeRaw === "bi-weekly" ||
+    interestIntervalModeRaw === "monthly" ||
+    interestIntervalModeRaw === "custom"
+      ? interestIntervalModeRaw
+      : "weekly";
+  const interestIntervalCustomDays =
+    Number.isFinite(interestIntervalCustomDaysRaw) && interestIntervalCustomDaysRaw > 0
+      ? Math.min(30, interestIntervalCustomDaysRaw)
+      : 7;
+  const gracePeriodDays =
+    Number.isFinite(gracePeriodDaysRaw) && gracePeriodDaysRaw > 0
+      ? Math.min(30, gracePeriodDaysRaw)
+      : 7;
 
   return {
     enabled,
@@ -701,13 +716,9 @@ function tabsModuleSettingsFromModule(entry: ModuleEntry): TabsModuleSettings {
       Number.isFinite(interestRateRaw) && interestRateRaw >= 0
         ? interestRateRaw
         : 0,
-    interestEveryDays:
-      Number.isFinite(interestEveryDaysRaw) && interestEveryDaysRaw > 0
-        ? interestEveryDaysRaw
-        : 7,
-    interestStartDelayMode,
-    interestStartDelayValue,
-    interestStartDelayUnit,
+    interestIntervalMode,
+    interestIntervalCustomDays,
+    gracePeriodDays,
   };
 }
 
@@ -1008,6 +1019,18 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
           .catch(() => {
             if (!controller.signal.aborted) {
               setNotice("Could not load the quotes module settings right now.");
+            }
+          });
+
+        void fetchRustLogModuleSettings(controller.signal)
+          .then((nextSettings) => {
+            setModules((current) =>
+              mergeRustLogModuleSettings(current, nextSettings, catalogByID),
+            );
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setNotice("Could not load the RustLog module settings right now.");
             }
           });
 
@@ -1696,6 +1719,24 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    if (moduleId === rustLogModuleID) {
+      void saveRustLogModuleSettings({ enabled: optimisticEntry.enabled })
+        .then((saved) => {
+          setModules((current) =>
+            mergeRustLogModuleSettings(current, saved, moduleCatalogLookup),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) =>
+              entry.id === moduleId ? currentEntry : entry,
+            ),
+          );
+          setNotice("Could not save the RustLog module right now.");
+        });
+      return;
+    }
+
     if (moduleId === tabsModuleID) {
       void saveTabsModuleSettings(tabsModuleSettingsFromModule(optimisticEntry))
         .then((saved) => {
@@ -1845,6 +1886,22 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
             current.map((entry) => (entry.id === moduleId ? existing : entry)),
           );
           setNotice("Could not save the quotes module right now.");
+        });
+      return;
+    }
+
+    if (moduleId === rustLogModuleID) {
+      void saveRustLogModuleSettings({ enabled: merged.enabled })
+        .then((saved) => {
+          setModules((current) =>
+            mergeRustLogModuleSettings(current, saved, moduleCatalogLookup),
+          );
+        })
+        .catch(() => {
+          setModules((current) =>
+            current.map((entry) => (entry.id === moduleId ? existing : entry)),
+          );
+          setNotice("Could not save the RustLog module right now.");
         });
       return;
     }

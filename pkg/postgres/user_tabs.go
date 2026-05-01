@@ -247,13 +247,14 @@ func (s *UserTabStore) mutate(
 	if displayName != "" {
 		row.DisplayName = displayName
 	}
-	if wasZeroBeforeMutation && row.BalanceCents > 0 {
+	if wasZeroBeforeMutation && row.BalanceCents > 0 && strings.TrimSpace(action) == "paid" {
 		row.CreatedAt = now
 		row.LastInterestAt = now
 	}
 	row.UpdatedAt = now
-	if row.BalanceCents == 0 {
+	if row.BalanceCents == 0 && strings.TrimSpace(action) == "paid" {
 		row.LastInterestAt = now
+		row.CreatedAt = now
 	}
 
 	if err := upsertTab(ctx, tx, row); err != nil {
