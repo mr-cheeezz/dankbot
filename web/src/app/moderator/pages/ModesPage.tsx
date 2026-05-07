@@ -64,6 +64,8 @@ const defaultDraft: ModeEditorDraft = {
   timerMessage: "",
   timerIntervalSeconds: 180,
   builtin: false,
+  temporaryMode: false,
+  expiresInMinutes: 0,
 };
 
 const editorSections: Array<{
@@ -200,6 +202,10 @@ export function ModesPage() {
       coordinatedTwitchCategoryName: draft.coordinatedTwitchCategoryName.trim(),
       timerMessage: draft.timerMessage.trim(),
       timerIntervalSeconds: Math.max(5, draft.timerIntervalSeconds || 0),
+      temporaryMode: draft.temporaryMode,
+      expiresInMinutes: draft.temporaryMode
+        ? Math.max(1, Number(draft.expiresInMinutes) || 0)
+        : 0,
     };
     if (cleanedDraft.coordinatedTwitchCategoryID === "") {
       cleanedDraft.coordinatedTwitchCategoryName = "";
@@ -394,6 +400,14 @@ export function ModesPage() {
                     {entry.timerEnabled
                       ? `${entry.timerIntervalSeconds}s · ${entry.timerMessage}`
                       : "timer disabled"}
+                    {entry.temporaryMode ? (
+                      <Typography
+                        component="div"
+                        sx={{ mt: 0.25, color: "warning.light", fontSize: "0.78rem" }}
+                      >
+                        temp mode · expires in {entry.expiresInMinutes}m
+                      </Typography>
+                    ) : null}
                   </TableCell>
                   <TableCell align="right">
                     <Box
@@ -630,9 +644,9 @@ export function ModesPage() {
                       helperText="Lowercase key used internally and for linked mode routing."
                   />
 
-                  <TextField
-                    fullWidth
-                    label="Description"
+                    <TextField
+                      fullWidth
+                      label="Description"
                     value={draft.description}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, description: event.target.value }))
@@ -819,6 +833,39 @@ export function ModesPage() {
                       multiline
                       minRows={3}
                     />
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 220 }}>
+                        <Checkbox
+                          checked={draft.temporaryMode}
+                          disabled={draft.builtin}
+                          onChange={(event) =>
+                            setDraft((current) => ({
+                              ...current,
+                              temporaryMode: event.target.checked,
+                              expiresInMinutes: event.target.checked
+                                ? Math.max(1, current.expiresInMinutes || 60)
+                                : 0,
+                            }))
+                          }
+                        />
+                        <Typography>Temporary mode (auto-delete)</Typography>
+                      </Stack>
+                      <TextField
+                        type="number"
+                        label="Delete after (minutes)"
+                        value={draft.expiresInMinutes}
+                        disabled={draft.builtin || !draft.temporaryMode}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            expiresInMinutes: Math.max(1, Number(event.target.value) || 0),
+                          }))
+                        }
+                        inputProps={{ min: 1, step: 1 }}
+                        helperText="Mode auto-deletes after this many minutes."
+                        sx={{ maxWidth: 260 }}
+                      />
+                    </Stack>
                     <Box
                       sx={{
                         px: 1.5,

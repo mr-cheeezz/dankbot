@@ -1464,6 +1464,8 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
           timerMessage: merged.timerMessage,
           timerIntervalSeconds: merged.timerIntervalSeconds,
           builtin: merged.builtin,
+          temporaryMode: merged.temporaryMode,
+          expiresInMinutes: merged.expiresInMinutes,
         },
         current.key,
       );

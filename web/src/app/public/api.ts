@@ -129,6 +129,43 @@ export type PublicUserProfile = {
   }>;
 };
 
+export type PublicPollOverlay = {
+  enabled: boolean;
+  active: boolean;
+  title: string;
+  status: string;
+  startedAt: string;
+  endedAt: string;
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  offsetX: number;
+  offsetY: number;
+  choices: Array<{
+    title: string;
+    votes: number;
+    channelPointsVotes: number;
+    bitsVotes: number;
+  }>;
+};
+
+export type PublicPredictionOverlay = {
+  enabled: boolean;
+  active: boolean;
+  title: string;
+  status: string;
+  startedAt: string;
+  endedAt: string;
+  lockedAt: string;
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  offsetX: number;
+  offsetY: number;
+  outcomes: Array<{
+    title: string;
+    users: number;
+    channelPoints: number;
+    color: string;
+  }>;
+};
+
 type PublicSummaryResponse = {
   channel_name: string;
   channel_login: string;
@@ -274,6 +311,43 @@ type PublicUserTabHistoryResponse = {
     balance_cents: number;
     note: string;
     created_at: string;
+  }>;
+};
+
+type PublicPollOverlayResponse = {
+  enabled: boolean;
+  active: boolean;
+  title: string;
+  status: string;
+  started_at: string;
+  ended_at: string;
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  offset_x: number;
+  offset_y: number;
+  choices: Array<{
+    title: string;
+    votes: number;
+    channel_points_votes: number;
+    bits_votes: number;
+  }>;
+};
+
+type PublicPredictionOverlayResponse = {
+  enabled: boolean;
+  active: boolean;
+  title: string;
+  status: string;
+  started_at: string;
+  ended_at: string;
+  locked_at: string;
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  offset_x: number;
+  offset_y: number;
+  outcomes: Array<{
+    title: string;
+    users: number;
+    channel_points: number;
+    color: string;
   }>;
 };
 
@@ -601,4 +675,67 @@ export async function fetchPublicUserTabHistory(
     note: entry.note,
     createdAt: entry.created_at,
   }));
+}
+
+export async function fetchPublicPollOverlay(
+  signal?: AbortSignal,
+): Promise<PublicPollOverlay> {
+  const response = await fetch("/api/public/overlay/polls", {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`failed to load poll overlay: ${response.status}`);
+  }
+  const payload = (await response.json()) as PublicPollOverlayResponse;
+  return {
+    enabled: payload.enabled,
+    active: payload.active,
+    title: payload.title ?? "",
+    status: payload.status ?? "",
+    startedAt: payload.started_at ?? "",
+    endedAt: payload.ended_at ?? "",
+    position: payload.position ?? "bottom-left",
+    offsetX: payload.offset_x ?? 24,
+    offsetY: payload.offset_y ?? 24,
+    choices: (payload.choices ?? []).map((choice) => ({
+      title: choice.title,
+      votes: choice.votes,
+      channelPointsVotes: choice.channel_points_votes,
+      bitsVotes: choice.bits_votes,
+    })),
+  };
+}
+
+export async function fetchPublicPredictionOverlay(
+  signal?: AbortSignal,
+): Promise<PublicPredictionOverlay> {
+  const response = await fetch("/api/public/overlay/predictions", {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`failed to load prediction overlay: ${response.status}`);
+  }
+  const payload = (await response.json()) as PublicPredictionOverlayResponse;
+  return {
+    enabled: payload.enabled,
+    active: payload.active,
+    title: payload.title ?? "",
+    status: payload.status ?? "",
+    startedAt: payload.started_at ?? "",
+    endedAt: payload.ended_at ?? "",
+    lockedAt: payload.locked_at ?? "",
+    position: payload.position ?? "bottom-right",
+    offsetX: payload.offset_x ?? 24,
+    offsetY: payload.offset_y ?? 24,
+    outcomes: (payload.outcomes ?? []).map((outcome) => ({
+      title: outcome.title,
+      users: outcome.users,
+      channelPoints: outcome.channel_points,
+      color: outcome.color,
+    })),
+  };
 }

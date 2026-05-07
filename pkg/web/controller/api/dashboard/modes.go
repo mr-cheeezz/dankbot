@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	modesmodule "github.com/mr-cheeezz/dankbot/pkg/modules/modes"
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
@@ -27,6 +28,8 @@ type modeResponse struct {
 	TimerMessage                  string `json:"timer_message"`
 	TimerIntervalSeconds          int    `json:"timer_interval_seconds"`
 	Builtin                       bool   `json:"builtin"`
+	TemporaryMode                 bool   `json:"temporary_mode"`
+	ExpiresInMinutes              int    `json:"expires_in_minutes"`
 }
 
 type modesListResponse struct {
@@ -47,6 +50,8 @@ type saveModeRequest struct {
 	TimerMessage                  string `json:"timer_message"`
 	TimerIntervalSeconds          int    `json:"timer_interval_seconds"`
 	OriginalKey                   string `json:"original_key"`
+	TemporaryMode                 bool   `json:"temporary_mode"`
+	ExpiresInMinutes              int    `json:"expires_in_minutes"`
 }
 
 func (h handler) modes(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +184,10 @@ func (h handler) updateMode(w http.ResponseWriter, r *http.Request) {
 	next := modeFromRequest(request)
 	next.ModeKey = current.ModeKey
 	next.IsBuiltin = current.IsBuiltin
+	if current.IsBuiltin {
+		next.TemporaryMode = false
+		next.ExpiresAt = time.Time{}
+	}
 	next.LastTimerSentAt = current.LastTimerSentAt
 	next.CreatedAt = current.CreatedAt
 	if err := modeStore.Save(r.Context(), next); err != nil {
@@ -262,6 +271,9 @@ func (h handler) fetchModes(r *http.Request) ([]modeResponse, error) {
 	if err := modeStore.EnsureDefaults(r.Context(), modesmodule.BuiltInModes()); err != nil {
 		return nil, err
 	}
+	if err := modeStore.DeleteExpiredTemporary(r.Context()); err != nil {
+		return nil, err
+	}
 
 	items, err := modeStore.List(r.Context())
 	if err != nil {
@@ -301,11 +313,22 @@ func (h handler) decodeModeSaveRequest(r *http.Request) (*postgres.BotModeStore,
 	if err := modeStore.EnsureDefaults(r.Context(), modesmodule.BuiltInModes()); err != nil {
 		return nil, saveModeRequest{}, err
 	}
+	if err := modeStore.DeleteExpiredTemporary(r.Context()); err != nil {
+		return nil, saveModeRequest{}, err
+	}
 
 	return modeStore, request, nil
 }
 
 func modeToResponse(item postgres.BotMode) modeResponse {
+	expiresInMinutes := 0
+	if item.TemporaryMode && !item.ExpiresAt.IsZero() {
+		expiresInMinutes = int(time.Until(item.ExpiresAt).Minutes())
+		if expiresInMinutes < 0 {
+			expiresInMinutes = 0
+		}
+	}
+
 	return modeResponse{
 		ID:                            item.ModeKey,
 		Key:                           item.ModeKey,
@@ -321,6 +344,8 @@ func modeToResponse(item postgres.BotMode) modeResponse {
 		TimerMessage:                  item.TimerMessage,
 		TimerIntervalSeconds:          item.TimerIntervalSeconds,
 		Builtin:                       item.IsBuiltin,
+		TemporaryMode:                 item.TemporaryMode,
+		ExpiresInMinutes:              expiresInMinutes,
 	}
 }
 
@@ -350,11 +375,20 @@ func modeFromRequest(request saveModeRequest) postgres.BotMode {
 		TimerEnabled:                  request.TimerEnabled,
 		TimerMessage:                  strings.TrimSpace(request.TimerMessage),
 		TimerIntervalSeconds:          timerIntervalSeconds,
+		TemporaryMode:                 request.TemporaryMode,
+		ExpiresAt:                     expiresAtFromMinutes(request.ExpiresInMinutes, request.TemporaryMode),
 	}
 }
 
 func normalizeModeKey(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func expiresAtFromMinutes(minutes int, temporary bool) time.Time {
+	if !temporary || minutes <= 0 {
+		return time.Time{}
+	}
+	return time.Now().UTC().Add(time.Duration(minutes) * time.Minute)
 }
 
 func (h handler) logDashboardModeChange(r *http.Request, userSession *session.UserSession, detail string) {

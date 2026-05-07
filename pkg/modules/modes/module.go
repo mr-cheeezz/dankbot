@@ -19,6 +19,7 @@ import (
 const (
 	modeTitleEnforceInterval = 15 * time.Second
 	modeTitleEnforceTimeout  = 5 * time.Second
+	quickTempModeKey         = "temp-quick"
 )
 
 var (
@@ -183,6 +184,18 @@ func (m *Module) RegisterCommands() map[string]modules.CommandDefinition {
 			Usage:       "!link",
 			Example:     "!link",
 		},
+		"temptitle": {
+			Handler:     m.tempTitle,
+			Description: "Quickly enables a custom override mode with a temporary Twitch title only.",
+			Usage:       "!temptitle <title>",
+			Example:     "!temptitle Warmup in another game",
+		},
+		"tempgame": {
+			Handler:     m.tempGame,
+			Description: "Quickly enables a custom override mode with a temporary Twitch category/game only.",
+			Usage:       "!tempgame <game>",
+			Example:     "!tempgame Fortnite",
+		},
 	}
 }
 
@@ -269,6 +282,9 @@ func (m *Module) HandleMessage(ctx modules.CommandContext) (modules.MessageResul
 func (m *Module) mode(ctx modules.CommandContext) (string, error) {
 	if !m.canManageModes(ctx) {
 		return "", nil
+	}
+	if err := m.cleanupExpiredTemporaryModes(context.Background()); err != nil {
+		return "", err
 	}
 	if len(ctx.Args) == 0 {
 		return m.currentMode(ctx)
@@ -440,6 +456,9 @@ func (m *Module) link(ctx modules.CommandContext) (string, error) {
 
 func (m *Module) modes(ctx modules.CommandContext) (string, error) {
 	_ = ctx
+	if err := m.cleanupExpiredTemporaryModes(context.Background()); err != nil {
+		return "", err
+	}
 
 	items, err := m.modeStore.List(context.Background())
 	if err != nil {
@@ -451,7 +470,8 @@ func (m *Module) modes(ctx modules.CommandContext) (string, error) {
 
 	names := make([]string, 0, len(items))
 	for _, item := range items {
-		if strings.TrimSpace(item.ModeKey) != "" {
+		modeKey := strings.TrimSpace(item.ModeKey)
+		if modeKey != "" && !isQuickOverrideModeKey(modeKey) {
 			names = append(names, item.ModeKey)
 		}
 	}
@@ -465,6 +485,9 @@ func (m *Module) modes(ctx modules.CommandContext) (string, error) {
 
 func (m *Module) currentMode(ctx modules.CommandContext) (string, error) {
 	_ = ctx
+	if err := m.cleanupExpiredTemporaryModes(context.Background()); err != nil {
+		return "", err
+	}
 
 	state, err := m.stateStore.Get(context.Background())
 	if err != nil {
@@ -480,8 +503,15 @@ func (m *Module) currentMode(ctx modules.CommandContext) (string, error) {
 	}
 
 	name := strings.TrimSpace(state.CurrentModeKey)
+	if isQuickOverrideModeKey(name) {
+		name = "custom"
+	}
 	if mode != nil && strings.TrimSpace(mode.ModeKey) != "" {
-		name = mode.ModeKey
+		if isQuickOverrideModeKey(mode.ModeKey) {
+			name = "custom"
+		} else {
+			name = mode.ModeKey
+		}
 	}
 	if name == "" {
 		name = "unknown"
@@ -595,6 +625,10 @@ func (m *Module) runTitleEnforcer(ctx context.Context) {
 }
 
 func (m *Module) tickModeTimer(ctx context.Context) error {
+	if err := m.cleanupExpiredTemporaryModes(ctx); err != nil {
+		return err
+	}
+
 	channel, say := m.output()
 	if channel == "" || say == nil {
 		return nil
@@ -640,6 +674,183 @@ func (m *Module) tickModeTimer(ctx context.Context) error {
 	}
 
 	return m.modeStore.MarkTimerSent(ctx, mode.ModeKey, now)
+}
+
+func (m *Module) tempTitle(ctx modules.CommandContext) (string, error) {
+	if !m.canManageModes(ctx) {
+		return "", nil
+	}
+	if len(ctx.Args) == 0 {
+		return "Usage: !temptitle <title>", nil
+	}
+
+	title := strings.TrimSpace(strings.Join(ctx.Args, " "))
+	if title == "" {
+		return "Usage: !temptitle <title>", nil
+	}
+
+	reply, err := m.applyQuickTemporaryMode(ctx, title, "", "")
+	if err != nil {
+		return "", err
+	}
+	return reply, nil
+}
+
+func (m *Module) tempGame(ctx modules.CommandContext) (string, error) {
+	if !m.canManageModes(ctx) {
+		return "", nil
+	}
+	if len(ctx.Args) == 0 {
+		return "Usage: !tempgame <game>", nil
+	}
+
+	game := strings.TrimSpace(strings.Join(ctx.Args, " "))
+	if game == "" {
+		return "Usage: !tempgame <game>", nil
+	}
+
+	categoryID, categoryName := m.lookupTwitchCategory(context.Background(), game)
+	reply, err := m.applyQuickTemporaryMode(ctx, "", categoryID, categoryName)
+	if err != nil {
+		return "", err
+	}
+	return reply, nil
+}
+
+func (m *Module) applyQuickTemporaryMode(ctx modules.CommandContext, title, categoryID, categoryName string) (string, error) {
+	if err := m.cleanupExpiredTemporaryModes(context.Background()); err != nil {
+		return "", err
+	}
+
+	state, err := m.stateStore.Get(context.Background())
+	if err != nil {
+		return "", err
+	}
+
+	mode := postgres.BotMode{
+		ModeKey:                       quickTempModeKey,
+		Title:                         "Custom",
+		Description:                   "Custom override mode created from chat commands.",
+		KeywordName:                   "",
+		KeywordDescription:            "",
+		KeywordResponse:               "",
+		CoordinatedTwitchTitle:        strings.TrimSpace(title),
+		CoordinatedTwitchCategoryID:   strings.TrimSpace(categoryID),
+		CoordinatedTwitchCategoryName: strings.TrimSpace(categoryName),
+		IsBuiltin:                     false,
+		TimerEnabled:                  false,
+		TimerMessage:                  "",
+		TimerIntervalSeconds:          180,
+		TemporaryMode:                 false,
+		ExpiresAt:                     time.Time{},
+	}
+	if err := m.modeStore.Save(context.Background(), mode); err != nil {
+		return "", err
+	}
+
+	warnings := make([]string, 0, 1)
+	if state != nil && strings.EqualFold(strings.TrimSpace(state.CurrentModeKey), "link") {
+		clearWarning, clearErr := m.clearConfiguredLinkCommand(context.Background())
+		if clearErr != nil {
+			return "", clearErr
+		}
+		if strings.TrimSpace(clearWarning) != "" {
+			warnings = append(warnings, clearWarning)
+		}
+	}
+
+	if err := m.stateStore.SetCurrentMode(context.Background(), mode.ModeKey, "", ctx.SenderID); err != nil {
+		return "", err
+	}
+
+	m.logAction(ctx, "enabled custom override mode from chat")
+	streamerLogin := m.streamerLogin()
+	senderName := m.senderName(ctx)
+	parts := make([]string, 0, 2)
+	if mode.CoordinatedTwitchTitle != "" {
+		parts = append(parts, fmt.Sprintf("title: %s", mode.CoordinatedTwitchTitle))
+	}
+	if mode.CoordinatedTwitchCategoryName != "" {
+		parts = append(parts, fmt.Sprintf("game: %s", mode.CoordinatedTwitchCategoryName))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "no title/game override")
+	}
+
+	return strings.TrimSpace(fmt.Sprintf("@%s, %s enabled custom mode (%s). Use !mode to switch back to a normal mode. %s", streamerLogin, senderName, strings.Join(parts, ", "), joinWarnings(warnings...))), nil
+}
+
+func (m *Module) lookupTwitchCategory(ctx context.Context, query string) (string, string) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", ""
+	}
+
+	clientID, oauthService, accountStore := m.titleCoordinator()
+	if strings.TrimSpace(clientID) == "" || oauthService == nil || accountStore == nil {
+		return "", query
+	}
+
+	account, err := m.streamerAccountForTitleSync(ctx, oauthService, accountStore)
+	if err != nil || account == nil {
+		return "", query
+	}
+	if strings.TrimSpace(account.AccessToken) == "" {
+		return "", query
+	}
+
+	client := twitchhelix.NewClientWithHTTPClient(
+		&http.Client{Timeout: modeTitleEnforceTimeout},
+		clientID,
+		account.AccessToken,
+	)
+	results, err := client.SearchCategories(ctx, query, 10)
+	if err != nil || len(results) == 0 {
+		return "", query
+	}
+
+	needle := strings.ToLower(strings.TrimSpace(query))
+	best := results[0]
+	for _, result := range results {
+		if strings.EqualFold(strings.TrimSpace(result.Name), needle) {
+			best = result
+			break
+		}
+	}
+
+	return strings.TrimSpace(best.ID), strings.TrimSpace(best.Name)
+}
+
+func (m *Module) cleanupExpiredTemporaryModes(ctx context.Context) error {
+	if m.modeStore == nil {
+		return nil
+	}
+	if err := m.modeStore.DeleteExpiredTemporary(ctx); err != nil {
+		return err
+	}
+	if m.stateStore == nil {
+		return nil
+	}
+
+	state, err := m.stateStore.Get(ctx)
+	if err != nil || state == nil {
+		return err
+	}
+
+	activeKey := strings.TrimSpace(strings.ToLower(state.CurrentModeKey))
+	if activeKey == "" {
+		return nil
+	}
+
+	activeMode, err := m.modeStore.Get(ctx, activeKey)
+	if err != nil {
+		return err
+	}
+	if activeMode != nil {
+		return nil
+	}
+
+	return m.stateStore.SetCurrentMode(ctx, "join", "", state.UpdatedBy)
 }
 
 func (m *Module) tickSocialTimer(ctx context.Context) error {
@@ -792,6 +1003,10 @@ func (m *Module) streamerLogin() string {
 	}
 
 	return channel
+}
+
+func isQuickOverrideModeKey(modeKey string) bool {
+	return strings.EqualFold(strings.TrimSpace(modeKey), quickTempModeKey)
 }
 
 func (m *Module) senderName(ctx modules.CommandContext) string {

@@ -32,9 +32,11 @@ import { MassModerationPage } from "./moderator/pages/MassModerationPage";
 import { SettingsPage } from "./moderator/pages/SettingsPage";
 import { SpamFiltersPage } from "./moderator/pages/SpamFiltersPage";
 import { TimersPage } from "./moderator/pages/TimersPage";
+import { WebsitePage } from "./moderator/pages/WebsitePage";
 import { PublicCommandsPage } from "./public/PublicCommandsPage";
 import { PublicHomePage } from "./public/PublicHomePage";
 import { PublicLayout } from "./public/PublicLayout";
+import { PublicOverlayPage } from "./public/PublicOverlayPage";
 import { PublicProfilePage } from "./public/PublicProfilePage";
 import { PublicQuotesPage } from "./public/PublicQuotesPage";
 
@@ -59,6 +61,9 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/dashboard/*" element={<LegacyDashboardRedirect />} />
+          <Route path="/overlay" element={<PublicOverlayPage />} />
+          <Route path="/overlay/polls" element={<Navigate to="/overlay" replace />} />
+          <Route path="/overlay/predictions" element={<Navigate to="/overlay" replace />} />
           <Route element={<PublicLayout />}>
             <Route path="/" element={<PublicHomePage />} />
             <Route path="/commands" element={<PublicCommandsPage />} />
@@ -176,6 +181,14 @@ export function App() {
               element={
                 <RequireDashboardView view="giveaways">
                   <GiveawayDashboardPage />
+                </RequireDashboardView>
+              }
+            />
+            <Route
+              path="website"
+              element={
+                <RequireDashboardView view="website">
+                  <WebsitePage />
                 </RequireDashboardView>
               }
             />

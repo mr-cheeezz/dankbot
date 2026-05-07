@@ -12,6 +12,7 @@ export type ViewKey =
   | "massModeration"
   | "channelPoints"
   | "giveaways"
+  | "website"
   | "integrations"
   | "settings";
 
@@ -105,6 +106,8 @@ export type ModeEntry = {
   timerMessage: string;
   timerIntervalSeconds: number;
   builtin: boolean;
+  temporaryMode: boolean;
+  expiresInMinutes: number;
 };
 
 export type TwitchCategorySearchEntry = {
@@ -583,6 +586,17 @@ export type PublicHomeSettings = {
     | "custom";
   robloxLinkCommandTemplate: string;
   robloxLinkCommandDeleteTemplate: string;
+};
+
+export type WebsiteOverlaySettings = {
+  pollsEnabled: boolean;
+  predictionsEnabled: boolean;
+  pollPosition: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  predictionPosition: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  pollOffsetX: number;
+  pollOffsetY: number;
+  predictionOffsetX: number;
+  predictionOffsetY: number;
 };
 
 export type PlaceholderItem = {

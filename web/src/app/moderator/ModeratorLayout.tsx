@@ -10,6 +10,7 @@ import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import IntegrationInstructionsRoundedIcon from "@mui/icons-material/IntegrationInstructionsRounded";
 import KeyboardCommandKeyRoundedIcon from "@mui/icons-material/KeyboardCommandKeyRounded";
 import LoginRoundedIcon from "@mui/icons-material/LoginRounded";
+import LanguageRoundedIcon from "@mui/icons-material/LanguageRounded";
 import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SecurityRoundedIcon from "@mui/icons-material/SecurityRounded";
@@ -128,6 +129,8 @@ function iconForView(view: ViewKey): ReactNode {
       return <PaidRoundedIcon fontSize="small" />;
     case "giveaways":
       return <CardGiftcardRoundedIcon fontSize="small" />;
+    case "website":
+      return <LanguageRoundedIcon fontSize="small" />;
     case "integrations":
       return <IntegrationInstructionsRoundedIcon fontSize="small" />;
     case "settings":

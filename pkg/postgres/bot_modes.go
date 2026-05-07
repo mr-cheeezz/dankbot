@@ -22,6 +22,8 @@ type BotMode struct {
 	TimerEnabled                  bool
 	TimerMessage                  string
 	TimerIntervalSeconds          int
+	TemporaryMode                 bool
+	ExpiresAt                     time.Time
 	LastTimerSentAt               time.Time
 	CreatedAt                     time.Time
 	UpdatedAt                     time.Time
@@ -50,6 +52,12 @@ func (s *BotModeStore) Save(ctx context.Context, mode BotMode) error {
 	mode.CoordinatedTwitchTitle = strings.TrimSpace(mode.CoordinatedTwitchTitle)
 	mode.CoordinatedTwitchCategoryID = strings.TrimSpace(mode.CoordinatedTwitchCategoryID)
 	mode.CoordinatedTwitchCategoryName = strings.TrimSpace(mode.CoordinatedTwitchCategoryName)
+	if mode.ExpiresAt.IsZero() {
+		mode.TemporaryMode = false
+	}
+	if !mode.TemporaryMode {
+		mode.ExpiresAt = time.Time{}
+	}
 
 	if mode.ModeKey == "" {
 		return fmt.Errorf("mode key is required")
@@ -75,10 +83,12 @@ INSERT INTO bot_modes (
 	timer_enabled,
 	timer_message,
 	timer_interval_seconds,
+	temporary_mode,
+	expires_at,
 	created_at,
 	updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
 ON CONFLICT (mode_key) DO UPDATE SET
 	title = EXCLUDED.title,
 	description = EXCLUDED.description,
@@ -92,6 +102,8 @@ ON CONFLICT (mode_key) DO UPDATE SET
 	timer_enabled = EXCLUDED.timer_enabled,
 	timer_message = EXCLUDED.timer_message,
 	timer_interval_seconds = EXCLUDED.timer_interval_seconds,
+	temporary_mode = EXCLUDED.temporary_mode,
+	expires_at = EXCLUDED.expires_at,
 	updated_at = NOW()
 `,
 		mode.ModeKey,
@@ -107,6 +119,8 @@ ON CONFLICT (mode_key) DO UPDATE SET
 		mode.TimerEnabled,
 		mode.TimerMessage,
 		mode.TimerIntervalSeconds,
+		mode.TemporaryMode,
+		nullableTime(mode.ExpiresAt),
 	)
 	if err != nil {
 		return fmt.Errorf("save bot mode %q: %w", mode.ModeKey, err)
@@ -128,6 +142,7 @@ func (s *BotModeStore) Get(ctx context.Context, modeKey string) (*BotMode, error
 
 	var mode BotMode
 	var lastTimerSentAt sql.NullTime
+	var expiresAt sql.NullTime
 	err = db.QueryRowContext(
 		ctx,
 		`
@@ -145,6 +160,8 @@ SELECT
 	timer_enabled,
 	timer_message,
 	timer_interval_seconds,
+	temporary_mode,
+	expires_at,
 	last_timer_sent_at,
 	created_at,
 	updated_at
@@ -166,6 +183,8 @@ WHERE mode_key = $1
 		&mode.TimerEnabled,
 		&mode.TimerMessage,
 		&mode.TimerIntervalSeconds,
+		&mode.TemporaryMode,
+		&expiresAt,
 		&lastTimerSentAt,
 		&mode.CreatedAt,
 		&mode.UpdatedAt,
@@ -179,6 +198,15 @@ WHERE mode_key = $1
 
 	if lastTimerSentAt.Valid {
 		mode.LastTimerSentAt = lastTimerSentAt.Time
+	}
+	if expiresAt.Valid {
+		mode.ExpiresAt = expiresAt.Time
+	}
+	if mode.TemporaryMode && !mode.ExpiresAt.IsZero() && !mode.ExpiresAt.After(time.Now().UTC()) && !mode.IsBuiltin {
+		if err := s.Delete(ctx, mode.ModeKey); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 
 	return &mode, nil
@@ -207,6 +235,8 @@ SELECT
 	timer_enabled,
 	timer_message,
 	timer_interval_seconds,
+	temporary_mode,
+	expires_at,
 	last_timer_sent_at,
 	created_at,
 	updated_at
@@ -223,6 +253,7 @@ ORDER BY is_builtin DESC, title ASC, mode_key ASC
 	for rows.Next() {
 		var mode BotMode
 		var lastTimerSentAt sql.NullTime
+		var expiresAt sql.NullTime
 		if err := rows.Scan(
 			&mode.ModeKey,
 			&mode.Title,
@@ -237,6 +268,8 @@ ORDER BY is_builtin DESC, title ASC, mode_key ASC
 			&mode.TimerEnabled,
 			&mode.TimerMessage,
 			&mode.TimerIntervalSeconds,
+			&mode.TemporaryMode,
+			&expiresAt,
 			&lastTimerSentAt,
 			&mode.CreatedAt,
 			&mode.UpdatedAt,
@@ -246,6 +279,12 @@ ORDER BY is_builtin DESC, title ASC, mode_key ASC
 
 		if lastTimerSentAt.Valid {
 			mode.LastTimerSentAt = lastTimerSentAt.Time
+		}
+		if expiresAt.Valid {
+			mode.ExpiresAt = expiresAt.Time
+		}
+		if mode.TemporaryMode && !mode.ExpiresAt.IsZero() && !mode.ExpiresAt.After(time.Now().UTC()) && !mode.IsBuiltin {
+			continue
 		}
 
 		modes = append(modes, mode)
@@ -297,6 +336,8 @@ func (s *BotModeStore) EnsureDefaults(ctx context.Context, defaults []BotMode) e
 		mode.CoordinatedTwitchTitle = strings.TrimSpace(mode.CoordinatedTwitchTitle)
 		mode.CoordinatedTwitchCategoryID = strings.TrimSpace(mode.CoordinatedTwitchCategoryID)
 		mode.CoordinatedTwitchCategoryName = strings.TrimSpace(mode.CoordinatedTwitchCategoryName)
+		mode.TemporaryMode = false
+		mode.ExpiresAt = time.Time{}
 		if mode.ModeKey == "" || mode.Title == "" {
 			continue
 		}
@@ -318,10 +359,12 @@ INSERT INTO bot_modes (
 	timer_enabled,
 	timer_message,
 	timer_interval_seconds,
+	temporary_mode,
+	expires_at,
 	created_at,
 	updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
 ON CONFLICT (mode_key) DO NOTHING
 `,
 			mode.ModeKey,
@@ -337,6 +380,8 @@ ON CONFLICT (mode_key) DO NOTHING
 			mode.TimerEnabled,
 			mode.TimerMessage,
 			mode.TimerIntervalSeconds,
+			mode.TemporaryMode,
+			nullableTime(mode.ExpiresAt),
 		); err != nil {
 			return fmt.Errorf("ensure default bot mode %q: %w", mode.ModeKey, err)
 		}
@@ -394,6 +439,13 @@ ON CONFLICT (mode_key) DO NOTHING
 	return nil
 }
 
+func nullableTime(value time.Time) any {
+	if value.IsZero() {
+		return nil
+	}
+	return value
+}
+
 func (s *BotModeStore) Delete(ctx context.Context, modeKey string) error {
 	db, err := s.client.DB(ctx)
 	if err != nil {
@@ -411,6 +463,22 @@ func (s *BotModeStore) Delete(ctx context.Context, modeKey string) error {
 		modeKey,
 	); err != nil {
 		return fmt.Errorf("delete bot mode %q: %w", modeKey, err)
+	}
+
+	return nil
+}
+
+func (s *BotModeStore) DeleteExpiredTemporary(ctx context.Context) error {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(
+		ctx,
+		`DELETE FROM bot_modes WHERE temporary_mode = TRUE AND is_builtin = FALSE AND expires_at IS NOT NULL AND expires_at <= NOW()`,
+	); err != nil {
+		return fmt.Errorf("delete expired temporary bot modes: %w", err)
 	}
 
 	return nil

@@ -49,6 +49,7 @@ export function canAccessDashboardView(session: AuthSession, view: ViewKey): boo
     case "giveaways":
     case "discord":
     case "modes":
+    case "website":
     case "blockedTerms":
     case "massModeration":
       return canAccessEditorFeatureViews(session);

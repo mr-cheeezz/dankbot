@@ -305,6 +305,12 @@ func buildOpenAPISpec(appState *state.State) map[string]any {
 			"/api/public/quotes": map[string]any{
 				"get": op("Public", "Public quotes", "Returns publicly visible quotes."),
 			},
+			"/api/public/overlay/polls": map[string]any{
+				"get": op("Public", "Poll overlay state", "Returns current poll overlay payload when a poll is active."),
+			},
+			"/api/public/overlay/predictions": map[string]any{
+				"get": op("Public", "Prediction overlay state", "Returns current prediction overlay payload when a prediction is active."),
+			},
 			"/api/public/users/{login}": map[string]any{
 				"get": map[string]any{
 					"tags":        []string{"Public"},
@@ -338,6 +344,10 @@ func buildOpenAPISpec(appState *state.State) map[string]any {
 			"/api/dashboard/public-home-settings": map[string]any{
 				"get": authedOp("Dashboard", "Get channel settings", "Returns public-home and promo-link settings."),
 				"put": authedOp("Dashboard", "Save channel settings", "Saves public-home and promo-link settings."),
+			},
+			"/api/dashboard/website-overlay-settings": map[string]any{
+				"get": authedOp("Dashboard", "Get website overlay settings", "Returns poll and prediction overlay settings."),
+				"put": authedOp("Dashboard", "Save website overlay settings", "Saves poll and prediction overlay settings."),
 			},
 			"/api/dashboard/roles": map[string]any{
 				"get":    authedOp("Dashboard", "List dashboard roles", "Returns assigned editor roles."),

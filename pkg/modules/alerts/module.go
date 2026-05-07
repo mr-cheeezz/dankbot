@@ -124,6 +124,16 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 		return nil
 	}
 
+	preAlertMessage, err := m.renderPreAlert(event.Type, event.Event)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(preAlertMessage) != "" {
+		if err := say(channel, preAlertMessage); err != nil {
+			return err
+		}
+	}
+
 	message, err := m.renderTwitchAlert(event.Type, event.Event)
 	if err != nil {
 		return err
@@ -133,6 +143,33 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 	}
 
 	return say(channel, message)
+}
+
+func (m *Module) renderPreAlert(eventType string, raw json.RawMessage) (string, error) {
+	switch eventType {
+	case "channel.subscribe":
+		var event eventsub.SubscriptionEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			return "", fmt.Errorf("decode subscription pre-alert event: %w", err)
+		}
+		if event.IsGift {
+			return "", nil
+		}
+		user := displayName(event.UserName, event.UserLogin)
+		tier := humanTier(event.Tier)
+		fallback := fmt.Sprintf("Incoming sub alert: %s (%s)", user, tier)
+		return m.renderFromAlertEntry(
+			"sub-prealert",
+			map[string]string{
+				"user": user,
+				"tier": tier,
+			},
+			fallback,
+			nil,
+		)
+	default:
+		return "", nil
+	}
 }
 
 func (m *Module) isDuplicateAlertEvent(event eventsub.PublishedEvent) bool {

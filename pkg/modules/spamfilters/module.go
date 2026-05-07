@@ -480,9 +480,6 @@ func (m *Module) handlePublishedEvent(payload string) error {
 	if err := json.Unmarshal([]byte(payload), &published); err != nil {
 		return fmt.Errorf("decode published event: %w", err)
 	}
-	if published.Source != eventsub.SourceTwitchEventSub {
-		return nil
-	}
 	if !m.matchesStreamerID(strings.TrimSpace(published.BroadcasterID), published.Event) {
 		return nil
 	}
@@ -534,6 +531,13 @@ func (m *Module) handlePublishedEvent(payload string) error {
 				shouldTrigger = true
 			}
 		}
+	case "streamlabs.donation", "streamlabs.tip", "streamelements.tip", "thirdparty.donation":
+		if settings.DonationsEnabled {
+			donationAmount := extractThirdPartyDonationAmount(published.Event)
+			if donationAmount >= settings.DonationsThreshold {
+				shouldTrigger = true
+			}
+		}
 	}
 
 	if !shouldTrigger {
@@ -579,6 +583,9 @@ func (m *Module) matchesStreamerID(eventBroadcasterID string, rawEvent json.RawM
 	var fallback struct {
 		BroadcasterUserID   string `json:"broadcaster_user_id"`
 		ToBroadcasterUserID string `json:"to_broadcaster_user_id"`
+		StreamerID          string `json:"streamer_id"`
+		ChannelID           string `json:"channel_id"`
+		TwitchUserID        string `json:"twitch_user_id"`
 	}
 	if err := json.Unmarshal(rawEvent, &fallback); err != nil {
 		return false
@@ -586,7 +593,36 @@ func (m *Module) matchesStreamerID(eventBroadcasterID string, rawEvent json.RawM
 	if strings.EqualFold(strings.TrimSpace(fallback.BroadcasterUserID), streamerID) {
 		return true
 	}
-	return strings.EqualFold(strings.TrimSpace(fallback.ToBroadcasterUserID), streamerID)
+	if strings.EqualFold(strings.TrimSpace(fallback.ToBroadcasterUserID), streamerID) {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(fallback.StreamerID), streamerID) {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(fallback.ChannelID), streamerID) {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(fallback.TwitchUserID), streamerID)
+}
+
+func extractThirdPartyDonationAmount(raw json.RawMessage) float64 {
+	amount := extractNestedNumberFromJSON(raw, []string{"amount", "value"}, []string{"amount", "decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	amount = extractNestedNumberFromJSON(raw, []string{"amount"}, []string{"decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	amount = extractNestedNumberFromJSON(raw, []string{"tip", "amount"}, []string{"tip", "decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	amount = extractNestedNumberFromJSON(raw, []string{"donation", "amount"}, []string{"donation", "decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	return 0
 }
 
 func extractNestedNumberFromJSON(raw json.RawMessage, amountPath []string, decimalPath []string) float64 {

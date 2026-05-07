@@ -56,6 +56,31 @@ type PredictionEventSnapshot struct {
 	Outcomes             []PredictionOutcomeSnapshot
 }
 
+type PollOverlayState struct {
+	PollID            string
+	Title             string
+	Status            string
+	BroadcasterUserID string
+	BroadcasterLogin  string
+	BroadcasterName   string
+	StartedAt         time.Time
+	EndedAt           time.Time
+	Choices           []PollChoiceSnapshot
+}
+
+type PredictionOverlayState struct {
+	PredictionID      string
+	Title             string
+	Status            string
+	BroadcasterUserID string
+	BroadcasterLogin  string
+	BroadcasterName   string
+	StartedAt         time.Time
+	EndedAt           time.Time
+	LockedAt          time.Time
+	Outcomes          []PredictionOutcomeSnapshot
+}
+
 type ChannelPointRedemption struct {
 	RedemptionID         string
 	TwitchSubscriptionID string
@@ -434,4 +459,145 @@ func (s *EventSubActivityStore) GetUserRedemptionStats(ctx context.Context, user
 	}
 
 	return stats, nil
+}
+
+func (s *EventSubActivityStore) GetLatestPollOverlayState(ctx context.Context, broadcasterUserID string) (*PollOverlayState, error) {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT poll_id, title, status, broadcaster_user_id, broadcaster_user_login, broadcaster_user_name, started_at, ended_at, id
+		 FROM twitch_poll_events
+		 WHERE broadcaster_user_id = $1
+		 ORDER BY COALESCE(started_at, created_at) DESC, id DESC
+		 LIMIT 1`,
+		broadcasterUserID,
+	)
+
+	var (
+		state       PollOverlayState
+		startedAt   sql.NullTime
+		endedAt     sql.NullTime
+		pollEventID int64
+	)
+	if err := row.Scan(
+		&state.PollID,
+		&state.Title,
+		&state.Status,
+		&state.BroadcasterUserID,
+		&state.BroadcasterLogin,
+		&state.BroadcasterName,
+		&startedAt,
+		&endedAt,
+		&pollEventID,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load latest poll overlay state %q: %w", broadcasterUserID, err)
+	}
+	if startedAt.Valid {
+		state.StartedAt = startedAt.Time
+	}
+	if endedAt.Valid {
+		state.EndedAt = endedAt.Time
+	}
+
+	choicesRows, err := db.QueryContext(
+		ctx,
+		`SELECT choice_id, title, votes, channel_points_votes, bits_votes
+		 FROM twitch_poll_event_choices
+		 WHERE poll_event_id = $1
+		 ORDER BY id ASC`,
+		pollEventID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load poll overlay choices %q: %w", broadcasterUserID, err)
+	}
+	defer choicesRows.Close()
+
+	for choicesRows.Next() {
+		var choice PollChoiceSnapshot
+		if err := choicesRows.Scan(
+			&choice.ChoiceID,
+			&choice.Title,
+			&choice.Votes,
+			&choice.ChannelPointsVotes,
+			&choice.BitsVotes,
+		); err != nil {
+			return nil, fmt.Errorf("scan poll overlay choice %q: %w", broadcasterUserID, err)
+		}
+		state.Choices = append(state.Choices, choice)
+	}
+	if err := choicesRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate poll overlay choices %q: %w", broadcasterUserID, err)
+	}
+
+	return &state, nil
+}
+
+func (s *EventSubActivityStore) GetLatestPredictionOverlayState(ctx context.Context, broadcasterUserID string) (*PredictionOverlayState, error) {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	row := db.QueryRowContext(
+		ctx,
+		`SELECT prediction_id, title, status, broadcaster_user_id, broadcaster_user_login, broadcaster_user_name,
+		        started_at, ended_at, locked_at, raw_event
+		 FROM twitch_prediction_events
+		 WHERE broadcaster_user_id = $1
+		 ORDER BY COALESCE(started_at, created_at) DESC, id DESC
+		 LIMIT 1`,
+		broadcasterUserID,
+	)
+
+	var (
+		state          PredictionOverlayState
+		startedAt      sql.NullTime
+		endedAt        sql.NullTime
+		lockedAt       sql.NullTime
+		rawEventString string
+	)
+	if err := row.Scan(
+		&state.PredictionID,
+		&state.Title,
+		&state.Status,
+		&state.BroadcasterUserID,
+		&state.BroadcasterLogin,
+		&state.BroadcasterName,
+		&startedAt,
+		&endedAt,
+		&lockedAt,
+		&rawEventString,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load latest prediction overlay state %q: %w", broadcasterUserID, err)
+	}
+	if startedAt.Valid {
+		state.StartedAt = startedAt.Time
+	}
+	if endedAt.Valid {
+		state.EndedAt = endedAt.Time
+	}
+	if lockedAt.Valid {
+		state.LockedAt = lockedAt.Time
+	}
+
+	var decoded struct {
+		Event struct {
+			Outcomes []PredictionOutcomeSnapshot `json:"outcomes"`
+		} `json:"event"`
+	}
+	if err := json.Unmarshal([]byte(rawEventString), &decoded); err == nil {
+		state.Outcomes = decoded.Event.Outcomes
+	}
+
+	return &state, nil
 }

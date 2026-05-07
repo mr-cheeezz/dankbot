@@ -89,6 +89,8 @@ func Register(mux *http.ServeMux, appState *state.State) {
 	mux.Handle("/api/public/commands", http.HandlerFunc(handler{appState: appState}.commands))
 	mux.Handle("/api/public/quotes", http.HandlerFunc(handler{appState: appState}.quotes))
 	mux.Handle("/api/public/users/", http.HandlerFunc(handler{appState: appState}.userProfile))
+	mux.Handle("/api/public/overlay/polls", http.HandlerFunc(handler{appState: appState}.pollOverlay))
+	mux.Handle("/api/public/overlay/predictions", http.HandlerFunc(handler{appState: appState}.predictionOverlay))
 }
 
 func NewHandler(appState *state.State) http.Handler {
@@ -502,7 +504,11 @@ func enrichWithRobloxPresence(ctx context.Context, appState *state.State, summar
 	}
 
 	presence := presences[0]
-	summary.RobloxGameName = strings.TrimSpace(presence.LastLocation)
+	robloxGameName := cleanRobloxPresenceLocation(presence.LastLocation)
+	summary.RobloxGameName = robloxGameName
+	if robloxGameName != "" {
+		summary.StreamGameName = robloxGameName
+	}
 	rootPlaceID := presence.RootPlaceID
 	if rootPlaceID == 0 {
 		rootPlaceID = presence.PlaceID
@@ -510,6 +516,17 @@ func enrichWithRobloxPresence(ctx context.Context, appState *state.State, summar
 	if rootPlaceID > 0 {
 		summary.RobloxGameURL = robloxGameURL(rootPlaceID)
 	}
+}
+
+func cleanRobloxPresenceLocation(name string) string {
+	cleaned := strings.TrimSpace(name)
+	if cleaned == "" {
+		return ""
+	}
+	if strings.EqualFold(cleaned, "website") {
+		return ""
+	}
+	return cleaned
 }
 
 func looksLikeURL(value string) bool {

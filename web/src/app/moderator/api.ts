@@ -25,6 +25,7 @@ import type {
   ModeEntry,
   ModuleCatalogEntry,
   PublicHomeSettings,
+  WebsiteOverlaySettings,
   SpamFilterEntry,
   SpamFilterHypeSettings,
   TwitchCategorySearchEntry,
@@ -124,6 +125,17 @@ type PublicHomeSettingsResponse = {
   roblox_link_command_delete_template: string;
 };
 
+type WebsiteOverlaySettingsResponse = {
+  polls_enabled: boolean;
+  predictions_enabled: boolean;
+  poll_position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  prediction_position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  poll_offset_x: number;
+  poll_offset_y: number;
+  prediction_offset_x: number;
+  prediction_offset_y: number;
+};
+
 type ModesResponse = {
   items: Array<{
     id: string;
@@ -140,6 +152,8 @@ type ModesResponse = {
     timer_message: string;
     timer_interval_seconds: number;
     builtin: boolean;
+    temporary_mode?: boolean;
+    expires_in_minutes?: number;
   }>;
 };
 
@@ -1660,6 +1674,11 @@ export async function fetchModes(signal?: AbortSignal): Promise<ModeEntry[]> {
     timerMessage: entry.timer_message,
     timerIntervalSeconds: entry.timer_interval_seconds,
     builtin: entry.builtin,
+    temporaryMode: entry.temporary_mode === true,
+    expiresInMinutes:
+      Number.isFinite(entry.expires_in_minutes) && (entry.expires_in_minutes ?? 0) > 0
+        ? Number(entry.expires_in_minutes)
+        : 0,
   }));
 }
 
@@ -1677,6 +1696,8 @@ function modeRequestBody(entry: Omit<ModeEntry, "id">, originalKey?: string) {
     timer_enabled: entry.timerEnabled,
     timer_message: entry.timerMessage,
     timer_interval_seconds: entry.timerIntervalSeconds,
+    temporary_mode: entry.temporaryMode,
+    expires_in_minutes: entry.expiresInMinutes,
     original_key: originalKey ?? entry.key,
   });
 }
@@ -1714,6 +1735,11 @@ export async function createMode(
     timerMessage: item.timer_message,
     timerIntervalSeconds: item.timer_interval_seconds,
     builtin: item.builtin,
+    temporaryMode: item.temporary_mode === true,
+    expiresInMinutes:
+      Number.isFinite(item.expires_in_minutes) && (item.expires_in_minutes ?? 0) > 0
+        ? Number(item.expires_in_minutes)
+        : 0,
   }));
 }
 
@@ -1751,6 +1777,11 @@ export async function updateMode(
     timerMessage: item.timer_message,
     timerIntervalSeconds: item.timer_interval_seconds,
     builtin: item.builtin,
+    temporaryMode: item.temporary_mode === true,
+    expiresInMinutes:
+      Number.isFinite(item.expires_in_minutes) && (item.expires_in_minutes ?? 0) > 0
+        ? Number(item.expires_in_minutes)
+        : 0,
   }));
 }
 
@@ -1786,6 +1817,11 @@ export async function deleteMode(modeKey: string): Promise<ModeEntry[]> {
     timerMessage: item.timer_message,
     timerIntervalSeconds: item.timer_interval_seconds,
     builtin: item.builtin,
+    temporaryMode: item.temporary_mode === true,
+    expiresInMinutes:
+      Number.isFinite(item.expires_in_minutes) && (item.expires_in_minutes ?? 0) > 0
+        ? Number(item.expires_in_minutes)
+        : 0,
   }));
 }
 
@@ -2186,6 +2222,73 @@ export async function savePublicHomeSettings(
     robloxLinkCommandTarget: payload.roblox_link_command_target ?? "dankbot",
     robloxLinkCommandTemplate: payload.roblox_link_command_template ?? "",
     robloxLinkCommandDeleteTemplate: payload.roblox_link_command_delete_template ?? "",
+  };
+}
+
+export async function fetchWebsiteOverlaySettings(
+  signal?: AbortSignal,
+): Promise<WebsiteOverlaySettings> {
+  const response = await fetch("/api/dashboard/website-overlay-settings", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load website overlay settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as WebsiteOverlaySettingsResponse;
+  return {
+    pollsEnabled: payload.polls_enabled,
+    predictionsEnabled: payload.predictions_enabled,
+    pollPosition: payload.poll_position ?? "bottom-left",
+    predictionPosition: payload.prediction_position ?? "bottom-right",
+    pollOffsetX: payload.poll_offset_x ?? 24,
+    pollOffsetY: payload.poll_offset_y ?? 24,
+    predictionOffsetX: payload.prediction_offset_x ?? 24,
+    predictionOffsetY: payload.prediction_offset_y ?? 24,
+  };
+}
+
+export async function saveWebsiteOverlaySettings(
+  settings: WebsiteOverlaySettings,
+): Promise<WebsiteOverlaySettings> {
+  const response = await fetch("/api/dashboard/website-overlay-settings", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      polls_enabled: settings.pollsEnabled,
+      predictions_enabled: settings.predictionsEnabled,
+      poll_position: settings.pollPosition,
+      prediction_position: settings.predictionPosition,
+      poll_offset_x: settings.pollOffsetX,
+      poll_offset_y: settings.pollOffsetY,
+      prediction_offset_x: settings.predictionOffsetX,
+      prediction_offset_y: settings.predictionOffsetY,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to save website overlay settings: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as WebsiteOverlaySettingsResponse;
+  return {
+    pollsEnabled: payload.polls_enabled,
+    predictionsEnabled: payload.predictions_enabled,
+    pollPosition: payload.poll_position ?? "bottom-left",
+    predictionPosition: payload.prediction_position ?? "bottom-right",
+    pollOffsetX: payload.poll_offset_x ?? 24,
+    pollOffsetY: payload.poll_offset_y ?? 24,
+    predictionOffsetX: payload.prediction_offset_x ?? 24,
+    predictionOffsetY: payload.prediction_offset_y ?? 24,
   };
 }
 

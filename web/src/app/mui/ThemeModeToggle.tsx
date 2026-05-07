@@ -16,23 +16,23 @@ export function ThemeModeToggle() {
       title={isDark ? "Switch to light theme" : "Switch to dark theme"}
       sx={{
         position: "relative",
-        width: 102,
-        height: 36,
+        width: 116,
+        height: 38,
         p: 0,
         m: 0,
         overflow: "hidden",
         appearance: "none",
         cursor: "pointer",
-        display: "inline-grid",
+        display: "inline-flex",
         alignItems: "center",
         border: "none",
         borderRadius: "999px",
         background: isDark
-          ? "linear-gradient(180deg, #0b1d3f 0%, #131f38 58%, #191c30 100%)"
-          : "linear-gradient(180deg, #7fd1ff 0%, #a7e7ff 62%, #d7f4ff 100%)",
+          ? "linear-gradient(180deg, #08132a 0%, #10244c 52%, #0f1f41 100%)"
+          : "linear-gradient(180deg, #73cfff 0%, #a7e8ff 60%, #e4f8ff 100%)",
         boxShadow: isDark
-          ? "inset 0 0 0 1px rgba(165,190,255,0.2), 0 6px 14px rgba(0,0,0,0.32)"
-          : "inset 0 0 0 1px rgba(43,125,196,0.26), 0 6px 14px rgba(26,102,163,0.24)",
+          ? "inset 0 0 0 1px rgba(146,176,255,0.3), 0 6px 14px rgba(0,0,0,0.32)"
+          : "inset 0 0 0 1px rgba(42,118,189,0.28), 0 6px 14px rgba(26,102,163,0.24)",
         transition: "background 260ms ease, box-shadow 260ms ease",
         "@keyframes dankbot-stars": {
           "0%": {
@@ -67,10 +67,10 @@ export function ThemeModeToggle() {
             height: 2,
             borderRadius: "50%",
             backgroundColor: "#fff",
-            top: 8,
-            left: 18,
+            top: 9,
+            left: 14,
             boxShadow:
-              "14px 6px 0 0 #fff, 32px -2px 0 0 rgba(255,255,255,0.95), 47px 7px 0 0 rgba(255,255,255,0.9), 64px 2px 0 0 #fff, 77px 10px 0 0 rgba(255,255,255,0.95)",
+              "14px 6px 0 0 #fff, 30px -2px 0 0 rgba(255,255,255,0.95), 46px 8px 0 0 rgba(255,255,255,0.9), 63px 2px 0 0 #fff, 82px 9px 0 0 rgba(255,255,255,0.95)",
             animation: "dankbot-stars 7s linear infinite",
           },
         }}
@@ -79,15 +79,15 @@ export function ThemeModeToggle() {
       <Box
         sx={{
           position: "absolute",
-          top: isDark ? 9 : 11,
-          left: isDark ? 62 : 10,
-          width: isDark ? 16 : 14,
-          height: isDark ? 16 : 14,
+          top: 8,
+          left: isDark ? 79 : 11,
+          width: 22,
+          height: 22,
           borderRadius: "50%",
-          backgroundColor: isDark ? "#dfe9ff" : "#fff8b4",
+          backgroundColor: isDark ? "#e2ecff" : "#fff6a5",
           boxShadow: isDark
-            ? "inset -4px -3px 0 rgba(186,206,255,0.55), 0 0 10px rgba(185,205,255,0.45)"
-            : "0 0 14px rgba(255,224,122,0.7), inset -2px -2px 0 rgba(255,214,91,0.48)",
+            ? "inset -6px -4px 0 rgba(182,203,255,0.56), 0 0 12px rgba(183,205,255,0.5)"
+            : "0 0 16px rgba(255,223,110,0.72), inset -3px -3px 0 rgba(255,206,74,0.46)",
           transition:
             "left 280ms cubic-bezier(0.2, 0.8, 0.2, 1), top 280ms cubic-bezier(0.2, 0.8, 0.2, 1), width 280ms ease, height 280ms ease, background-color 220ms ease, box-shadow 220ms ease",
           "&::before": isDark
@@ -109,9 +109,9 @@ export function ThemeModeToggle() {
         sx={{
           position: "absolute",
           bottom: 3,
-          left: 8,
-          width: 86,
-          height: 8,
+          left: 9,
+          width: 98,
+          height: 9,
           borderRadius: "999px",
           background: isDark
             ? "linear-gradient(180deg, rgba(28,36,62,0.85) 0%, rgba(16,20,36,0.95) 100%)"
@@ -122,12 +122,12 @@ export function ThemeModeToggle() {
       <Box
         sx={{
           position: "absolute",
-          bottom: 2,
-          right: 8,
-          px: 0.75,
-          py: 0.15,
+          bottom: 2.5,
+          right: 10,
+          px: 0.7,
+          py: 0.1,
           borderRadius: "999px",
-          fontSize: "0.58rem",
+          fontSize: "0.56rem",
           letterSpacing: "0.08em",
           fontWeight: 800,
           color: isDark ? alpha("#ecf3ff", 0.9) : alpha("#1b4a72", 0.85),
