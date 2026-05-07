@@ -135,10 +135,13 @@ export type PublicPollOverlay = {
   title: string;
   status: string;
   startedAt: string;
+  endsAt: string;
   endedAt: string;
   position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   offsetX: number;
   offsetY: number;
+  amountPerVote: number;
+  totalVotes: number;
   choices: Array<{
     title: string;
     votes: number;
@@ -158,6 +161,8 @@ export type PublicPredictionOverlay = {
   position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   offsetX: number;
   offsetY: number;
+  totalUsers: number;
+  totalPoints: number;
   outcomes: Array<{
     title: string;
     users: number;
@@ -320,10 +325,13 @@ type PublicPollOverlayResponse = {
   title: string;
   status: string;
   started_at: string;
+  ends_at: string;
   ended_at: string;
   position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   offset_x: number;
   offset_y: number;
+  amount_per_vote: number;
+  total_votes: number;
   choices: Array<{
     title: string;
     votes: number;
@@ -343,6 +351,8 @@ type PublicPredictionOverlayResponse = {
   position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   offset_x: number;
   offset_y: number;
+  total_users: number;
+  total_points: number;
   outcomes: Array<{
     title: string;
     users: number;
@@ -695,10 +705,13 @@ export async function fetchPublicPollOverlay(
     title: payload.title ?? "",
     status: payload.status ?? "",
     startedAt: payload.started_at ?? "",
+    endsAt: payload.ends_at ?? "",
     endedAt: payload.ended_at ?? "",
     position: payload.position ?? "bottom-left",
     offsetX: payload.offset_x ?? 24,
     offsetY: payload.offset_y ?? 24,
+    amountPerVote: payload.amount_per_vote ?? 0,
+    totalVotes: payload.total_votes ?? 0,
     choices: (payload.choices ?? []).map((choice) => ({
       title: choice.title,
       votes: choice.votes,
@@ -731,6 +744,8 @@ export async function fetchPublicPredictionOverlay(
     position: payload.position ?? "bottom-right",
     offsetX: payload.offset_x ?? 24,
     offsetY: payload.offset_y ?? 24,
+    totalUsers: payload.total_users ?? 0,
+    totalPoints: payload.total_points ?? 0,
     outcomes: (payload.outcomes ?? []).map((outcome) => ({
       title: outcome.title,
       users: outcome.users,

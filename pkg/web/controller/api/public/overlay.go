@@ -8,16 +8,19 @@ import (
 )
 
 type pollOverlayResponse struct {
-	Enabled   bool   `json:"enabled"`
-	Active    bool   `json:"active"`
-	Title     string `json:"title"`
-	Status    string `json:"status"`
-	StartedAt string `json:"started_at"`
-	EndedAt   string `json:"ended_at"`
-	Position  string `json:"position"`
-	OffsetX   int    `json:"offset_x"`
-	OffsetY   int    `json:"offset_y"`
-	Choices   []struct {
+	Enabled       bool   `json:"enabled"`
+	Active        bool   `json:"active"`
+	Title         string `json:"title"`
+	Status        string `json:"status"`
+	StartedAt     string `json:"started_at"`
+	EndsAt        string `json:"ends_at"`
+	EndedAt       string `json:"ended_at"`
+	Position      string `json:"position"`
+	OffsetX       int    `json:"offset_x"`
+	OffsetY       int    `json:"offset_y"`
+	AmountPerVote int    `json:"amount_per_vote"`
+	TotalVotes    int    `json:"total_votes"`
+	Choices       []struct {
 		Title              string `json:"title"`
 		Votes              int    `json:"votes"`
 		ChannelPointsVotes int    `json:"channel_points_votes"`
@@ -26,17 +29,19 @@ type pollOverlayResponse struct {
 }
 
 type predictionOverlayResponse struct {
-	Enabled   bool   `json:"enabled"`
-	Active    bool   `json:"active"`
-	Title     string `json:"title"`
-	Status    string `json:"status"`
-	StartedAt string `json:"started_at"`
-	EndedAt   string `json:"ended_at"`
-	LockedAt  string `json:"locked_at"`
-	Position  string `json:"position"`
-	OffsetX   int    `json:"offset_x"`
-	OffsetY   int    `json:"offset_y"`
-	Outcomes  []struct {
+	Enabled     bool   `json:"enabled"`
+	Active      bool   `json:"active"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	StartedAt   string `json:"started_at"`
+	EndedAt     string `json:"ended_at"`
+	LockedAt    string `json:"locked_at"`
+	Position    string `json:"position"`
+	OffsetX     int    `json:"offset_x"`
+	OffsetY     int    `json:"offset_y"`
+	TotalUsers  int    `json:"total_users"`
+	TotalPoints int64  `json:"total_points"`
+	Outcomes    []struct {
 		Title         string `json:"title"`
 		Users         int    `json:"users"`
 		ChannelPoints int64  `json:"channel_points"`
@@ -52,7 +57,7 @@ func (h handler) pollOverlay(w http.ResponseWriter, r *http.Request) {
 
 	response := pollOverlayResponse{
 		Enabled:  true,
-		Position: "bottom-left",
+		Position: "top-right",
 		OffsetX:  24,
 		OffsetY:  24,
 	}
@@ -87,10 +92,15 @@ func (h handler) pollOverlay(w http.ResponseWriter, r *http.Request) {
 			if !state.StartedAt.IsZero() {
 				response.StartedAt = state.StartedAt.UTC().Format(time.RFC3339)
 			}
+			if !state.EndsAt.IsZero() {
+				response.EndsAt = state.EndsAt.UTC().Format(time.RFC3339)
+			}
 			if !state.EndedAt.IsZero() {
 				response.EndedAt = state.EndedAt.UTC().Format(time.RFC3339)
 			}
+			response.AmountPerVote = state.AmountPerVote
 			for _, choice := range state.Choices {
+				response.TotalVotes += choice.Votes
 				response.Choices = append(response.Choices, struct {
 					Title              string `json:"title"`
 					Votes              int    `json:"votes"`
@@ -160,6 +170,8 @@ func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
 				response.LockedAt = state.LockedAt.UTC().Format(time.RFC3339)
 			}
 			for _, outcome := range state.Outcomes {
+				response.TotalUsers += outcome.Users
+				response.TotalPoints += outcome.ChannelPoints
 				response.Outcomes = append(response.Outcomes, struct {
 					Title         string `json:"title"`
 					Users         int    `json:"users"`

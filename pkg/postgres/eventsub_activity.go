@@ -64,7 +64,9 @@ type PollOverlayState struct {
 	BroadcasterLogin  string
 	BroadcasterName   string
 	StartedAt         time.Time
+	EndsAt            time.Time
 	EndedAt           time.Time
+	AmountPerVote     int
 	Choices           []PollChoiceSnapshot
 }
 
@@ -469,7 +471,7 @@ func (s *EventSubActivityStore) GetLatestPollOverlayState(ctx context.Context, b
 
 	row := db.QueryRowContext(
 		ctx,
-		`SELECT poll_id, title, status, broadcaster_user_id, broadcaster_user_login, broadcaster_user_name, started_at, ended_at, id
+		`SELECT poll_id, title, status, broadcaster_user_id, broadcaster_user_login, broadcaster_user_name, started_at, ended_at, id, raw_event
 		 FROM twitch_poll_events
 		 WHERE broadcaster_user_id = $1
 		 ORDER BY COALESCE(started_at, created_at) DESC, id DESC
@@ -482,6 +484,7 @@ func (s *EventSubActivityStore) GetLatestPollOverlayState(ctx context.Context, b
 		startedAt   sql.NullTime
 		endedAt     sql.NullTime
 		pollEventID int64
+		rawEvent    string
 	)
 	if err := row.Scan(
 		&state.PollID,
@@ -493,6 +496,7 @@ func (s *EventSubActivityStore) GetLatestPollOverlayState(ctx context.Context, b
 		&startedAt,
 		&endedAt,
 		&pollEventID,
+		&rawEvent,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -504,6 +508,19 @@ func (s *EventSubActivityStore) GetLatestPollOverlayState(ctx context.Context, b
 	}
 	if endedAt.Valid {
 		state.EndedAt = endedAt.Time
+	}
+
+	var pollEvent struct {
+		ChannelPointsVoting struct {
+			AmountPerVote int `json:"amount_per_vote"`
+		} `json:"channel_points_voting"`
+		EndsAt *time.Time `json:"ends_at"`
+	}
+	if err := json.Unmarshal([]byte(rawEvent), &pollEvent); err == nil {
+		state.AmountPerVote = pollEvent.ChannelPointsVoting.AmountPerVote
+		if pollEvent.EndsAt != nil {
+			state.EndsAt = pollEvent.EndsAt.UTC()
+		}
 	}
 
 	choicesRows, err := db.QueryContext(
@@ -591,12 +608,10 @@ func (s *EventSubActivityStore) GetLatestPredictionOverlayState(ctx context.Cont
 	}
 
 	var decoded struct {
-		Event struct {
-			Outcomes []PredictionOutcomeSnapshot `json:"outcomes"`
-		} `json:"event"`
+		Outcomes []PredictionOutcomeSnapshot `json:"outcomes"`
 	}
 	if err := json.Unmarshal([]byte(rawEventString), &decoded); err == nil {
-		state.Outcomes = decoded.Event.Outcomes
+		state.Outcomes = decoded.Outcomes
 	}
 
 	return &state, nil
