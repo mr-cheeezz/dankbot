@@ -86,8 +86,9 @@ export function App() {
               </RequireModerator>
             }
           >
-            <Route index element={<DashboardV2Page />} />
-            <Route path="dashboard-v2" element={<DashboardV2Page />} />
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardV2Page />} />
+            <Route path="dashboard-v2" element={<Navigate to="../dashboard" replace />} />
             <Route path="dashboard-v1" element={<DashboardOverviewPage />} />
             <Route path="commands" element={<CommandsPage />} />
             <Route path="keywords" element={<KeywordsPage />} />
@@ -185,13 +186,14 @@ export function App() {
               }
             />
             <Route
-              path="website"
+              path="overlay"
               element={
                 <RequireDashboardView view="website">
                   <WebsitePage />
                 </RequireDashboardView>
               }
             />
+            <Route path="website" element={<Navigate to="../overlay" replace />} />
             <Route
               path="integrations"
               element={

@@ -14,6 +14,8 @@ import {
   Select,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
@@ -42,6 +44,7 @@ const commonActions = [
 ];
 
 const timeoutActionPattern = /timeout(?:\s+(\d+)\s*([smh]?))?/i;
+type SpamFiltersPageTab = "filters" | "hype";
 
 function formatLabel(value: string): string {
   return value
@@ -1844,6 +1847,7 @@ export function SpamFiltersPage() {
   );
   const [hypeSettingsLoaded, setHypeSettingsLoaded] = useState(false);
   const [hypeSettingsSaving, setHypeSettingsSaving] = useState(false);
+  const [pageTab, setPageTab] = useState<SpamFiltersPageTab>("filters");
 
   const isLinkFilter =
     selectedSpamFilter?.id === "links" &&
@@ -1998,8 +2002,49 @@ export function SpamFiltersPage() {
   return (
     <>
       <Stack spacing={2}>
-        <Paper elevation={0} sx={{ p: 2.25 }}>
-          <Stack spacing={2}>
+        <Paper elevation={0} sx={{ overflow: "hidden" }}>
+          <Stack
+            direction={{ xs: "column", lg: "row" }}
+            justifyContent="space-between"
+            spacing={1.5}
+            sx={{ px: 2.25, pt: 2.25, pb: 0 }}
+          >
+            <Box>
+              <Typography variant="h5">Chat filters</Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.45 }}
+              >
+                Tune everyday chat moderation separately from hype-moment auto-disable behavior.
+              </Typography>
+            </Box>
+            <Tabs
+              value={pageTab}
+              onChange={(_event, value: SpamFiltersPageTab) => setPageTab(value)}
+              variant="scrollable"
+              allowScrollButtonsMobile
+              sx={{
+                minHeight: 44,
+                "& .MuiTabs-flexContainer": { gap: 0.75 },
+                "& .MuiTab-root": {
+                  minHeight: 44,
+                  borderRadius: 999,
+                  textTransform: "none",
+                  fontWeight: 700,
+                  px: 2,
+                },
+              }}
+            >
+              <Tab value="filters" label="Filters" disableRipple />
+              <Tab value="hype" label="Hype Moments" disableRipple />
+            </Tabs>
+          </Stack>
+        </Paper>
+
+        {pageTab === "hype" ? (
+          <Paper elevation={0} sx={{ p: 2.25 }}>
+            <Stack spacing={2}>
             <Box>
               <Typography variant="h5">Hype moment settings</Typography>
               <Typography
@@ -2208,40 +2253,40 @@ export function SpamFiltersPage() {
                 ? "Saving hype settings..."
                 : "Hype settings are saved."}
             </Typography>
-          </Stack>
-        </Paper>
-
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              xl: "minmax(340px, 420px) minmax(0, 1fr)",
-            },
-            gap: 2,
-          }}
-        >
-          <Paper elevation={0} sx={{ overflow: "hidden" }}>
-            <Box
-              sx={{
-                px: 2.5,
-                py: 2.25,
-                borderBottom: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <Box>
-                <Typography variant="h5">Spam filters</Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 0.45 }}
-                >
-                  Tune the rules that catch flood, links, caps, and other noisy
-                  chat behavior.
-                </Typography>
+            </Stack>
+          </Paper>
+        ) : (
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                xl: "minmax(340px, 420px) minmax(0, 1fr)",
+              },
+              gap: 2,
+            }}
+          >
+            <Paper elevation={0} sx={{ overflow: "hidden" }}>
+              <Box
+                sx={{
+                  px: 2.5,
+                  py: 2.25,
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Box>
+                  <Typography variant="h5">Spam filters</Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 0.45 }}
+                  >
+                    Tune the rules that catch flood, links, caps, and other noisy
+                    chat behavior.
+                  </Typography>
+                </Box>
               </Box>
-            </Box>
 
             <Stack spacing={1.25} sx={{ p: 1.5 }}>
               {filteredSpamFilters.map((entry) => {
@@ -2973,6 +3018,7 @@ export function SpamFiltersPage() {
             )}
           </Paper>
         </Box>
+        )}
       </Stack>
     </>
   );

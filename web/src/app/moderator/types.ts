@@ -226,6 +226,10 @@ export type NowPlayingModuleSettings = {
 
 export type QuoteModuleSettings = {
   enabled: boolean;
+  quoteCommandEnabled: boolean;
+  addCommandEnabled: boolean;
+  editCommandEnabled: boolean;
+  deleteCommandEnabled: boolean;
 };
 
 export type RustLogModuleSettings = {

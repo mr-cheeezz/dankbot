@@ -18,7 +18,11 @@ import (
 )
 
 type quoteModuleResponse struct {
-	Enabled bool `json:"enabled"`
+	Enabled              bool `json:"enabled"`
+	QuoteCommandEnabled  bool `json:"quote_command_enabled"`
+	AddCommandEnabled    bool `json:"add_command_enabled"`
+	EditCommandEnabled   bool `json:"edit_command_enabled"`
+	DeleteCommandEnabled bool `json:"delete_command_enabled"`
 }
 
 type quoteEntryResponse struct {
@@ -211,7 +215,11 @@ func (h handler) getQuoteModule(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(quoteModuleResponse{
-		Enabled: settings.Enabled,
+		Enabled:              settings.Enabled,
+		QuoteCommandEnabled:  settings.QuoteCommandEnabled,
+		AddCommandEnabled:    settings.AddCommandEnabled,
+		EditCommandEnabled:   settings.EditCommandEnabled,
+		DeleteCommandEnabled: settings.DeleteCommandEnabled,
 	})
 }
 
@@ -243,8 +251,12 @@ func (h handler) updateQuoteModule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, err := h.appState.QuoteModule.Update(r.Context(), postgres.QuoteModuleSettings{
-		Enabled:   request.Enabled,
-		UpdatedBy: strings.TrimSpace(userSession.Login),
+		Enabled:              request.Enabled,
+		QuoteCommandEnabled:  request.QuoteCommandEnabled,
+		AddCommandEnabled:    request.AddCommandEnabled,
+		EditCommandEnabled:   request.EditCommandEnabled,
+		DeleteCommandEnabled: request.DeleteCommandEnabled,
+		UpdatedBy:            strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -257,7 +269,11 @@ func (h handler) updateQuoteModule(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(quoteModuleResponse{
-		Enabled: updated.Enabled,
+		Enabled:              updated.Enabled,
+		QuoteCommandEnabled:  updated.QuoteCommandEnabled,
+		AddCommandEnabled:    updated.AddCommandEnabled,
+		EditCommandEnabled:   updated.EditCommandEnabled,
+		DeleteCommandEnabled: updated.DeleteCommandEnabled,
 	})
 }
 

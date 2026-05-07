@@ -285,6 +285,13 @@ export function PublicHomePage() {
                       <PromoLinkButton key={`${link.label}-${link.href}`} link={link} />
                     ))}
                   </Box>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 1.35, fontSize: "0.82rem" }}
+                  >
+                    Hand-picked destinations from the streamer. Each link opens in a new tab.
+                  </Typography>
                 </CardContent>
               </Card>
             ) : null}
@@ -688,48 +695,112 @@ function PromoLinkButton({
       href={link.href}
       target="_blank"
       rel="noreferrer"
-      variant="outlined"
-      startIcon={metadata.icon}
-      endIcon={<OpenInNewRoundedIcon fontSize="small" />}
       sx={{
         justifyContent: "space-between",
-        px: 1.35,
-        py: 1.1,
-        minHeight: 52,
-        borderRadius: 1.35,
+        alignItems: "stretch",
+        gap: 1.25,
+        px: 1.4,
+        py: 1.25,
+        minHeight: 78,
+        borderRadius: 1.6,
         textTransform: "none",
         fontWeight: 700,
+        border: "1px solid",
+        borderColor: "divider",
+        background: `linear-gradient(180deg, ${metadata.surfaceColor} 0%, rgba(255,255,255,0.02) 100%)`,
+        color: "text.primary",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        "&:hover": {
+          borderColor: metadata.accentColor,
+          background: `linear-gradient(180deg, ${metadata.surfaceColor} 0%, rgba(255,255,255,0.04) 100%)`,
+          transform: "translateY(-1px)",
+        },
       }}
     >
-      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
-        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-          {link.label}
-        </Box>
-        <Typography
-          component="span"
+      <Stack direction="row" spacing={1.25} sx={{ minWidth: 0, flex: 1 }} alignItems="center">
+        <Box
           sx={{
-            fontSize: "0.74rem",
-            lineHeight: 1.2,
-            color: "text.secondary",
-            fontWeight: 500,
-            textTransform: "none",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: "100%",
+            width: 42,
+            height: 42,
+            borderRadius: 1.35,
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+            color: metadata.accentColor,
+            backgroundColor: metadata.surfaceColor,
+            border: "1px solid",
+            borderColor: "rgba(255,255,255,0.08)",
           }}
         >
-          {metadata.hostLabel}
-        </Typography>
+          {metadata.icon}
+        </Box>
+
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0, flex: 1 }}>
+          <Typography
+            component="span"
+            sx={{
+              fontSize: "0.72rem",
+              lineHeight: 1.1,
+              color: metadata.accentColor,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: "100%",
+            }}
+          >
+            {metadata.hostLabel}
+          </Typography>
+          <Box
+            component="span"
+            sx={{
+              mt: 0.35,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: "100%",
+              fontSize: "0.96rem",
+              fontWeight: 800,
+            }}
+          >
+            {link.label}
+          </Box>
+        </Box>
+      </Stack>
+
+      <Box
+        sx={{
+          width: 32,
+          height: 32,
+          borderRadius: 999,
+          display: "grid",
+          placeItems: "center",
+          flexShrink: 0,
+          color: "text.secondary",
+          backgroundColor: "rgba(255,255,255,0.04)",
+          border: "1px solid",
+          borderColor: "rgba(255,255,255,0.06)",
+        }}
+      >
+        <OpenInNewRoundedIcon fontSize="small" />
       </Box>
     </Button>
   );
 }
 
-function getPromoLinkMetadata(href: string): { icon: ReactNode; hostLabel: string } {
+function getPromoLinkMetadata(href: string): {
+  icon: ReactNode;
+  hostLabel: string;
+  accentColor: string;
+  surfaceColor: string;
+} {
   const fallback = {
     icon: <PublicRoundedIcon fontSize="small" />,
     hostLabel: "External link",
+    accentColor: "#8fb9ff",
+    surfaceColor: "rgba(74,137,255,0.12)",
   };
 
   try {
@@ -739,40 +810,100 @@ function getPromoLinkMetadata(href: string): { icon: ReactNode; hostLabel: strin
     const root = parts.length >= 2 ? parts.slice(-2).join(".") : hostname;
 
     if (root === "github.com") {
-      return { icon: <GitHubIcon fontSize="small" />, hostLabel: "GitHub" };
+      return {
+        icon: <GitHubIcon fontSize="small" />,
+        hostLabel: "GitHub",
+        accentColor: "#d4d9e6",
+        surfaceColor: "rgba(212,217,230,0.12)",
+      };
     }
     if (root === "youtube.com" || hostname === "youtu.be") {
-      return { icon: <YouTubeIcon fontSize="small" />, hostLabel: "YouTube" };
+      return {
+        icon: <YouTubeIcon fontSize="small" />,
+        hostLabel: "YouTube",
+        accentColor: "#ff7b7b",
+        surfaceColor: "rgba(255,90,90,0.14)",
+      };
     }
     if (root === "instagram.com") {
-      return { icon: <InstagramIcon fontSize="small" />, hostLabel: "Instagram" };
+      return {
+        icon: <InstagramIcon fontSize="small" />,
+        hostLabel: "Instagram",
+        accentColor: "#ff9ab0",
+        surfaceColor: "rgba(255,120,162,0.14)",
+      };
     }
     if (root === "x.com" || root === "twitter.com") {
-      return { icon: <XIcon fontSize="small" />, hostLabel: "X" };
+      return {
+        icon: <XIcon fontSize="small" />,
+        hostLabel: "X",
+        accentColor: "#d7dde8",
+        surfaceColor: "rgba(215,221,232,0.12)",
+      };
     }
     if (root === "discord.com" || root === "discord.gg") {
-      return { icon: <ChatRoundedIcon fontSize="small" />, hostLabel: "Discord" };
+      return {
+        icon: <ChatRoundedIcon fontSize="small" />,
+        hostLabel: "Discord",
+        accentColor: "#9da8ff",
+        surfaceColor: "rgba(125,134,255,0.14)",
+      };
     }
     if (root === "facebook.com" || hostname === "fb.me") {
-      return { icon: <FacebookIcon fontSize="small" />, hostLabel: "Facebook" };
+      return {
+        icon: <FacebookIcon fontSize="small" />,
+        hostLabel: "Facebook",
+        accentColor: "#8eb6ff",
+        surfaceColor: "rgba(74,137,255,0.14)",
+      };
     }
     if (root === "linkedin.com") {
-      return { icon: <LinkedInIcon fontSize="small" />, hostLabel: "LinkedIn" };
+      return {
+        icon: <LinkedInIcon fontSize="small" />,
+        hostLabel: "LinkedIn",
+        accentColor: "#89c5ff",
+        surfaceColor: "rgba(68,171,255,0.14)",
+      };
     }
     if (root === "reddit.com") {
-      return { icon: <RedditIcon fontSize="small" />, hostLabel: "Reddit" };
+      return {
+        icon: <RedditIcon fontSize="small" />,
+        hostLabel: "Reddit",
+        accentColor: "#ffb074",
+        surfaceColor: "rgba(255,120,56,0.14)",
+      };
     }
     if (root === "telegram.org" || hostname === "t.me") {
-      return { icon: <TelegramIcon fontSize="small" />, hostLabel: "Telegram" };
+      return {
+        icon: <TelegramIcon fontSize="small" />,
+        hostLabel: "Telegram",
+        accentColor: "#86d8ff",
+        surfaceColor: "rgba(82,190,255,0.14)",
+      };
     }
     if (root === "whatsapp.com" || hostname === "wa.me") {
-      return { icon: <WhatsAppIcon fontSize="small" />, hostLabel: "WhatsApp" };
+      return {
+        icon: <WhatsAppIcon fontSize="small" />,
+        hostLabel: "WhatsApp",
+        accentColor: "#88e7a4",
+        surfaceColor: "rgba(46,204,113,0.14)",
+      };
     }
     if (root === "pinterest.com") {
-      return { icon: <PinterestIcon fontSize="small" />, hostLabel: "Pinterest" };
+      return {
+        icon: <PinterestIcon fontSize="small" />,
+        hostLabel: "Pinterest",
+        accentColor: "#ff8b9e",
+        surfaceColor: "rgba(230,0,35,0.14)",
+      };
     }
     if (root === "spotify.com") {
-      return { icon: <MusicNoteRoundedIcon fontSize="small" />, hostLabel: "Spotify" };
+      return {
+        icon: <MusicNoteRoundedIcon fontSize="small" />,
+        hostLabel: "Spotify",
+        accentColor: "#7be6a3",
+        surfaceColor: "rgba(29,185,84,0.14)",
+      };
     }
     if (
       root === "twitch.tv" ||
@@ -787,10 +918,27 @@ function getPromoLinkMetadata(href: string): { icon: ReactNode; hostLabel: strin
             : <LiveTvRoundedIcon fontSize="small" />,
         hostLabel:
           root === "twitch.tv" ? "Twitch" : root === "kick.com" ? "Kick" : "TikTok",
+        accentColor:
+          root === "twitch.tv"
+            ? "#c3a0ff"
+            : root === "kick.com"
+              ? "#8fed9f"
+              : "#ffe080",
+        surfaceColor:
+          root === "twitch.tv"
+            ? "rgba(145,70,255,0.15)"
+            : root === "kick.com"
+              ? "rgba(82,208,120,0.14)"
+              : "rgba(255,214,102,0.14)",
       };
     }
     if (root === "steamcommunity.com" || root === "steampowered.com") {
-      return { icon: <SportsEsportsRoundedIcon fontSize="small" />, hostLabel: "Steam" };
+      return {
+        icon: <SportsEsportsRoundedIcon fontSize="small" />,
+        hostLabel: "Steam",
+        accentColor: "#9dbce0",
+        surfaceColor: "rgba(88,130,193,0.14)",
+      };
     }
     if (
       root === "patreon.com" ||
@@ -801,10 +949,20 @@ function getPromoLinkMetadata(href: string): { icon: ReactNode; hostLabel: strin
       hostname.includes("store") ||
       hostname.includes("merch")
     ) {
-      return { icon: <StorefrontRoundedIcon fontSize="small" />, hostLabel: "Shop" };
+      return {
+        icon: <StorefrontRoundedIcon fontSize="small" />,
+        hostLabel: "Shop",
+        accentColor: "#ffc78a",
+        surfaceColor: "rgba(255,162,74,0.14)",
+      };
     }
     if (root === "linktr.ee" || root === "beacons.ai" || root === "solo.to") {
-      return { icon: <LanguageRoundedIcon fontSize="small" />, hostLabel: "Link hub" };
+      return {
+        icon: <LanguageRoundedIcon fontSize="small" />,
+        hostLabel: "Link hub",
+        accentColor: "#9bd6ff",
+        surfaceColor: "rgba(104,195,255,0.14)",
+      };
     }
 
     const niceHost = root
@@ -814,6 +972,8 @@ function getPromoLinkMetadata(href: string): { icon: ReactNode; hostLabel: strin
     return {
       icon: <PublicRoundedIcon fontSize="small" />,
       hostLabel: niceHost === "" ? "Website" : niceHost.replace(/\b\w/g, (char) => char.toUpperCase()),
+      accentColor: "#8fb9ff",
+      surfaceColor: "rgba(74,137,255,0.12)",
     };
   } catch {
     return fallback;

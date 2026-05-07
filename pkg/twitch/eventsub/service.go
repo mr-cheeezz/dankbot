@@ -575,7 +575,7 @@ func (s *Service) savePollEvent(ctx context.Context, envelope *WebhookEnvelope) 
 		})
 	}
 
-	return s.activity.SavePollEvent(ctx, postgres.PollEventSnapshot{
+	if err := s.activity.SavePollEvent(ctx, postgres.PollEventSnapshot{
 		TwitchSubscriptionID: envelope.Subscription.ID,
 		EventType:            envelope.Subscription.Type,
 		PollID:               event.ID,
@@ -588,7 +588,12 @@ func (s *Service) savePollEvent(ctx context.Context, envelope *WebhookEnvelope) 
 		EndedAt:              event.EndedAt,
 		RawEvent:             envelope.Event,
 		Choices:              choices,
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.publishPublicOverlayUpdate(ctx, envelope.Subscription.Type)
+	return nil
 }
 
 func (s *Service) saveChannelPointRedemption(ctx context.Context, envelope *WebhookEnvelope) error {
@@ -634,7 +639,7 @@ func (s *Service) savePredictionEvent(ctx context.Context, envelope *WebhookEnve
 		})
 	}
 
-	return s.activity.SavePredictionEvent(ctx, postgres.PredictionEventSnapshot{
+	if err := s.activity.SavePredictionEvent(ctx, postgres.PredictionEventSnapshot{
 		TwitchSubscriptionID: envelope.Subscription.ID,
 		EventType:            envelope.Subscription.Type,
 		PredictionID:         event.ID,
@@ -649,7 +654,12 @@ func (s *Service) savePredictionEvent(ctx context.Context, envelope *WebhookEnve
 		LockedAt:             derefTime(event.LocksAt),
 		RawEvent:             envelope.Event,
 		Outcomes:             outcomes,
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.publishPublicOverlayUpdate(ctx, envelope.Subscription.Type)
+	return nil
 }
 
 func derefTime(value *time.Time) time.Time {
@@ -657,4 +667,12 @@ func derefTime(value *time.Time) time.Time {
 		return time.Time{}
 	}
 	return value.UTC()
+}
+
+func (s *Service) publishPublicOverlayUpdate(ctx context.Context, eventType string) {
+	if s == nil || s.redis == nil {
+		return
+	}
+
+	_ = s.redis.Publish(ctx, "public:overlay:updates", strings.TrimSpace(eventType))
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 	"github.com/mr-cheeezz/dankbot/pkg/web/session"
@@ -11,6 +12,10 @@ import (
 
 type alertsResponse struct {
 	Items []postgres.AlertSettingEntry `json:"items"`
+}
+
+var deprecatedAlertIDs = map[string]struct{}{
+	"sub-prealert": {},
 }
 
 func (h handler) alerts(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +55,7 @@ func (h handler) getAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 	entries := []postgres.AlertSettingEntry{}
 	if settings != nil && settings.Entries != nil {
-		entries = settings.Entries
+		entries = filterDeprecatedAlertEntries(settings.Entries)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -81,7 +86,7 @@ func (h handler) updateAlerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.appState.AlertSettings.Update(r.Context(), request.Items, userSession.Login)
+	updated, err := h.appState.AlertSettings.Update(r.Context(), filterDeprecatedAlertEntries(request.Items), userSession.Login)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -93,6 +98,22 @@ func (h handler) updateAlerts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(alertsResponse{
-		Items: updated.Entries,
+		Items: filterDeprecatedAlertEntries(updated.Entries),
 	})
+}
+
+func filterDeprecatedAlertEntries(entries []postgres.AlertSettingEntry) []postgres.AlertSettingEntry {
+	if len(entries) == 0 {
+		return []postgres.AlertSettingEntry{}
+	}
+
+	filtered := make([]postgres.AlertSettingEntry, 0, len(entries))
+	for _, entry := range entries {
+		if _, ok := deprecatedAlertIDs[strings.TrimSpace(strings.ToLower(entry.ID))]; ok {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+
+	return filtered
 }

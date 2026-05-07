@@ -215,6 +215,10 @@ type NowPlayingModuleResponse = {
 
 type QuoteModuleResponse = {
   enabled: boolean;
+  quote_command_enabled: boolean;
+  add_command_enabled: boolean;
+  edit_command_enabled: boolean;
+  delete_command_enabled: boolean;
 };
 
 type RustLogModuleResponse = {
@@ -963,6 +967,10 @@ export async function fetchQuoteModuleSettings(
   const payload = (await response.json()) as QuoteModuleResponse;
   return {
     enabled: payload.enabled,
+    quoteCommandEnabled: payload.quote_command_enabled,
+    addCommandEnabled: payload.add_command_enabled,
+    editCommandEnabled: payload.edit_command_enabled,
+    deleteCommandEnabled: payload.delete_command_enabled,
   };
 }
 
@@ -1203,6 +1211,10 @@ export async function saveQuoteModuleSettings(
   const payload = (await response.json()) as QuoteModuleResponse;
   return {
     enabled: payload.enabled,
+    quoteCommandEnabled: payload.quote_command_enabled,
+    addCommandEnabled: payload.add_command_enabled,
+    editCommandEnabled: payload.edit_command_enabled,
+    deleteCommandEnabled: payload.delete_command_enabled,
   };
 }
 

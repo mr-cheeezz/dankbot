@@ -92,8 +92,8 @@ func (m *Module) Start(ctx context.Context) error {
 }
 
 func (m *Module) quote(ctx modules.CommandContext) (string, error) {
-	enabled, err := m.moduleEnabled(context.Background())
-	if err != nil || !enabled {
+	settings, err := m.moduleSettings(context.Background())
+	if err != nil || !settings.Enabled || !settings.QuoteCommandEnabled {
 		return "", err
 	}
 	if m.store == nil {
@@ -129,8 +129,8 @@ func (m *Module) quote(ctx modules.CommandContext) (string, error) {
 }
 
 func (m *Module) addQuote(ctx modules.CommandContext) (string, error) {
-	enabled, err := m.moduleEnabled(context.Background())
-	if err != nil || !enabled {
+	settings, err := m.moduleSettings(context.Background())
+	if err != nil || !settings.Enabled || !settings.AddCommandEnabled {
 		return "", err
 	}
 	if !m.canManageQuotes(ctx) {
@@ -153,8 +153,8 @@ func (m *Module) addQuote(ctx modules.CommandContext) (string, error) {
 }
 
 func (m *Module) deleteQuote(ctx modules.CommandContext) (string, error) {
-	enabled, err := m.moduleEnabled(context.Background())
-	if err != nil || !enabled {
+	settings, err := m.moduleSettings(context.Background())
+	if err != nil || !settings.Enabled || !settings.DeleteCommandEnabled {
 		return "", err
 	}
 	if !m.canManageQuotes(ctx) {
@@ -185,8 +185,8 @@ func (m *Module) deleteQuote(ctx modules.CommandContext) (string, error) {
 }
 
 func (m *Module) editQuote(ctx modules.CommandContext) (string, error) {
-	enabled, err := m.moduleEnabled(context.Background())
-	if err != nil || !enabled {
+	settings, err := m.moduleSettings(context.Background())
+	if err != nil || !settings.Enabled || !settings.EditCommandEnabled {
 		return "", err
 	}
 	if !m.canManageQuotes(ctx) {
@@ -225,20 +225,21 @@ func (m *Module) canManageQuotes(ctx modules.CommandContext) bool {
 	return ok
 }
 
-func (m *Module) moduleEnabled(ctx context.Context) (bool, error) {
+func (m *Module) moduleSettings(ctx context.Context) (postgres.QuoteModuleSettings, error) {
+	defaults := postgres.DefaultQuoteModuleSettings()
 	if m.settings == nil {
-		return true, nil
+		return defaults, nil
 	}
 
 	settings, err := m.settings.Get(ctx)
 	if err != nil {
-		return false, err
+		return postgres.QuoteModuleSettings{}, err
 	}
 	if settings == nil {
-		return true, nil
+		return defaults, nil
 	}
 
-	return settings.Enabled, nil
+	return *settings, nil
 }
 
 func formatQuote(quote postgres.Quote) string {

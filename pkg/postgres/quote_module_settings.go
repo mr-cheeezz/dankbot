@@ -9,10 +9,14 @@ import (
 )
 
 type QuoteModuleSettings struct {
-	Enabled   bool
-	UpdatedBy string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Enabled              bool
+	QuoteCommandEnabled  bool
+	AddCommandEnabled    bool
+	EditCommandEnabled   bool
+	DeleteCommandEnabled bool
+	UpdatedBy            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 type QuoteModuleSettingsStore struct {
@@ -25,7 +29,11 @@ func NewQuoteModuleSettingsStore(client *Client) *QuoteModuleSettingsStore {
 
 func DefaultQuoteModuleSettings() QuoteModuleSettings {
 	return QuoteModuleSettings{
-		Enabled: true,
+		Enabled:              true,
+		QuoteCommandEnabled:  true,
+		AddCommandEnabled:    true,
+		EditCommandEnabled:   true,
+		DeleteCommandEnabled: true,
 	}
 }
 
@@ -42,14 +50,22 @@ func (s *QuoteModuleSettingsStore) EnsureDefault(ctx context.Context) error {
 INSERT INTO quote_module_settings (
 	id,
 	enabled,
+	quote_command_enabled,
+	add_command_enabled,
+	edit_command_enabled,
+	delete_command_enabled,
 	updated_by,
 	created_at,
 	updated_at
 )
-VALUES (1, $1, '', NOW(), NOW())
+VALUES (1, $1, $2, $3, $4, $5, '', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
 		defaults.Enabled,
+		defaults.QuoteCommandEnabled,
+		defaults.AddCommandEnabled,
+		defaults.EditCommandEnabled,
+		defaults.DeleteCommandEnabled,
 	)
 	if err != nil {
 		return fmt.Errorf("ensure quote module settings defaults: %w", err)
@@ -70,6 +86,10 @@ func (s *QuoteModuleSettingsStore) Get(ctx context.Context) (*QuoteModuleSetting
 		`
 SELECT
 	enabled,
+	quote_command_enabled,
+	add_command_enabled,
+	edit_command_enabled,
+	delete_command_enabled,
 	updated_by,
 	created_at,
 	updated_at
@@ -78,6 +98,10 @@ WHERE id = 1
 `,
 	).Scan(
 		&settings.Enabled,
+		&settings.QuoteCommandEnabled,
+		&settings.AddCommandEnabled,
+		&settings.EditCommandEnabled,
+		&settings.DeleteCommandEnabled,
 		&settings.UpdatedBy,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -105,19 +129,35 @@ func (s *QuoteModuleSettingsStore) Update(ctx context.Context, settings QuoteMod
 UPDATE quote_module_settings
 SET
 	enabled = $1,
-	updated_by = $2,
+	quote_command_enabled = $2,
+	add_command_enabled = $3,
+	edit_command_enabled = $4,
+	delete_command_enabled = $5,
+	updated_by = $6,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
 	enabled,
+	quote_command_enabled,
+	add_command_enabled,
+	edit_command_enabled,
+	delete_command_enabled,
 	updated_by,
 	created_at,
 	updated_at
 `,
 		settings.Enabled,
+		settings.QuoteCommandEnabled,
+		settings.AddCommandEnabled,
+		settings.EditCommandEnabled,
+		settings.DeleteCommandEnabled,
 		strings.TrimSpace(settings.UpdatedBy),
 	).Scan(
 		&updated.Enabled,
+		&updated.QuoteCommandEnabled,
+		&updated.AddCommandEnabled,
+		&updated.EditCommandEnabled,
+		&updated.DeleteCommandEnabled,
 		&updated.UpdatedBy,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,

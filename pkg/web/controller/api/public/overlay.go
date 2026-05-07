@@ -1,11 +1,14 @@
 package public
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 )
+
+const publicOverlayUpdatesChannel = "public:overlay:updates"
 
 type pollOverlayResponse struct {
 	Enabled       bool   `json:"enabled"`
@@ -49,12 +52,43 @@ type predictionOverlayResponse struct {
 	} `json:"outcomes"`
 }
 
+type overlaySnapshotResponse struct {
+	Poll       pollOverlayResponse       `json:"poll"`
+	Prediction predictionOverlayResponse `json:"prediction"`
+}
+
 func (h handler) pollOverlay(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w, http.MethodGet)
 		return
 	}
 
+	response := h.buildPollOverlayResponse(r.Context())
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w, http.MethodGet)
+		return
+	}
+
+	response := h.buildPredictionOverlayResponse(r.Context())
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func (h handler) buildOverlaySnapshot(ctx context.Context) overlaySnapshotResponse {
+	return overlaySnapshotResponse{
+		Poll:       h.buildPollOverlayResponse(ctx),
+		Prediction: h.buildPredictionOverlayResponse(ctx),
+	}
+}
+
+func (h handler) buildPollOverlayResponse(ctx context.Context) pollOverlayResponse {
 	response := pollOverlayResponse{
 		Enabled:  true,
 		Position: "top-right",
@@ -62,14 +96,12 @@ func (h handler) pollOverlay(w http.ResponseWriter, r *http.Request) {
 		OffsetY:  24,
 	}
 	if h.appState == nil || h.appState.Config == nil || h.appState.EventSubActivity == nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
-		return
+		return response
 	}
 
 	if h.appState.WebsiteOverlaySettings != nil {
-		if err := h.appState.WebsiteOverlaySettings.EnsureDefault(r.Context()); err == nil {
-			if settings, err := h.appState.WebsiteOverlaySettings.Get(r.Context()); err == nil && settings != nil {
+		if err := h.appState.WebsiteOverlaySettings.EnsureDefault(ctx); err == nil {
+			if settings, err := h.appState.WebsiteOverlaySettings.Get(ctx); err == nil && settings != nil {
 				response.Enabled = settings.PollsEnabled
 				response.Position = settings.PollPosition
 				response.OffsetX = settings.PollOffsetX
@@ -78,14 +110,12 @@ func (h handler) pollOverlay(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !response.Enabled {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
-		return
+		return response
 	}
 
 	broadcasterID := strings.TrimSpace(h.appState.Config.Main.StreamerID)
 	if broadcasterID != "" {
-		if state, err := h.appState.EventSubActivity.GetLatestPollOverlayState(r.Context(), broadcasterID); err == nil && state != nil {
+		if state, err := h.appState.EventSubActivity.GetLatestPollOverlayState(ctx, broadcasterID); err == nil && state != nil {
 			response.Title = strings.TrimSpace(state.Title)
 			response.Status = strings.ToLower(strings.TrimSpace(state.Status))
 			response.Active = pollOverlayIsActive(state.Status, state.EndsAt, state.EndedAt)
@@ -116,16 +146,10 @@ func (h handler) pollOverlay(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
+	return response
 }
 
-func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeMethodNotAllowed(w, http.MethodGet)
-		return
-	}
-
+func (h handler) buildPredictionOverlayResponse(ctx context.Context) predictionOverlayResponse {
 	response := predictionOverlayResponse{
 		Enabled:  true,
 		Position: "bottom-right",
@@ -133,14 +157,12 @@ func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
 		OffsetY:  24,
 	}
 	if h.appState == nil || h.appState.Config == nil || h.appState.EventSubActivity == nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
-		return
+		return response
 	}
 
 	if h.appState.WebsiteOverlaySettings != nil {
-		if err := h.appState.WebsiteOverlaySettings.EnsureDefault(r.Context()); err == nil {
-			if settings, err := h.appState.WebsiteOverlaySettings.Get(r.Context()); err == nil && settings != nil {
+		if err := h.appState.WebsiteOverlaySettings.EnsureDefault(ctx); err == nil {
+			if settings, err := h.appState.WebsiteOverlaySettings.Get(ctx); err == nil && settings != nil {
 				response.Enabled = settings.PredictionsEnabled
 				response.Position = settings.PredictionPosition
 				response.OffsetX = settings.PredictionOffsetX
@@ -149,14 +171,12 @@ func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !response.Enabled {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
-		return
+		return response
 	}
 
 	broadcasterID := strings.TrimSpace(h.appState.Config.Main.StreamerID)
 	if broadcasterID != "" {
-		if state, err := h.appState.EventSubActivity.GetLatestPredictionOverlayState(r.Context(), broadcasterID); err == nil && state != nil {
+		if state, err := h.appState.EventSubActivity.GetLatestPredictionOverlayState(ctx, broadcasterID); err == nil && state != nil {
 			response.Title = strings.TrimSpace(state.Title)
 			response.Status = strings.ToLower(strings.TrimSpace(state.Status))
 			response.Active = predictionOverlayIsActive(state.Status, state.EndedAt)
@@ -187,8 +207,7 @@ func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
+	return response
 }
 
 func pollOverlayIsActive(status string, endsAt, endedAt time.Time) bool {

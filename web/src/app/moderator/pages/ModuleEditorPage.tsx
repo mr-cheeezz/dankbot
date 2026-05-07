@@ -85,7 +85,7 @@ export function ModuleEditorPage() {
     () =>
       isQuotesModule
         ? [
-            { key: "general", label: "General" },
+            { key: "settings", label: "Settings" },
             { key: "library", label: "Library" },
           ]
         : [
@@ -100,7 +100,7 @@ export function ModuleEditorPage() {
   }, [moduleEntry]);
 
   useEffect(() => {
-    setSection("general");
+    setSection(isQuotesModule ? "settings" : "general");
   }, [moduleId, isQuotesModule]);
 
   useEffect(() => {
@@ -412,19 +412,12 @@ export function ModuleEditorPage() {
             </Box>
 
             <Stack spacing={2.5} sx={{ p: 3 }}>
-              {section === "general" ? (
+              {section === "general" && !isQuotesModule ? (
                 <>
-                  {!isQuotesModule ? (
-                    <Alert severity="info">
-                      Module metadata is system-managed. Edit the persisted
-                      module settings from the Settings tab.
-                    </Alert>
-                  ) : (
-                    <Alert severity="info">
-                      The quotes module saves its enabled state immediately.
-                      Manage your saved quote library from the Library tab.
-                    </Alert>
-                  )}
+                  <Alert severity="info">
+                    Module metadata is system-managed. Edit the persisted
+                    module settings from the Settings tab.
+                  </Alert>
 
                   <Paper sx={{ p: 2 }}>
                     <Typography
@@ -447,8 +440,16 @@ export function ModuleEditorPage() {
                 </>
               ) : null}
 
-              {section === "settings" && !isQuotesModule ? (
+              {section === "settings" ? (
                 <Stack spacing={2}>
+                  {isQuotesModule ? (
+                    <Alert severity="info">
+                      Use this page to turn quote chat commands on or off. The
+                      module toggle in the top-right still controls the whole
+                      quotes module, and your saved quote library stays in the
+                      Library tab.
+                    </Alert>
+                  ) : null}
                   {draft.settings.length === 0 ? (
                     <Alert severity="info">
                       This module has no editable settings right now.
@@ -692,20 +693,12 @@ export function ModuleEditorPage() {
         </DialogContent>
 
         <DialogActions sx={{ px: 3, py: 2.5 }}>
-          {!isQuotesModule ? (
-            <>
-              <Button variant="outlined" onClick={closeEditor}>
-                Cancel
-              </Button>
-              <Button variant="contained" onClick={saveDraft}>
-                Save
-              </Button>
-            </>
-          ) : (
-            <Button variant="outlined" onClick={closeEditor}>
-              Close
-            </Button>
-          )}
+          <Button variant="outlined" onClick={closeEditor}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={saveDraft}>
+            Save
+          </Button>
         </DialogActions>
       </Dialog>
 

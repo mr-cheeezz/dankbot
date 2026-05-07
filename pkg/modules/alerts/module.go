@@ -124,17 +124,7 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 		return nil
 	}
 
-	preAlertMessage, err := m.renderPreAlert(event.Type, event.Event)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(preAlertMessage) != "" {
-		if err := say(channel, preAlertMessage); err != nil {
-			return err
-		}
-	}
-
-	message, err := m.renderTwitchAlert(event.Type, event.Event)
+	message, err := m.renderAlert(event)
 	if err != nil {
 		return err
 	}
@@ -145,28 +135,12 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 	return say(channel, message)
 }
 
-func (m *Module) renderPreAlert(eventType string, raw json.RawMessage) (string, error) {
-	switch eventType {
-	case "channel.subscribe":
-		var event eventsub.SubscriptionEvent
-		if err := json.Unmarshal(raw, &event); err != nil {
-			return "", fmt.Errorf("decode subscription pre-alert event: %w", err)
-		}
-		if event.IsGift {
-			return "", nil
-		}
-		user := displayName(event.UserName, event.UserLogin)
-		tier := humanTier(event.Tier)
-		fallback := fmt.Sprintf("Incoming sub alert: %s (%s)", user, tier)
-		return m.renderFromAlertEntry(
-			"sub-prealert",
-			map[string]string{
-				"user": user,
-				"tier": tier,
-			},
-			fallback,
-			nil,
-		)
+func (m *Module) renderAlert(event eventsub.PublishedEvent) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(event.Source)) {
+	case eventsub.SourceTwitchEventSub:
+		return m.renderTwitchAlert(event.Type, event.Event)
+	case eventsub.SourceStreamlabs:
+		return m.renderThirdPartyAlert(event.Type, event.Event)
 	default:
 		return "", nil
 	}
@@ -511,6 +485,57 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 	}
 }
 
+func (m *Module) renderThirdPartyAlert(eventType string, raw json.RawMessage) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(eventType)) {
+	case "streamlabs.donation", "streamlabs.tip", "thirdparty.donation":
+		donation, ok := parseThirdPartyDonationAlert(raw)
+		if !ok {
+			return "", nil
+		}
+		minimum := 0
+		if value := m.alertMinimum("streamlabs-donations"); value != nil {
+			minimum = *value
+		}
+		if minimum > 0 && donation.Amount < float64(minimum) {
+			return "", nil
+		}
+		return m.renderFromAlertEntry(
+			"streamlabs-donations",
+			map[string]string{
+				"user":    donation.User,
+				"amount":  donation.DisplayAmount,
+				"message": donation.Message,
+			},
+			fmt.Sprintf("%s just donated %s! Thank you so much!", donation.User, donation.DisplayAmount),
+			nil,
+		)
+	case "streamelements.tip":
+		donation, ok := parseThirdPartyDonationAlert(raw)
+		if !ok {
+			return "", nil
+		}
+		minimum := 0
+		if value := m.alertMinimum("streamelements-tips"); value != nil {
+			minimum = *value
+		}
+		if minimum > 0 && donation.Amount < float64(minimum) {
+			return "", nil
+		}
+		return m.renderFromAlertEntry(
+			"streamelements-tips",
+			map[string]string{
+				"user":    donation.User,
+				"amount":  donation.DisplayAmount,
+				"message": donation.Message,
+			},
+			fmt.Sprintf("%s just tipped %s! PogU", donation.User, donation.DisplayAmount),
+			nil,
+		)
+	default:
+		return "", nil
+	}
+}
+
 func (m *Module) renderFromAlertEntry(alertID string, values map[string]string, fallback string, enabledRule func(postgres.AlertSettingEntry) bool) (string, error) {
 	entry, err := m.alertEntry(alertID)
 	if err != nil {
@@ -629,13 +654,168 @@ func (m *Module) matchesStreamer(event eventsub.PublishedEvent) bool {
 	}
 
 	var fallback struct {
-		BroadcasterUserID string `json:"broadcaster_user_id"`
+		BroadcasterUserID   string `json:"broadcaster_user_id"`
+		ToBroadcasterUserID string `json:"to_broadcaster_user_id"`
+		StreamerID          string `json:"streamer_id"`
+		ChannelID           string `json:"channel_id"`
+		TwitchUserID        string `json:"twitch_user_id"`
 	}
 	if err := json.Unmarshal(event.Event, &fallback); err != nil {
 		return false
 	}
+	if strings.EqualFold(strings.TrimSpace(fallback.BroadcasterUserID), targetStreamerID) {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(fallback.ToBroadcasterUserID), targetStreamerID) {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(fallback.StreamerID), targetStreamerID) {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(fallback.ChannelID), targetStreamerID) {
+		return true
+	}
 
-	return strings.EqualFold(strings.TrimSpace(fallback.BroadcasterUserID), targetStreamerID)
+	return strings.EqualFold(strings.TrimSpace(fallback.TwitchUserID), targetStreamerID)
+}
+
+type thirdPartyDonationAlert struct {
+	User          string
+	Amount        float64
+	DisplayAmount string
+	Message       string
+}
+
+func parseThirdPartyDonationAlert(raw json.RawMessage) (thirdPartyDonationAlert, bool) {
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return thirdPartyDonationAlert{}, false
+	}
+
+	user := firstStringValue(
+		payload,
+		"user",
+		"from",
+		"name",
+		"username",
+		"display_name",
+		"from_user",
+	)
+	if user == "" {
+		user = "Someone"
+	}
+
+	amount := extractThirdPartyDonationAmount(raw)
+	if amount <= 0 {
+		return thirdPartyDonationAlert{}, false
+	}
+
+	displayAmount := firstStringValue(payload, "formatted_amount", "formattedAmount", "display_amount")
+	if displayAmount == "" {
+		displayAmount = fmt.Sprintf("$%.2f", amount)
+	}
+
+	return thirdPartyDonationAlert{
+		User:          user,
+		Amount:        amount,
+		DisplayAmount: displayAmount,
+		Message:       firstStringValue(payload, "message", "donation_message"),
+	}, true
+}
+
+func extractThirdPartyDonationAmount(raw json.RawMessage) float64 {
+	amount := extractNestedNumberFromJSON(raw, []string{"amount", "value"}, []string{"amount", "decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	amount = extractNestedNumberFromJSON(raw, []string{"amount"}, []string{"decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	amount = extractNestedNumberFromJSON(raw, []string{"tip", "amount"}, []string{"tip", "decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	amount = extractNestedNumberFromJSON(raw, []string{"donation", "amount"}, []string{"donation", "decimal_places"})
+	if amount > 0 {
+		return amount
+	}
+	return 0
+}
+
+func extractNestedNumberFromJSON(raw json.RawMessage, amountPath []string, decimalPath []string) float64 {
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return 0
+	}
+	amount := nestedNumber(payload, amountPath...)
+	if amount <= 0 {
+		return 0
+	}
+	decimals := nestedNumber(payload, decimalPath...)
+	if decimals <= 0 {
+		return amount
+	}
+
+	divisor := 1.0
+	for i := 0; i < int(decimals); i++ {
+		divisor *= 10
+	}
+
+	return amount / divisor
+}
+
+func nestedNumber(payload map[string]any, path ...string) float64 {
+	if len(path) == 0 {
+		return 0
+	}
+
+	var current any = payload
+	for _, key := range path {
+		nextMap, ok := current.(map[string]any)
+		if !ok {
+			return 0
+		}
+		current, ok = nextMap[key]
+		if !ok {
+			return 0
+		}
+	}
+
+	switch value := current.(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case json.Number:
+		number, err := value.Float64()
+		if err != nil {
+			return 0
+		}
+		return number
+	default:
+		return 0
+	}
+}
+
+func firstStringValue(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := payload[key]
+		if !ok {
+			continue
+		}
+		if text, ok := value.(string); ok {
+			if trimmed := strings.TrimSpace(text); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+
+	return ""
 }
 
 func displayName(primary string, fallbacks ...string) string {

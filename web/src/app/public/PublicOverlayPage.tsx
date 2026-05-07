@@ -1,16 +1,17 @@
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
-import HowToVoteRoundedIcon from "@mui/icons-material/HowToVoteRounded";
 import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import TollRoundedIcon from "@mui/icons-material/TollRounded";
 import {
   Box,
+  Chip,
   LinearProgress,
+  Paper,
   Stack,
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import {
   fetchPublicPollOverlay,
@@ -45,7 +46,10 @@ export function PublicOverlayPage() {
     }
 
     let cancelled = false;
-    const load = () => {
+    let socket: WebSocket | null = null;
+    let reconnectID = 0;
+
+    const loadFallback = () => {
       void fetchPublicPollOverlay()
         .then((payload) => {
           if (!cancelled) {
@@ -71,13 +75,59 @@ export function PublicOverlayPage() {
         });
     };
 
-    load();
-    const refreshID = window.setInterval(load, refreshMS);
+    const connect = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${window.location.host}/api/public/overlay/ws`);
+
+      socket.onmessage = (event) => {
+        if (cancelled) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(event.data) as {
+            poll?: PublicPollOverlay;
+            prediction?: PublicPredictionOverlay;
+          };
+          if (payload.poll != null) {
+            setPoll(payload.poll);
+          }
+          if (payload.prediction != null) {
+            setPrediction(payload.prediction);
+          }
+        } catch {
+          loadFallback();
+        }
+      };
+
+      socket.onerror = () => {
+        if (!cancelled) {
+          loadFallback();
+        }
+      };
+
+      socket.onclose = () => {
+        if (cancelled) {
+          return;
+        }
+        window.clearTimeout(reconnectID);
+        reconnectID = window.setTimeout(connect, refreshMS);
+      };
+    };
+
+    loadFallback();
+    connect();
     const tickID = window.setInterval(() => setNowTick(Date.now()), 1000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(refreshID);
+      if (socket != null) {
+        socket.close();
+      }
+      window.clearTimeout(reconnectID);
       window.clearInterval(tickID);
       html.style.background = previous.htmlBackground;
       body.style.background = previous.bodyBackground;
@@ -136,50 +186,45 @@ function PollOverlayCard({
     <OverlayCard
       eyebrow="Live Poll"
       title={poll.title || "Poll active"}
-      accent="linear-gradient(135deg, rgba(103, 208, 255, 0.95), rgba(63, 124, 255, 0.95))"
     >
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <MetaPill icon={<AccessTimeRoundedIcon sx={{ fontSize: 15 }} />} label={timeLeft} />
-        <MetaPill
-          icon={<HowToVoteRoundedIcon sx={{ fontSize: 15 }} />}
-          label={`${poll.totalVotes.toLocaleString()} votes`}
-        />
+        <MetaPill label={`${poll.totalVotes.toLocaleString()} votes`} />
         {poll.amountPerVote > 0 ? (
           <MetaPill
             icon={<TollRoundedIcon sx={{ fontSize: 15 }} />}
-            label={`${poll.amountPerVote.toLocaleString()} extra vote cost`}
+            label={`${poll.amountPerVote.toLocaleString()} extra vote`}
           />
         ) : null}
       </Stack>
 
-      <Stack spacing={1.2} sx={{ mt: 1.5 }}>
+      <Stack spacing={1} sx={{ mt: 1.4 }}>
         {poll.choices.map((choice) => {
           const ratio = (choice.votes / maxVotes) * 100;
           return (
-            <Box key={choice.title} sx={{ display: "grid", gap: 0.55 }}>
+            <Box key={choice.title} sx={{ display: "grid", gap: 0.45 }}>
               <Stack direction="row" justifyContent="space-between" spacing={1}>
-                <Typography sx={{ fontWeight: 700, fontSize: "0.98rem", color: "#f7fbff" }}>
+                <Typography sx={{ fontWeight: 700, fontSize: "0.96rem", color: "#1c2430" }}>
                   {choice.title}
                 </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: "0.92rem", color: "#9fd8ff" }}>
+                <Typography sx={{ fontWeight: 800, fontSize: "0.88rem", color: "#334155" }}>
                   {choice.votes.toLocaleString()}
                 </Typography>
               </Stack>
               <LinearProgress
                 variant="determinate"
                 value={ratio}
-                sx={overlayProgressSx("rgba(103, 208, 255, 0.95)")}
+                sx={overlayProgressSx("#60a5fa")}
               />
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <MiniStat label={`${choice.votes.toLocaleString()} total`} />
-                <MiniStat
-                  label={`${choice.channelPointsVotes.toLocaleString()} extra`}
-                  tone="blue"
-                />
-                {choice.bitsVotes > 0 ? (
-                  <MiniStat label={`${choice.bitsVotes.toLocaleString()} bits`} tone="amber" />
-                ) : null}
-              </Stack>
+              {(choice.channelPointsVotes > 0 || choice.bitsVotes > 0) ? (
+                <Typography sx={{ fontSize: "0.74rem", color: "#5b6778" }}>
+                  {choice.channelPointsVotes > 0
+                    ? `${choice.channelPointsVotes.toLocaleString()} extra votes`
+                    : ""}
+                  {choice.channelPointsVotes > 0 && choice.bitsVotes > 0 ? " • " : ""}
+                  {choice.bitsVotes > 0 ? `${choice.bitsVotes.toLocaleString()} bits votes` : ""}
+                </Typography>
+              ) : null}
             </Box>
           );
         })}
@@ -206,7 +251,6 @@ function PredictionOverlayCard({
     <OverlayCard
       eyebrow="Live Prediction"
       title={prediction.title || "Prediction active"}
-      accent="linear-gradient(135deg, rgba(144, 115, 255, 0.95), rgba(255, 102, 166, 0.9))"
     >
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <MetaPill icon={<AccessTimeRoundedIcon sx={{ fontSize: 15 }} />} label={timeLeft} />
@@ -214,22 +258,19 @@ function PredictionOverlayCard({
           icon={<InsightsRoundedIcon sx={{ fontSize: 15 }} />}
           label={`${prediction.totalUsers.toLocaleString()} predictors`}
         />
-        <MetaPill
-          icon={<TollRoundedIcon sx={{ fontSize: 15 }} />}
-          label={`${prediction.totalPoints.toLocaleString()} points`}
-        />
+        <MetaPill label={`${prediction.totalPoints.toLocaleString()} points`} />
       </Stack>
 
-      <Stack spacing={1.2} sx={{ mt: 1.5 }}>
+      <Stack spacing={1} sx={{ mt: 1.4 }}>
         {prediction.outcomes.map((outcome) => {
           const ratio = (outcome.channelPoints / totalPoints) * 100;
           return (
-            <Box key={outcome.title} sx={{ display: "grid", gap: 0.55 }}>
+            <Box key={outcome.title} sx={{ display: "grid", gap: 0.45 }}>
               <Stack direction="row" justifyContent="space-between" spacing={1}>
-                <Typography sx={{ fontWeight: 700, fontSize: "0.98rem", color: "#fdf9ff" }}>
+                <Typography sx={{ fontWeight: 700, fontSize: "0.96rem", color: "#1c2430" }}>
                   {outcome.title}
                 </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: "0.92rem", color: "#f1c8ff" }}>
+                <Typography sx={{ fontWeight: 800, fontSize: "0.88rem", color: "#334155" }}>
                   {outcome.channelPoints.toLocaleString()} pts
                 </Typography>
               </Stack>
@@ -238,13 +279,9 @@ function PredictionOverlayCard({
                 value={ratio}
                 sx={overlayProgressSx(outcomeColor(outcome.color))}
               />
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <MiniStat label={`${outcome.users.toLocaleString()} users`} />
-                <MiniStat
-                  label={`${outcome.channelPoints.toLocaleString()} points`}
-                  tone="purple"
-                />
-              </Stack>
+              <Typography sx={{ fontSize: "0.74rem", color: "#5b6778" }}>
+                {outcome.users.toLocaleString()} users
+              </Typography>
             </Box>
           );
         })}
@@ -256,74 +293,51 @@ function PredictionOverlayCard({
 function OverlayCard({
   eyebrow,
   title,
-  accent,
   children,
 }: {
   eyebrow: string;
   title: string;
-  accent: string;
   children: ReactNode;
 }) {
   return (
-    <Box
+    <Paper
+      elevation={0}
       sx={{
-        position: "relative",
-        p: 1.6,
-        borderRadius: 4,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.12)",
-        background:
-          "linear-gradient(180deg, rgba(7, 11, 20, 0.84), rgba(10, 14, 24, 0.78))",
-        backdropFilter: "blur(14px) saturate(130%)",
-        boxShadow: "0 22px 60px rgba(0, 0, 0, 0.34)",
+        p: 1.5,
+        borderRadius: 3,
+        border: "1px solid rgba(255,255,255,0.55)",
+        backgroundColor: "rgba(255, 255, 255, 0.72)",
+        backdropFilter: "blur(12px)",
+        boxShadow: "0 18px 40px rgba(15, 23, 42, 0.14)",
       }}
     >
-      <Box
-        sx={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(circle at top right, rgba(255,255,255,0.1), transparent 28%), radial-gradient(circle at bottom left, rgba(255,255,255,0.04), transparent 26%)",
-          pointerEvents: "none",
-        }}
-      />
-      <Box
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 4,
-          background: accent,
-        }}
-      />
-      <Box sx={{ position: "relative" }}>
+      <Box>
         <Typography
           sx={{
-            fontSize: "0.72rem",
+            fontSize: "0.68rem",
             textTransform: "uppercase",
-            letterSpacing: "0.16em",
-            color: alpha("#ffffff", 0.72),
-            fontWeight: 800,
+            letterSpacing: "0.12em",
+            color: "#64748b",
+            fontWeight: 700,
           }}
         >
           {eyebrow}
         </Typography>
         <Typography
           sx={{
-            mt: 0.55,
-            fontSize: "1.24rem",
-            lineHeight: 1.15,
-            fontWeight: 900,
+            mt: 0.35,
+            fontSize: "1.08rem",
+            lineHeight: 1.2,
+            fontWeight: 800,
             letterSpacing: "-0.03em",
-            color: "#ffffff",
+            color: "#0f172a",
           }}
         >
           {title}
         </Typography>
-        <Box sx={{ mt: 1.2 }}>{children}</Box>
+        <Box sx={{ mt: 1 }}>{children}</Box>
       </Box>
-    </Box>
+    </Paper>
   );
 }
 
@@ -331,66 +345,39 @@ function MetaPill({
   icon,
   label,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   label: string;
 }) {
   return (
-    <Stack
-      direction="row"
-      spacing={0.65}
-      alignItems="center"
+    <Chip
+      {...(icon != null ? { icon: icon as ReactElement } : {})}
+      label={label}
+      size="small"
       sx={{
-        px: 1,
-        py: 0.55,
         borderRadius: 999,
-        bgcolor: "rgba(255,255,255,0.08)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        bgcolor: "rgba(255,255,255,0.62)",
+        color: "#334155",
+        border: "1px solid rgba(255,255,255,0.7)",
+        "& .MuiChip-label": {
+          px: 1,
+          fontWeight: 700,
+          fontSize: "0.74rem",
+        },
+        "& .MuiChip-icon": {
+          color: "#64748b",
+          fontSize: 16,
+          ml: 0.75,
+        },
       }}
-    >
-      <Box sx={{ color: alpha("#ffffff", 0.86), display: "grid", placeItems: "center" }}>{icon}</Box>
-      <Typography sx={{ fontSize: "0.8rem", fontWeight: 700, color: "#f4f8ff" }}>
-        {label}
-      </Typography>
-    </Stack>
-  );
-}
-
-function MiniStat({
-  label,
-  tone = "neutral",
-}: {
-  label: string;
-  tone?: "neutral" | "blue" | "amber" | "purple";
-}) {
-  const tones = {
-    neutral: { bg: "rgba(255,255,255,0.07)", color: "#d8e2f0" },
-    blue: { bg: "rgba(103, 208, 255, 0.14)", color: "#98deff" },
-    amber: { bg: "rgba(255, 188, 92, 0.14)", color: "#ffd595" },
-    purple: { bg: "rgba(198, 127, 255, 0.14)", color: "#efc1ff" },
-  }[tone];
-
-  return (
-    <Typography
-      sx={{
-        px: 0.8,
-        py: 0.45,
-        borderRadius: 999,
-        bgcolor: tones.bg,
-        color: tones.color,
-        fontSize: "0.75rem",
-        fontWeight: 700,
-      }}
-    >
-      {label}
-    </Typography>
+    />
   );
 }
 
 function overlayProgressSx(fill: string) {
   return {
-    height: 10,
+    height: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.55)",
     "& .MuiLinearProgress-bar": {
       borderRadius: 999,
       background: `linear-gradient(90deg, ${alpha(fill, 0.72)}, ${fill})`,
@@ -401,11 +388,11 @@ function overlayProgressSx(fill: string) {
 function outcomeColor(color: string) {
   switch (color.trim().toLowerCase()) {
     case "blue":
-      return "rgba(85, 190, 255, 0.95)";
+      return "#60a5fa";
     case "pink":
-      return "rgba(255, 112, 171, 0.95)";
+      return "#f472b6";
     default:
-      return "rgba(214, 138, 255, 0.95)";
+      return "#a78bfa";
   }
 }
 

@@ -1,4 +1,5 @@
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import MusicNoteRoundedIcon from "@mui/icons-material/MusicNoteRounded";
 import PauseRoundedIcon from "@mui/icons-material/PauseRounded";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
@@ -15,6 +16,7 @@ import {
   Chip,
   FormControl,
   IconButton,
+  InputAdornment,
   InputLabel,
   LinearProgress,
   MenuItem,
@@ -97,7 +99,7 @@ function trackQueueLabel(track: DashboardSpotifyTrack): string {
 
 export function DashboardOverviewPage() {
   const {
-    filteredAuditEntries,
+    auditEntries,
     hiddenPanels,
     hidePanel,
     restorePanels,
@@ -119,10 +121,45 @@ export function DashboardOverviewPage() {
   const [spotifyQuery, setSpotifyQuery] = useState("");
   const [spotifyResults, setSpotifyResults] = useState<DashboardSpotifyTrack[]>([]);
   const [spotifyNotice, setSpotifyNotice] = useState("");
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditCommandFilter, setAuditCommandFilter] = useState("all");
+  const [auditActorFilter, setAuditActorFilter] = useState("");
   const orderedAuditEntries = useMemo(
-    () => [...filteredAuditEntries].reverse(),
-    [filteredAuditEntries],
+    () => [...auditEntries].reverse(),
+    [auditEntries],
   );
+  const auditCommandOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const entry of orderedAuditEntries) {
+      const normalized = entry.command.trim();
+      if (normalized !== "") {
+        values.add(normalized);
+      }
+    }
+
+    return ["all", ...Array.from(values).sort((a, b) => a.localeCompare(b))];
+  }, [orderedAuditEntries]);
+  const visibleAuditEntries = useMemo(() => {
+    const searchNeedle = auditSearch.trim().toLowerCase();
+    const actorNeedle = auditActorFilter.trim().toLowerCase();
+
+    return orderedAuditEntries.filter((entry) => {
+      if (auditCommandFilter !== "all" && entry.command !== auditCommandFilter) {
+        return false;
+      }
+      if (actorNeedle !== "" && !entry.actor.toLowerCase().includes(actorNeedle)) {
+        return false;
+      }
+      if (searchNeedle === "") {
+        return true;
+      }
+
+      return [entry.actor, entry.command, entry.detail, entry.ago]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchNeedle);
+    });
+  }, [auditActorFilter, auditCommandFilter, auditSearch, orderedAuditEntries]);
   const spotifyIntegration = useMemo(
     () => summary.integrations.find((entry) => entry.id === "spotify") ?? null,
     [summary.integrations],
@@ -304,7 +341,7 @@ export function DashboardOverviewPage() {
   return (
     <Stack spacing={2}>
       <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Button component={RouterLink} to="/d/dashboard-v2" variant="outlined" color="inherit">
+        <Button component={RouterLink} to="/d/dashboard" variant="outlined" color="inherit">
           Switch to Dashboard V2
         </Button>
         {hiddenPanels.length > 0 ? (
@@ -347,6 +384,60 @@ export function DashboardOverviewPage() {
                   </IconButton>
                 </Stack>
                 <Box
+                  sx={{
+                    px: 2.5,
+                    py: 1.5,
+                    borderBottom: "1px solid",
+                    borderColor: "divider",
+                  }}
+                >
+                  <Stack direction={{ xs: "column", lg: "row" }} spacing={1.25}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder="Search actor, command, details..."
+                      value={auditSearch}
+                      onChange={(event) => setAuditSearch(event.target.value)}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchRoundedIcon fontSize="small" />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    <TextField
+                      select
+                      size="small"
+                      label="Command"
+                      value={auditCommandFilter}
+                      onChange={(event) => setAuditCommandFilter(event.target.value)}
+                      sx={{ minWidth: 220 }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <FilterListRoundedIcon fontSize="small" />
+                          </InputAdornment>
+                        ),
+                      }}
+                    >
+                      {auditCommandOptions.map((option) => (
+                        <MenuItem key={option} value={option}>
+                          {option === "all" ? "All commands" : option}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      size="small"
+                      label="Actor"
+                      value={auditActorFilter}
+                      onChange={(event) => setAuditActorFilter(event.target.value)}
+                      placeholder="Filter by actor"
+                      sx={{ minWidth: 220 }}
+                    />
+                  </Stack>
+                </Box>
+                <Box
                   ref={auditScrollRef}
                   sx={{
                     maxHeight: { xs: 460, xl: 620 },
@@ -354,13 +445,17 @@ export function DashboardOverviewPage() {
                     backgroundColor: "rgba(0,0,0,0.18)",
                   }}
                 >
-                  {orderedAuditEntries.length === 0 ? (
+                  {visibleAuditEntries.length === 0 ? (
                     <Box sx={{ px: 2.5, py: 3 }}>
                       <Typography sx={{ fontSize: "0.95rem", fontWeight: 700 }}>
-                        No audit entries yet
+                        {orderedAuditEntries.length === 0
+                          ? "No audit entries yet"
+                          : "No audit entries match these filters"}
                       </Typography>
                       <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: "0.9rem" }}>
-                        Moderator actions will show up here once the bot starts logging them.
+                        {orderedAuditEntries.length === 0
+                          ? "Moderator actions will show up here once the bot starts logging them."
+                          : "Try widening the search or changing the command and actor filters."}
                       </Typography>
                     </Box>
                   ) : (
@@ -370,7 +465,7 @@ export function DashboardOverviewPage() {
                         p: 1.5,
                       }}
                     >
-                      {orderedAuditEntries.map((entry) => (
+                      {visibleAuditEntries.map((entry) => (
                         <Box
                           key={entry.id}
                           data-fresh={freshAuditIDs.includes(entry.id) ? "true" : "false"}

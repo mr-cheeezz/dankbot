@@ -1,18 +1,20 @@
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import {
+  Alert,
   AppBar,
   Box,
   Button,
   Container,
   IconButton,
   Link,
+  Snackbar,
   Stack,
   TextField,
   Toolbar,
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useSearchParams } from "react-router-dom";
 
 import { AccountMenu } from "../auth/AccountMenu";
 import { useAuth } from "../auth/AuthContext";
@@ -112,6 +114,12 @@ export function PublicLayout() {
   const { session, loading } = useAuth();
   const [summary, setSummary] = useState<PublicSummary>(defaultPublicSummary);
   const [searchInput, setSearchInput] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [oauthFlash, setOauthFlash] = useState<{
+    severity: "success" | "error";
+    title: string;
+    message: string;
+  } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -131,6 +139,32 @@ export function PublicLayout() {
 
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const status = searchParams.get("oauth_status");
+    if (status == null || status.trim() === "") {
+      return;
+    }
+
+    const normalizedStatus = status.trim().toLowerCase();
+    const severity = normalizedStatus === "success" ? "success" : "error";
+    const title =
+      searchParams.get("oauth_title")?.trim() ||
+      (severity === "success" ? "Signed in" : "Authorization failed");
+    const message =
+      searchParams.get("oauth_message")?.trim() ||
+      (severity === "success"
+        ? "Your Twitch account is connected."
+        : "That Twitch sign-in could not be completed.");
+
+    setOauthFlash({ severity, title, message });
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("oauth_status");
+    nextParams.delete("oauth_title");
+    nextParams.delete("oauth_message");
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const streamerLabel = formatStreamerTitle(summary.channelName || summary.channelLogin || "streamer");
   const release = unifiedReleaseMeta(summary);
@@ -289,6 +323,32 @@ export function PublicLayout() {
       <Container maxWidth="xl" sx={{ py: 3, flex: 1 }}>
         <Outlet />
       </Container>
+
+      <Snackbar
+        open={oauthFlash != null}
+        autoHideDuration={4500}
+        onClose={(_, reason) => {
+          if (reason === "clickaway") {
+            return;
+          }
+          setOauthFlash(null);
+        }}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        {oauthFlash ? (
+          <Alert
+            severity={oauthFlash.severity}
+            variant="filled"
+            onClose={() => setOauthFlash(null)}
+            sx={{ width: "100%", alignItems: "center" }}
+          >
+            <strong>{oauthFlash.title}</strong>
+            <Box component="span" sx={{ display: "block", mt: 0.35 }}>
+              {oauthFlash.message}
+            </Box>
+          </Alert>
+        ) : undefined}
+      </Snackbar>
 
       <Box
         component="footer"

@@ -59,7 +59,8 @@ const providerLabels: Record<AlertProvider, string> = {
   streamelements: "StreamElements",
 };
 
-const maxHypeSpamLines = 6;
+const maxBitsHypeSpamLines = 20;
+const maxSubHypeSpamMessages = 10;
 const minHypeSpamCooldownSeconds = 20;
 const defaultSectionTabs: Record<string, AlertSectionTab> = {};
 const initialHypeSpamConfigs: Record<HypeSpamKey, HypeSpamConfig> = {
@@ -863,7 +864,7 @@ export function AlertsPage() {
                                               lineCount: Math.max(
                                                 1,
                                                 Math.min(
-                                                  maxHypeSpamLines,
+                                                  maxBitsHypeSpamLines,
                                                   Number(
                                                     event.target.value || "1",
                                                   ),
@@ -872,7 +873,7 @@ export function AlertsPage() {
                                             },
                                           )
                                         }
-                                        helperText={`Max ${maxHypeSpamLines}`}
+                                        helperText={`Max ${maxBitsHypeSpamLines}`}
                                         disabled={basicAlertEnabled}
                                       />
                                       <TextField
@@ -951,7 +952,7 @@ export function AlertsPage() {
                                         label="Messages"
                                         value={entry.messageCount}
                                         disabled
-                                        helperText="Fixed for this hype mode"
+                                        helperText={`Fixed for this hype mode, capped at ${maxSubHypeSpamMessages}.`}
                                       />
                                       <TextField
                                         fullWidth

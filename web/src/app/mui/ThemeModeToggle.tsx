@@ -1,3 +1,5 @@
+import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
+import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import { Box, alpha, useTheme } from "@mui/material";
 
 import { useThemeMode } from "./ModeratorThemeProvider";
@@ -16,127 +18,76 @@ export function ThemeModeToggle() {
       title={isDark ? "Switch to light theme" : "Switch to dark theme"}
       sx={{
         position: "relative",
-        width: 116,
-        height: 38,
-        p: 0,
+        width: 62,
+        height: 34,
+        p: 0.5,
         m: 0,
-        overflow: "hidden",
-        appearance: "none",
-        cursor: "pointer",
+        border: "1px solid",
+        borderColor: isDark ? alpha("#91a9d6", 0.22) : alpha("#7ca0c8", 0.26),
+        borderRadius: "999px",
+        backgroundColor: isDark ? "#1b2230" : "#e7eef8",
+        boxShadow: isDark
+          ? "inset 0 1px 0 rgba(255,255,255,0.03)"
+          : "inset 0 1px 0 rgba(255,255,255,0.68)",
         display: "inline-flex",
         alignItems: "center",
-        border: "none",
-        borderRadius: "999px",
-        background: isDark
-          ? "linear-gradient(180deg, #08132a 0%, #10244c 52%, #0f1f41 100%)"
-          : "linear-gradient(180deg, #73cfff 0%, #a7e8ff 60%, #e4f8ff 100%)",
-        boxShadow: isDark
-          ? "inset 0 0 0 1px rgba(146,176,255,0.3), 0 6px 14px rgba(0,0,0,0.32)"
-          : "inset 0 0 0 1px rgba(42,118,189,0.28), 0 6px 14px rgba(26,102,163,0.24)",
-        transition: "background 260ms ease, box-shadow 260ms ease",
-        "@keyframes dankbot-stars": {
-          "0%": {
-            transform: "translateX(0px)",
-            opacity: 0.9,
-          },
-          "50%": {
-            transform: "translateX(-2px)",
-            opacity: 1,
-          },
-          "100%": {
-            transform: "translateX(0px)",
-            opacity: 0.9,
-          },
-        },
+        justifyContent: "space-between",
+        cursor: "pointer",
+        appearance: "none",
+        transition:
+          "background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
         "&:focus-visible": {
-          outline: `2px solid ${alpha(theme.palette.primary.main, 0.9)}`,
+          outline: `2px solid ${alpha(theme.palette.primary.main, 0.88)}`,
           outlineOffset: 2,
         },
       }}
     >
       <Box
         sx={{
-          position: "absolute",
-          inset: 0,
-          opacity: isDark ? 1 : 0,
-          transition: "opacity 260ms ease",
-          "&::before": {
-            content: '""',
-            position: "absolute",
-            width: 2,
-            height: 2,
-            borderRadius: "50%",
-            backgroundColor: "#fff",
-            top: 9,
-            left: 14,
-            boxShadow:
-              "14px 6px 0 0 #fff, 30px -2px 0 0 rgba(255,255,255,0.95), 46px 8px 0 0 rgba(255,255,255,0.9), 63px 2px 0 0 #fff, 82px 9px 0 0 rgba(255,255,255,0.95)",
-            animation: "dankbot-stars 7s linear infinite",
-          },
-        }}
-      />
-
-      <Box
-        sx={{
-          position: "absolute",
-          top: 8,
-          left: isDark ? 79 : 11,
-          width: 22,
-          height: 22,
-          borderRadius: "50%",
-          backgroundColor: isDark ? "#e2ecff" : "#fff6a5",
-          boxShadow: isDark
-            ? "inset -6px -4px 0 rgba(182,203,255,0.56), 0 0 12px rgba(183,205,255,0.5)"
-            : "0 0 16px rgba(255,223,110,0.72), inset -3px -3px 0 rgba(255,206,74,0.46)",
-          transition:
-            "left 280ms cubic-bezier(0.2, 0.8, 0.2, 1), top 280ms cubic-bezier(0.2, 0.8, 0.2, 1), width 280ms ease, height 280ms ease, background-color 220ms ease, box-shadow 220ms ease",
-          "&::before": isDark
-            ? {
-                content: '""',
-                position: "absolute",
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                right: -1,
-                top: 2,
-                backgroundColor: "#9eb6f2",
-              }
-            : undefined,
-        }}
-      />
-
-      <Box
-        sx={{
-          position: "absolute",
-          bottom: 3,
-          left: 9,
-          width: 98,
-          height: 9,
-          borderRadius: "999px",
-          background: isDark
-            ? "linear-gradient(180deg, rgba(28,36,62,0.85) 0%, rgba(16,20,36,0.95) 100%)"
-            : "linear-gradient(180deg, rgba(125,192,245,0.34) 0%, rgba(82,156,217,0.42) 100%)",
-        }}
-      />
-
-      <Box
-        sx={{
-          position: "absolute",
-          bottom: 2.5,
-          right: 10,
-          px: 0.7,
-          py: 0.1,
-          borderRadius: "999px",
-          fontSize: "0.56rem",
-          letterSpacing: "0.08em",
-          fontWeight: 800,
-          color: isDark ? alpha("#ecf3ff", 0.9) : alpha("#1b4a72", 0.85),
-          backgroundColor: isDark ? alpha("#7ea0ff", 0.16) : alpha("#4da9e5", 0.16),
-          textTransform: "uppercase",
+          width: 18,
+          height: 18,
+          display: "grid",
+          placeItems: "center",
+          color: isDark ? alpha("#8d99af", 0.72) : "#d39b1b",
+          transition: "color 180ms ease",
+          zIndex: 1,
         }}
       >
-        {isDark ? "night" : "day"}
+        <LightModeRoundedIcon sx={{ fontSize: 14 }} />
       </Box>
+
+      <Box
+        sx={{
+          width: 18,
+          height: 18,
+          display: "grid",
+          placeItems: "center",
+          color: isDark ? "#dfe8f7" : alpha("#6d7a92", 0.8),
+          transition: "color 180ms ease",
+          zIndex: 1,
+        }}
+      >
+        <DarkModeRoundedIcon sx={{ fontSize: 14 }} />
+      </Box>
+
+      <Box
+        sx={{
+          position: "absolute",
+          top: 3,
+          left: isDark ? "calc(100% - 31px)" : 3,
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
+          backgroundColor: isDark ? "#101722" : "#ffffff",
+          border: "1px solid",
+          borderColor: isDark ? alpha("#c8d4ea", 0.12) : alpha("#aebed6", 0.42),
+          boxShadow: isDark
+            ? "0 6px 16px rgba(0,0,0,0.3)"
+            : "0 6px 16px rgba(93,128,171,0.2)",
+          transition:
+            "left 220ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
+        }}
+      />
     </Box>
   );
 }

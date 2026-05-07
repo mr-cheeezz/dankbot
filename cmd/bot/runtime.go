@@ -32,6 +32,7 @@ import (
 	"github.com/mr-cheeezz/dankbot/pkg/postgres"
 	redispkg "github.com/mr-cheeezz/dankbot/pkg/redis"
 	spotifyoauth "github.com/mr-cheeezz/dankbot/pkg/spotify/oauth"
+	streamlabsoauth "github.com/mr-cheeezz/dankbot/pkg/streamlabs/oauth"
 	"github.com/mr-cheeezz/dankbot/pkg/twitch/chat"
 	twitchhelix "github.com/mr-cheeezz/dankbot/pkg/twitch/helix"
 	twitchoauth "github.com/mr-cheeezz/dankbot/pkg/twitch/oauth"
@@ -48,6 +49,7 @@ type runtime struct {
 	modules            *modules.Runner
 	accounts           *postgres.TwitchAccountStore
 	spotify            *postgres.SpotifyAccountStore
+	streamlabs         *postgres.StreamlabsAccountStore
 	modeStore          *postgres.BotModeStore
 	stateStore         *postgres.BotStateStore
 	socialStore        *postgres.BotSocialPromotionStore
@@ -68,6 +70,7 @@ type runtime struct {
 	streamer           *postgres.TwitchAccount
 	onConnectOnce      sync.Once
 	helixOAuth         *twitchoauth.Service
+	streamlabsOAuth    *streamlabsoauth.Service
 	helixClient        *twitchhelix.Client
 	helixToken         *twitchoauth.Token
 	helixMu            sync.Mutex
@@ -94,7 +97,12 @@ func newRuntime(cfg *config.Config) *runtime {
 		spotifyoauth.NewClient(nil, cfg.Spotify.ClientID, cfg.Spotify.ClientSecret, strings.TrimSpace(cfg.Spotify.RedirectURI)),
 		nil,
 	)
+	streamlabsOAuthService := streamlabsoauth.NewService(
+		streamlabsoauth.NewClient(nil, cfg.Streamlabs.ClientID, cfg.Streamlabs.ClientSecret, strings.TrimSpace(cfg.Streamlabs.RedirectURI)),
+		nil,
+	)
 	twitchAccountStore := postgres.NewTwitchAccountStore(postgresClient)
+	streamlabsAccountStore := postgres.NewStreamlabsAccountStore(postgresClient)
 	robloxAccountStore := postgres.NewRobloxAccountStore(postgresClient)
 	modeStore := postgres.NewBotModeStore(postgresClient)
 	stateStore := postgres.NewBotStateStore(postgresClient)
@@ -214,6 +222,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		modules:            moduleRunner,
 		accounts:           twitchAccountStore,
 		spotify:            postgres.NewSpotifyAccountStore(postgresClient),
+		streamlabs:         streamlabsAccountStore,
 		modeStore:          modeStore,
 		stateStore:         stateStore,
 		socialStore:        socialStore,
@@ -230,6 +239,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		chatActivityStore:  chatActivityStore,
 		chatActivityLast:   make(map[string]time.Time),
 		helixOAuth:         twitchOAuthService,
+		streamlabsOAuth:    streamlabsOAuthService,
 		commandPrefix:      "!",
 		startedAt:          time.Now().UTC(),
 		buildInfo:          buildmeta.Detect(botVersion),
@@ -259,6 +269,7 @@ func (r *runtime) Run(ctx context.Context) error {
 	go r.runDiscordAuditRelay(ctx)
 	go r.runTwitchTokenRefresh(ctx)
 	go r.runBotHeartbeat(ctx)
+	go r.runStreamlabsSocket(ctx)
 
 	if err := r.chat.Start(ctx); err != nil {
 		return err

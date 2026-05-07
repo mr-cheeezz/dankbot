@@ -43,7 +43,7 @@ export const navSections: NavSection[] = [
       { key: "channelPoints", label: "Channel Points" },
       { key: "giveaways", label: "Giveaways" },
       { key: "modules", label: "Modules" },
-      { key: "website", label: "Website" },
+      { key: "website", label: "Overlay" },
       { key: "alerts", label: "Chat Alerts" },
     ],
   },
@@ -517,19 +517,6 @@ export const initialSpamFilterHypeSettings: SpamFilterHypeSettings = {
 
 export const initialAlertEntries: AlertEntry[] = [
   {
-    id: "sub-prealert",
-    provider: "twitch",
-    section: "Subscription Alerts",
-    label: "Pre-alert (before sub announce)",
-    source: "subscription pre-alert",
-    behavior: "sends a short heads-up before the main sub alert message",
-    status: "stable",
-    enabled: false,
-    template: "Incoming sub alert: {user} ({tier})",
-    scope: "subscriptions",
-    note: "Optional. Enable this if you want a pre-alert to fire before the normal sub announce.",
-  },
-  {
     id: "sub-tier-1",
     provider: "twitch",
     section: "Subscription Alerts",
@@ -876,7 +863,7 @@ export const initialAlertEntries: AlertEntry[] = [
     label: "Enabled",
     source: "streamlabs donation alerts",
     behavior: "reads the Streamlabs socket feed for donation events",
-    status: "prepared",
+    status: "stable",
     enabled: true,
     template: "{user} just donated {amount}! Thank you so much!",
     scope: "streamlabs donations",
@@ -1023,7 +1010,7 @@ const dashboardPaths: Record<ViewKey, string> = {
   massModeration: "/d/mass-moderation",
   channelPoints: "/d/channel-points",
   giveaways: "/d/giveaways",
-  website: "/d/website",
+  website: "/d/overlay",
   integrations: "/d/integrations",
   settings: "/d/settings",
 };
@@ -1084,7 +1071,7 @@ export function pageTitleForView(view: ViewKey): string {
     case "giveaways":
       return "Giveaways";
     case "website":
-      return "Website";
+      return "Overlay";
     case "integrations":
       return "Integrations";
     case "settings":
@@ -1123,7 +1110,7 @@ export function pageSubtitleForView(view: ViewKey): string {
     case "giveaways":
       return "raffles, winners, and queue state";
     case "website":
-      return "public pages and overlays";
+      return "browser-source overlay controls and public output";
     case "integrations":
       return "provider auth and socket connections";
     case "settings":

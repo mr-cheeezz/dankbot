@@ -66,6 +66,7 @@ import type {
   GameModuleSettings,
   NewChatterGreetingModuleSettings,
   NowPlayingModuleSettings,
+  QuoteModuleSettings,
   RustLogModuleSettings,
   TabsModuleSettings,
   UserProfileModuleSettings,
@@ -178,13 +179,18 @@ const ModeratorContext = createContext<ModeratorContextValue | null>(null);
 const initialStreamTitle = "RIVALSSS | ROBLOX STREAM";
 const initialStreamGame = "ROBLOX";
 const auditRefreshIntervalMS = 5000;
+const deprecatedAlertIDs = new Set(["sub-prealert"]);
 
 function mergeAlertSettings(
   defaults: AlertEntry[],
   saved: AlertEntry[],
 ): AlertEntry[] {
   const savedByID = new Map(
-    saved.map((entry) => [entry.id.trim().toLowerCase(), entry]),
+    saved
+      .filter(
+        (entry) => !deprecatedAlertIDs.has(entry.id.trim().toLowerCase()),
+      )
+      .map((entry) => [entry.id.trim().toLowerCase(), entry]),
   );
   const merged = defaults.map((entry) => {
     const next = savedByID.get(entry.id.trim().toLowerCase());
@@ -197,7 +203,7 @@ function mergeAlertSettings(
   const known = new Set(merged.map((entry) => entry.id.trim().toLowerCase()));
   for (const entry of saved) {
     const key = entry.id.trim().toLowerCase();
-    if (key === "" || known.has(key)) {
+    if (key === "" || known.has(key) || deprecatedAlertIDs.has(key)) {
       continue;
     }
     merged.push(entry);
@@ -629,7 +635,7 @@ function nowPlayingModuleSettingsFromModule(
 
 function mergeQuoteModuleSettings(
   current: ModuleEntry[],
-  settings: { enabled: boolean },
+  settings: QuoteModuleSettings,
   catalogByID: ModuleCatalogByID,
 ): ModuleEntry[] {
   return upsertModuleFromCatalog(
@@ -637,8 +643,27 @@ function mergeQuoteModuleSettings(
     catalogByID,
     quoteModuleID,
     settings.enabled,
-    {},
+    {
+      "quote-command-enabled": settings.quoteCommandEnabled ? "true" : "false",
+      "add-command-enabled": settings.addCommandEnabled ? "true" : "false",
+      "edit-command-enabled": settings.editCommandEnabled ? "true" : "false",
+      "delete-command-enabled": settings.deleteCommandEnabled ? "true" : "false",
+    },
   );
+}
+
+function quoteModuleSettingsFromModule(entry: ModuleEntry): QuoteModuleSettings {
+  const getBool = (settingID: string, fallback: boolean) =>
+    (entry.settings.find((setting) => setting.id === settingID)?.value ??
+      String(fallback)) === "true";
+
+  return {
+    enabled: entry.enabled,
+    quoteCommandEnabled: getBool("quote-command-enabled", true),
+    addCommandEnabled: getBool("add-command-enabled", true),
+    editCommandEnabled: getBool("edit-command-enabled", true),
+    deleteCommandEnabled: getBool("delete-command-enabled", true),
+  };
 }
 
 function mergeRustLogModuleSettings(
@@ -1704,7 +1729,7 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     }
 
     if (moduleId === quoteModuleID) {
-      void saveQuoteModuleSettings({ enabled: optimisticEntry.enabled })
+      void saveQuoteModuleSettings(quoteModuleSettingsFromModule(optimisticEntry))
         .then((saved) => {
           setModules((current) =>
             mergeQuoteModuleSettings(current, saved, moduleCatalogLookup),
@@ -1877,7 +1902,7 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     }
 
     if (moduleId === quoteModuleID) {
-      void saveQuoteModuleSettings({ enabled: merged.enabled })
+      void saveQuoteModuleSettings(quoteModuleSettingsFromModule(merged))
         .then((saved) => {
           setModules((current) =>
             mergeQuoteModuleSettings(current, saved, moduleCatalogLookup),

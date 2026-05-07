@@ -674,7 +674,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(message, variant))
 			return
 		}
-		writeOAuthErrorPage(w, message, http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData(message, variant))
 		return
 	}
 
@@ -685,7 +685,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData("missing oauth state", variant))
 			return
 		}
-		writeOAuthErrorPage(w, "missing oauth state", http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData("missing oauth state", variant))
 		return
 	}
 	if code == "" {
@@ -693,7 +693,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData("missing oauth code", variant))
 			return
 		}
-		writeOAuthErrorPage(w, "missing oauth code", http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData("missing oauth code", variant))
 		return
 	}
 
@@ -703,25 +703,40 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 		if twitchResult.Flow == twitchoauth.FlowSiteLogin {
 			loginResult, err := h.persistSiteLoginSession(r.Context(), twitchResult)
 			if err != nil {
+				if variant == authPageVariantPublic {
+					redirectPublicAuthResult(
+						w,
+						r,
+						"error",
+						authorizedPageData{
+							Title:   "Sign-in failed",
+							Message: err.Error(),
+						},
+					)
+					return
+				}
 				writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
 				return
 			}
 
 			session.SetCookie(w, loginResult.sessionID, isSecureCookie(h.appState))
 			page := authorizedPageData{
-				Title:        "Signed in with Twitch",
-				Eyebrow:      "Authorization complete",
-				Message:      "You are signed in and DankBot is getting your session ready now.",
-				AccountLabel: "Twitch account",
-				AccountValue: preferredLoginName(twitchResult),
-				PrimaryLabel: "Continue to home page",
-				PrimaryHref:  "/",
-				RedirectHref: "/",
+				Title:   "Signed in with Twitch",
+				Message: fmt.Sprintf("%s is signed in and ready to use the site.", preferredLoginName(twitchResult)),
+			}
+			if variant == authPageVariantPublic {
+				redirectPublicAuthResult(w, r, "success", page)
+				return
 			}
 			if loginResult.canAccessDashboard {
-				page.SecondaryLabel = "Open dashboard"
-				page.SecondaryHref = "/d"
+				page.Message = fmt.Sprintf("%s is signed in. Dashboard access is available from the home page menu.", preferredLoginName(twitchResult))
 			}
+			page.Eyebrow = "Authorization complete"
+			page.AccountLabel = "Twitch account"
+			page.AccountValue = preferredLoginName(twitchResult)
+			page.PrimaryLabel = "Continue to home page"
+			page.PrimaryHref = "/"
+			page.RedirectHref = "/"
 			writeAuthorizedPage(w, http.StatusOK, variant, page)
 			return
 		}
@@ -732,7 +747,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 				redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 				return
 			}
-			writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
+			redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 			return
 		}
 		page := buildAuthorizedPageData(response)
@@ -748,7 +763,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 			return
 		}
-		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 		return
 	}
 
@@ -770,7 +785,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 			return
 		}
-		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 		return
 	}
 
@@ -790,7 +805,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 			return
 		}
-		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 		return
 	}
 
@@ -810,7 +825,7 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 			return
 		}
-		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 		return
 	}
 
@@ -829,13 +844,13 @@ func (h handler) oauthCallback(w http.ResponseWriter, r *http.Request, variant a
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData("unknown oauth state", variant))
 			return
 		}
-		writeOAuthErrorPage(w, "unknown oauth state", http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData("unknown oauth state", variant))
 	default:
 		if variant == authPageVariantDashboard {
 			redirectDashboardIntegrationResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 			return
 		}
-		writeOAuthErrorPage(w, err.Error(), http.StatusBadRequest, variant)
+		redirectPublicAuthResult(w, r, "error", buildOAuthErrorPageData(err.Error(), variant))
 	}
 }
 
@@ -1346,6 +1361,29 @@ func redirectDashboardIntegrationResult(
 	}
 
 	target := "/d/integrations"
+	if encoded := params.Encode(); encoded != "" {
+		target += "?" + encoded
+	}
+
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func redirectPublicAuthResult(
+	w http.ResponseWriter,
+	r *http.Request,
+	status string,
+	page authorizedPageData,
+) {
+	params := url.Values{}
+	params.Set("oauth_status", strings.TrimSpace(status))
+	if title := strings.TrimSpace(page.Title); title != "" {
+		params.Set("oauth_title", title)
+	}
+	if message := strings.TrimSpace(page.Message); message != "" {
+		params.Set("oauth_message", message)
+	}
+
+	target := "/"
 	if encoded := params.Encode(); encoded != "" {
 		target += "?" + encoded
 	}

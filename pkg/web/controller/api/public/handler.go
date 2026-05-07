@@ -89,6 +89,7 @@ func Register(mux *http.ServeMux, appState *state.State) {
 	mux.Handle("/api/public/commands", http.HandlerFunc(handler{appState: appState}.commands))
 	mux.Handle("/api/public/quotes", http.HandlerFunc(handler{appState: appState}.quotes))
 	mux.Handle("/api/public/users/", http.HandlerFunc(handler{appState: appState}.userProfile))
+	mux.Handle("/api/public/overlay/ws", http.HandlerFunc(handler{appState: appState}.overlaySocket))
 	mux.Handle("/api/public/overlay/polls", http.HandlerFunc(handler{appState: appState}.pollOverlay))
 	mux.Handle("/api/public/overlay/predictions", http.HandlerFunc(handler{appState: appState}.predictionOverlay))
 }

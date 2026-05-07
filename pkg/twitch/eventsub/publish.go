@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	redispkg "github.com/mr-cheeezz/dankbot/pkg/redis"
 )
 
 const (
 	AlertsChannel        = "alerts:events"
 	SourceTwitchEventSub = "twitch.eventsub"
+	SourceStreamlabs     = "streamlabs.socket"
 )
 
 type PublishedEvent struct {
@@ -23,11 +26,7 @@ type PublishedEvent struct {
 }
 
 func (s *Service) publishNotification(ctx context.Context, envelope *WebhookEnvelope) error {
-	if s.redis == nil {
-		return nil
-	}
-
-	payload, err := json.Marshal(PublishedEvent{
+	return PublishEvent(ctx, s.redis, PublishedEvent{
 		Source:         SourceTwitchEventSub,
 		Type:           envelope.Subscription.Type,
 		SubscriptionID: envelope.Subscription.ID,
@@ -35,12 +34,20 @@ func (s *Service) publishNotification(ctx context.Context, envelope *WebhookEnve
 		Event:          envelope.Event,
 		ReceivedAt:     s.now().UTC(),
 	})
-	if err != nil {
-		return fmt.Errorf("marshal published eventsub notification: %w", err)
+}
+
+func PublishEvent(ctx context.Context, redisClient *redispkg.Client, event PublishedEvent) error {
+	if redisClient == nil {
+		return nil
 	}
 
-	if err := s.redis.Publish(ctx, AlertsChannel, string(payload)); err != nil {
-		return fmt.Errorf("publish eventsub notification: %w", err)
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("marshal published event notification: %w", err)
+	}
+
+	if err := redisClient.Publish(ctx, AlertsChannel, string(payload)); err != nil {
+		return fmt.Errorf("publish event notification: %w", err)
 	}
 
 	return nil
