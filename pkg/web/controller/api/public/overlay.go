@@ -88,7 +88,7 @@ func (h handler) pollOverlay(w http.ResponseWriter, r *http.Request) {
 		if state, err := h.appState.EventSubActivity.GetLatestPollOverlayState(r.Context(), broadcasterID); err == nil && state != nil {
 			response.Title = strings.TrimSpace(state.Title)
 			response.Status = strings.ToLower(strings.TrimSpace(state.Status))
-			response.Active = response.Status == "active"
+			response.Active = pollOverlayIsActive(state.Status, state.EndsAt, state.EndedAt)
 			if !state.StartedAt.IsZero() {
 				response.StartedAt = state.StartedAt.UTC().Format(time.RFC3339)
 			}
@@ -159,7 +159,7 @@ func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
 		if state, err := h.appState.EventSubActivity.GetLatestPredictionOverlayState(r.Context(), broadcasterID); err == nil && state != nil {
 			response.Title = strings.TrimSpace(state.Title)
 			response.Status = strings.ToLower(strings.TrimSpace(state.Status))
-			response.Active = response.Status == "active" || response.Status == "locked"
+			response.Active = predictionOverlayIsActive(state.Status, state.EndedAt)
 			if !state.StartedAt.IsZero() {
 				response.StartedAt = state.StartedAt.UTC().Format(time.RFC3339)
 			}
@@ -189,4 +189,39 @@ func (h handler) predictionOverlay(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func pollOverlayIsActive(status string, endsAt, endedAt time.Time) bool {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch normalized {
+	case "completed", "archived", "terminated", "moderated", "invalid":
+		return false
+	case "active":
+		return true
+	}
+
+	if !endedAt.IsZero() && endedAt.Before(time.Now().UTC().Add(2*time.Second)) {
+		return false
+	}
+	if !endsAt.IsZero() && endsAt.After(time.Now().UTC()) {
+		return true
+	}
+
+	return normalized == "" && endedAt.IsZero()
+}
+
+func predictionOverlayIsActive(status string, endedAt time.Time) bool {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch normalized {
+	case "resolved", "canceled", "cancelled":
+		return false
+	case "active", "locked":
+		return true
+	}
+
+	if !endedAt.IsZero() && endedAt.Before(time.Now().UTC().Add(2*time.Second)) {
+		return false
+	}
+
+	return normalized == "" && endedAt.IsZero()
 }
