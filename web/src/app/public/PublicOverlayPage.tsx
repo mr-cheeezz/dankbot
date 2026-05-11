@@ -12,6 +12,7 @@ import {
 const refreshMS = 3000;
 const pollWidth = 430;
 const predictionWidth = 760;
+const winnerRevealMS = 10_000;
 
 export function PublicOverlayPage() {
   const [poll, setPoll] = useState<PublicPollOverlay | null>(null);
@@ -133,9 +134,12 @@ export function PublicOverlayPage() {
     };
   }, []);
 
-  const visiblePoll = poll != null && poll.enabled && poll.active;
+  const visiblePoll =
+    poll != null && poll.enabled && shouldShowOverlay(poll.active, poll.endedAt, nowTick);
   const visiblePrediction =
-    prediction != null && prediction.enabled && prediction.active;
+    prediction != null &&
+    prediction.enabled &&
+    shouldShowOverlay(prediction.active, prediction.endedAt, nowTick);
 
   return (
     <Box
@@ -162,20 +166,24 @@ function PollOverlay({
   poll: PublicPollOverlay;
   nowTick: number;
 }) {
+  const winnerMode = !poll.active && isRecentlyEnded(poll.endedAt, nowTick);
   const placement = fixedPosition(poll.position, poll.offsetX, poll.offsetY);
   const placementTransform =
     placement.transform == null
       ? `scale(${poll.scale})`
       : `${placement.transform} scale(${poll.scale})`;
+  const sortedChoices = [...poll.choices].sort((left, right) => right.votes - left.votes);
+  const winner = sortedChoices[0] ?? null;
   const maxVotes = Math.max(1, ...poll.choices.map((choice) => choice.votes));
   const svgHeight = 92 + Math.max(1, poll.choices.length) * 54;
   const metaLabels = [
-    formatTimeLeft(poll.endsAt, nowTick),
+    winnerMode ? "Poll complete" : formatTimeLeft(poll.endsAt, nowTick),
     `${poll.totalVotes.toLocaleString()} votes`,
+  ];
+  const extraVoteLabel =
     poll.amountPerVote > 0
-      ? `${poll.amountPerVote.toLocaleString()} extra vote`
-      : "",
-  ].filter((value) => value !== "");
+      ? `Extra votes cost ${poll.amountPerVote.toLocaleString()} each`
+      : "";
 
   return (
     <Box
@@ -186,6 +194,12 @@ function PollOverlay({
         width: { xs: "min(92vw, 430px)", sm: `${pollWidth}px` },
         transform: placementTransform,
         transformOrigin: "top right",
+        animation: winnerMode ? `overlayWinnerZoom ${winnerRevealMS}ms ease-out forwards` : "none",
+        "@keyframes overlayWinnerZoom": {
+          "0%": { transform: `${placementTransform} scale(1)` },
+          "14%": { transform: `${placementTransform} scale(1.08)` },
+          "100%": { transform: `${placementTransform} scale(1.04)` },
+        },
         ...placement,
       }}
     >
@@ -254,6 +268,10 @@ function PollOverlay({
           const y = 78 + index * 54;
           const percent = Math.max(10, (choice.votes / maxVotes) * 100);
           const width = (390 * percent) / 100;
+          const isWinner =
+            winner != null &&
+            winner.votes === choice.votes &&
+            winner.title.trim().toLowerCase() === choice.title.trim().toLowerCase();
           return (
             <g key={choice.title} transform={`translate(0, ${y})`}>
               <rect
@@ -273,16 +291,17 @@ function PollOverlay({
                 width={width}
                 height="38"
                 fill="url(#poll-fill)"
-                filter="url(#poll-shadow)"
+                filter={winnerMode && isWinner ? "url(#poll-shadow)" : undefined}
+                opacity={winnerMode && !isWinner ? 0.55 : 1}
               />
               <text
                 x="16"
                 y="24"
                 fill={poll.textColor}
                 fontSize="15"
-                fontWeight="800"
+                fontWeight={winnerMode && isWinner ? "900" : "800"}
               >
-                {choice.title}
+                {winnerMode && isWinner ? `Winner: ${choice.title}` : choice.title}
               </text>
               <text
                 x="374"
@@ -297,6 +316,18 @@ function PollOverlay({
             </g>
           );
         })}
+
+        {extraVoteLabel !== "" ? (
+          <text
+            x="0"
+            y={svgHeight - 6}
+            fill={alpha(poll.textColor, 0.9)}
+            fontSize="12.5"
+            fontWeight="700"
+          >
+            {extraVoteLabel}
+          </text>
+        ) : null}
       </svg>
     </Box>
   );
@@ -309,6 +340,8 @@ function PredictionOverlay({
   prediction: PublicPredictionOverlay;
   nowTick: number;
 }) {
+  const winnerMode =
+    !prediction.active && isRecentlyEnded(prediction.endedAt, nowTick);
   const totalPoints = Math.max(1, prediction.totalPoints);
   const outcomes = prediction.outcomes.slice(0, 2);
   const leftOutcome = outcomes[0] ?? {
@@ -323,12 +356,29 @@ function PredictionOverlay({
     channelPoints: 0,
     color: "pink",
   };
-  const leftPercent = Math.max(16, (leftOutcome.channelPoints / totalPoints) * 100);
-  const rightPercent = Math.max(16, 100 - leftPercent);
-  const leftWidth = (predictionWidth * leftPercent) / 100;
-  const rightX = leftWidth;
-  const rightWidth = predictionWidth - leftWidth;
-  const metaY = 88;
+  const winner =
+    leftOutcome.channelPoints === rightOutcome.channelPoints
+      ? null
+      : leftOutcome.channelPoints > rightOutcome.channelPoints
+        ? leftOutcome
+        : rightOutcome;
+  const leftRaw = (leftOutcome.channelPoints / totalPoints) * 100;
+  const clampedLeft =
+    outcomes.length < 2 ? 100 : Math.min(84, Math.max(16, leftRaw));
+  const clampedRight = 100 - clampedLeft;
+  const leftWidth = (predictionWidth * clampedLeft) / 100;
+  const rightWidth = (predictionWidth * clampedRight) / 100;
+  const rightX = predictionWidth - rightWidth;
+  const centerX = predictionWidth / 2;
+  const centerNotchSize = 22;
+  const metaY = 92;
+  const statusLabel = winnerMode
+    ? winner == null
+      ? "Prediction ended in a tie"
+      : `Winner: ${winner.title}`
+    : prediction.lockedAt.trim() !== ""
+      ? formatTimeLeft(prediction.lockedAt, nowTick)
+      : "Prediction live";
 
   return (
     <Box
@@ -341,10 +391,16 @@ function PredictionOverlay({
         width: { xs: "min(94vw, 760px)", md: `${predictionWidth}px` },
         zIndex: 9999,
         pointerEvents: "none",
+        animation: winnerMode ? `overlayWinnerFightZoom ${winnerRevealMS}ms ease-out forwards` : "none",
+        "@keyframes overlayWinnerFightZoom": {
+          "0%": { transform: `translateX(-50%) scale(${prediction.scale})` },
+          "14%": { transform: `translateX(-50%) scale(${prediction.scale * 1.06})` },
+          "100%": { transform: `translateX(-50%) scale(${prediction.scale * 1.03})` },
+        },
       }}
     >
       <svg
-        viewBox={`0 0 ${predictionWidth} 118`}
+        viewBox={`0 0 ${predictionWidth} 126`}
         width="100%"
         height="auto"
         preserveAspectRatio="xMidYMin meet"
@@ -391,56 +447,89 @@ function PredictionOverlay({
           x="0"
           y="34"
           width={predictionWidth}
-          height="40"
-          rx="20"
-          ry="20"
-          fill={prediction.trackColor}
+          height="44"
+          rx="22"
+          ry="22"
+          fill={alpha(prediction.trackColor, 0.92)}
         />
         <rect
           x="0"
           y="34"
           width={leftWidth}
-          height="40"
-          rx="20"
-          ry="20"
+          height="44"
+          rx="22"
+          ry="22"
           fill="url(#prediction-left)"
-          filter="url(#prediction-shadow)"
+          filter={winnerMode && winner === leftOutcome ? "url(#prediction-shadow)" : undefined}
+          opacity={winnerMode && winner != null && winner !== leftOutcome ? 0.55 : 1}
         />
         <rect
           x={rightX}
           y="34"
           width={rightWidth}
-          height="40"
-          rx="20"
-          ry="20"
+          height="44"
+          rx="22"
+          ry="22"
           fill="url(#prediction-right)"
-          filter="url(#prediction-shadow)"
+          filter={winnerMode && winner === rightOutcome ? "url(#prediction-shadow)" : undefined}
+          opacity={winnerMode && winner != null && winner !== rightOutcome ? 0.55 : 1}
+        />
+        <polygon
+          points={`${centerX - centerNotchSize},34 ${centerX + centerNotchSize},34 ${centerX},78`}
+          fill={alpha("#ffffff", 0.2)}
+        />
+        <line
+          x1={centerX}
+          y1="34"
+          x2={centerX}
+          y2="78"
+          stroke="rgba(255,255,255,0.5)"
+          strokeWidth="2"
         />
 
         <text
           x="18"
-          y="59"
+          y="61"
           fill={prediction.textColor}
           fontSize="16"
           fontWeight="900"
         >
-          {leftOutcome.title} {formatPercent(leftOutcome.channelPoints, totalPoints)}
+          {leftOutcome.title}
         </text>
         <text
           x={predictionWidth - 18}
-          y="59"
+          y="61"
           fill={prediction.textColor}
           fontSize="16"
           fontWeight="900"
           textAnchor="end"
         >
-          {rightOutcome.title} {formatPercent(rightOutcome.channelPoints, totalPoints)}
+          {rightOutcome.title}
+        </text>
+        <text
+          x="18"
+          y="78"
+          fill={alpha(prediction.textColor, 0.92)}
+          fontSize="12"
+          fontWeight="700"
+        >
+          {formatPercent(leftOutcome.channelPoints, totalPoints)} · {formatCompactNumber(leftOutcome.channelPoints)} pts
+        </text>
+        <text
+          x={predictionWidth - 18}
+          y="78"
+          fill={alpha(prediction.textColor, 0.92)}
+          fontSize="12"
+          fontWeight="700"
+          textAnchor="end"
+        >
+          {formatCompactNumber(rightOutcome.channelPoints)} pts · {formatPercent(rightOutcome.channelPoints, totalPoints)}
         </text>
 
         {[
-          formatTimeLeft(prediction.lockedAt || prediction.endedAt, nowTick),
+          statusLabel,
           `${prediction.totalUsers.toLocaleString()} predictors`,
-          `${prediction.totalPoints.toLocaleString()} points`,
+          `${formatCompactNumber(prediction.totalPoints)} points`,
         ].map((label, index) => {
           const pillWidth = 168;
           const gap = 16;
@@ -475,6 +564,21 @@ function PredictionOverlay({
       </svg>
     </Box>
   );
+}
+
+function shouldShowOverlay(active: boolean, endedAt: string, nowTick: number) {
+  return active || isRecentlyEnded(endedAt, nowTick);
+}
+
+function isRecentlyEnded(endedAt: string, nowTick: number) {
+  if (endedAt.trim() === "") {
+    return false;
+  }
+  const ended = new Date(endedAt).getTime();
+  if (Number.isNaN(ended)) {
+    return false;
+  }
+  return nowTick >= ended && nowTick - ended <= winnerRevealMS;
 }
 
 function formatTimeLeft(iso: string, nowTick: number) {
@@ -517,6 +621,16 @@ function fixedPosition(
     default:
       return { top: offsetY, right: offsetX };
   }
+}
+
+function formatCompactNumber(value: number) {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}m`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+  }
+  return value.toLocaleString();
 }
 
 function formatPercent(value: number, total: number) {

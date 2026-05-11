@@ -68,6 +68,7 @@ func Register(mux *http.ServeMux, appState *state.State) {
 	mux.Handle("/api/dashboard/spotify/queue", http.HandlerFunc(handler{appState: appState}.spotifyQueue))
 	mux.Handle("/api/dashboard/spotify/playback", http.HandlerFunc(handler{appState: appState}.spotifyPlayback))
 	mux.Handle("/api/dashboard/default-keywords", http.HandlerFunc(handler{appState: appState}.defaultKeywords))
+	mux.Handle("/api/dashboard/commands", http.HandlerFunc(handler{appState: appState}.commands))
 	mux.Handle("/api/dashboard/modules", http.HandlerFunc(handler{appState: appState}.modulesCatalog))
 	mux.Handle("/api/dashboard/modules/followers-only", http.HandlerFunc(handler{appState: appState}.followersOnlyModule))
 	mux.Handle("/api/dashboard/modules/new-chatter-greeting", http.HandlerFunc(handler{appState: appState}.newChatterGreetingModule))

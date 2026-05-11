@@ -37,6 +37,7 @@ type State struct {
 	StreamElementsOAuth    *streamelementsoauth.Service
 	StreamElementsAccounts *postgres.StreamElementsAccountStore
 	DashboardRoles         *postgres.DashboardRoleStore
+	CustomCommands         *postgres.CustomCommandStore
 	DefaultKeywords        *postgres.DefaultKeywordSettingStore
 	FollowersOnlyModule    *postgres.FollowersOnlyModuleSettingsStore
 	NewChatterGreeting     *postgres.NewChatterGreetingModuleSettingsStore
@@ -125,6 +126,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 	streamElementsOAuthService := streamelementsoauth.NewService(streamElementsClient, streamelementsoauth.NewRedisStateStore(redisClient))
 	streamElementsAccountStore := postgres.NewStreamElementsAccountStore(postgresClient)
 	dashboardRoleStore := postgres.NewDashboardRoleStore(postgresClient)
+	customCommandStore := postgres.NewCustomCommandStore(postgresClient)
 	defaultKeywordStore := postgres.NewDefaultKeywordSettingStore(postgresClient)
 	followersOnlyModuleStore := postgres.NewFollowersOnlyModuleSettingsStore(postgresClient)
 	newChatterGreetingStore := postgres.NewNewChatterGreetingModuleSettingsStore(postgresClient)
@@ -166,6 +168,7 @@ func New(cfg *config.Config, postgresClient *postgres.Client, redisClient *redis
 		StreamElementsOAuth:    streamElementsOAuthService,
 		StreamElementsAccounts: streamElementsAccountStore,
 		DashboardRoles:         dashboardRoleStore,
+		CustomCommands:         customCommandStore,
 		DefaultKeywords:        defaultKeywordStore,
 		FollowersOnlyModule:    followersOnlyModuleStore,
 		NewChatterGreeting:     newChatterGreetingStore,

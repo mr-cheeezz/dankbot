@@ -9,10 +9,13 @@ import {
 
 import {
   createMode as createDashboardMode,
+  createCommandEntry,
   deleteMode as deleteDashboardMode,
+  deleteCommandEntry,
   fetchBotControls,
   fetchAuditLogs,
   fetchAlertSettings,
+  fetchCommandEntries,
   fetchDefaultKeywordSettings,
   fetchModuleCatalog,
   fetchDashboardSummary,
@@ -39,6 +42,7 @@ import {
   saveUserProfileModuleSettings,
   saveSpamFilter,
   toggleDashboardKillswitch,
+  updateCommandEntry,
   updateMode as updateDashboardMode,
 } from "./api";
 import {
@@ -909,6 +913,29 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
       setAuditEntries(initialAuditEntries);
     });
 
+    fetchCommandEntries(controller.signal)
+      .then((nextCommands) => {
+        const resolvedCommands =
+          nextCommands.length > 0 ? nextCommands : initialCommandEntries;
+        setCommands(resolvedCommands);
+        setSelectedCommandId((current) => {
+          if (
+            current !== "" &&
+            resolvedCommands.some((entry) => entry.id === current)
+          ) {
+            return current;
+          }
+          return resolvedCommands[0]?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setCommands(initialCommandEntries);
+          setSelectedCommandId(initialCommandEntries[0]?.id ?? "");
+          setNotice("Could not load chat commands right now.");
+        }
+      });
+
     fetchBotControls(controller.signal)
       .then((nextControls) => {
         setAvailableBotModes(nextControls.modes);
@@ -1352,40 +1379,127 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
     null;
 
   const toggleCommand = (commandId: string) => {
-    setCommands((current) =>
-      current.map((entry) => {
-        if (entry.id !== commandId || entry.protected) {
-          return entry;
-        }
+    const currentEntry = commands.find((entry) => entry.id === commandId);
+    if (currentEntry == null || currentEntry.protected) {
+      return;
+    }
 
-        return {
-          ...entry,
-          enabled: !entry.enabled,
-          state: !entry.enabled ? "enabled" : "disabled",
-        };
-      }),
+    const nextEntry = {
+      ...currentEntry,
+      enabled: !currentEntry.enabled,
+      state: !currentEntry.enabled ? "enabled" : "disabled",
+    };
+
+    setCommands((current) =>
+      current.map((entry) => (entry.id === commandId ? nextEntry : entry)),
     );
+
+    void updateCommandEntry(commandId, {
+      name: nextEntry.name,
+      kind: nextEntry.kind,
+      defaultEnabled: nextEntry.defaultEnabled,
+      platform: nextEntry.platform,
+      aliases: nextEntry.aliases,
+      group: nextEntry.group,
+      state: nextEntry.state,
+      description: nextEntry.description,
+      example: nextEntry.example,
+      responsePreview: nextEntry.responsePreview,
+      responseType: nextEntry.responseType,
+      enabled: nextEntry.enabled,
+      enabledWhenOffline: nextEntry.enabledWhenOffline,
+      enabledWhenOnline: nextEntry.enabledWhenOnline,
+      protected: nextEntry.protected,
+      configurable: nextEntry.configurable,
+    }).then((savedEntry) => {
+      setCommands((current) =>
+        current.map((entry) => (entry.id === commandId ? savedEntry : entry)),
+      );
+    }).catch(() => {
+      setCommands((current) =>
+        current.map((entry) =>
+          entry.id === commandId ? currentEntry : entry,
+        ),
+      );
+      setNotice("Could not save that command right now.");
+    });
   };
 
   const updateCommand = (commandId: string, next: Partial<CommandEntry>) => {
+    const currentEntry = commands.find((entry) => entry.id === commandId);
+    if (currentEntry == null) {
+      return;
+    }
+
+    const mergedEntry = { ...currentEntry, ...next };
     setCommands((current) =>
-      current.map((entry) =>
-        entry.id === commandId ? { ...entry, ...next } : entry,
-      ),
+      current.map((entry) => (entry.id === commandId ? mergedEntry : entry)),
     );
+
+    void updateCommandEntry(commandId, {
+      name: mergedEntry.name,
+      kind: mergedEntry.kind,
+      defaultEnabled: mergedEntry.defaultEnabled,
+      platform: mergedEntry.platform,
+      aliases: mergedEntry.aliases,
+      group: mergedEntry.group,
+      state: mergedEntry.state,
+      description: mergedEntry.description,
+      example: mergedEntry.example,
+      responsePreview: mergedEntry.responsePreview,
+      responseType: mergedEntry.responseType,
+      enabled: mergedEntry.enabled,
+      enabledWhenOffline: mergedEntry.enabledWhenOffline,
+      enabledWhenOnline: mergedEntry.enabledWhenOnline,
+      protected: mergedEntry.protected,
+      configurable: mergedEntry.configurable,
+    }).then((savedEntry) => {
+      setCommands((current) =>
+        current.map((entry) => (entry.id === commandId ? savedEntry : entry)),
+      );
+    }).catch(() => {
+      setCommands((current) =>
+        current.map((entry) =>
+          entry.id === commandId ? currentEntry : entry,
+        ),
+      );
+      setNotice("Could not update that command right now.");
+    });
   };
 
   const createCommand = (entry: Omit<CommandEntry, "id">) => {
-    const id = `cmd-custom-${Date.now().toString(36)}`;
-    setCommands((current) => [{ ...entry, id }, ...current]);
+    void createCommandEntry(entry)
+      .then((createdEntry) => {
+        setCommands((current) => [createdEntry, ...current]);
+        setSelectedCommandId(createdEntry.id);
+      })
+      .catch(() => {
+        setNotice("Could not create that command right now.");
+      });
   };
 
   const deleteCommand = (commandId: string) => {
+    const currentEntry = commands.find((entry) => entry.id === commandId);
+    if (currentEntry == null || currentEntry.kind !== "custom") {
+      return;
+    }
+
     setCommands((current) =>
-      current.filter(
-        (entry) => !(entry.id === commandId && entry.kind === "custom"),
-      ),
+      current.filter((entry) => entry.id !== commandId),
     );
+    setSelectedCommandId((current) => {
+      if (current !== commandId) {
+        return current;
+      }
+      const nextEntry = commands.find((entry) => entry.id !== commandId);
+      return nextEntry?.id ?? "";
+    });
+
+    void deleteCommandEntry(commandId).catch(() => {
+      setCommands((current) => [currentEntry, ...current]);
+      setSelectedCommandId((current) => current || currentEntry.id);
+      setNotice("Could not delete that command right now.");
+    });
   };
 
   const toggleKeyword = (keywordId: string) => {

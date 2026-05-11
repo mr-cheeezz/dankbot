@@ -3,6 +3,7 @@ import type {
   AuditEntry,
   BlockedTermEntry,
   BotModeOption,
+  CommandEntry,
   DashboardRoleEntry,
   DiscordBotSettings,
   FollowersOnlyModuleSettings,
@@ -89,6 +90,28 @@ type AuditLogsResponse = {
     command: string;
     detail: string;
     ago: string;
+  }>;
+};
+
+type CommandsResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    kind: "custom" | "default";
+    default_enabled: boolean;
+    platform: "twitch" | "discord";
+    aliases: string[];
+    group: string;
+    state: string;
+    description: string;
+    example: string;
+    response_preview: string;
+    response_type: "reply" | "say" | "action";
+    enabled: boolean;
+    enabled_when_offline: boolean;
+    enabled_when_online: boolean;
+    protected: boolean;
+    configurable: boolean;
   }>;
 };
 
@@ -564,6 +587,135 @@ export async function fetchAuditLogs(
     detail: entry.detail,
     ago: entry.ago,
   }));
+}
+
+export async function fetchCommandEntries(
+  signal?: AbortSignal,
+): Promise<CommandEntry[]> {
+  const response = await fetch("/api/dashboard/commands", {
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to load commands: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as CommandsResponse;
+  return (payload.items ?? []).map(commandEntryFromPayload);
+}
+
+export async function createCommandEntry(
+  entry: Omit<CommandEntry, "id">,
+): Promise<CommandEntry> {
+  const response = await fetch("/api/dashboard/commands", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(commandEntryToPayload(entry)),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to create command: ${response.status}`);
+  }
+
+  return commandEntryFromPayload(
+    (await response.json()) as CommandsResponse["items"][number],
+  );
+}
+
+export async function updateCommandEntry(
+  id: string,
+  entry: Omit<CommandEntry, "id">,
+): Promise<CommandEntry> {
+  const response = await fetch("/api/dashboard/commands", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id,
+      ...commandEntryToPayload(entry),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`failed to update command: ${response.status}`);
+  }
+
+  return commandEntryFromPayload(
+    (await response.json()) as CommandsResponse["items"][number],
+  );
+}
+
+export async function deleteCommandEntry(id: string): Promise<void> {
+  const response = await fetch(
+    `/api/dashboard/commands?id=${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`failed to delete command: ${response.status}`);
+  }
+}
+
+function commandEntryFromPayload(
+  entry: CommandsResponse["items"][number],
+): CommandEntry {
+  return {
+    id: entry.id,
+    name: entry.name,
+    kind: entry.kind,
+    defaultEnabled: entry.default_enabled,
+    platform: entry.platform,
+    aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
+    group: entry.group ?? "",
+    state: entry.state ?? "",
+    description: entry.description ?? "",
+    example: entry.example ?? "",
+    responsePreview: entry.response_preview ?? "",
+    responseType: entry.response_type ?? "reply",
+    enabled: entry.enabled,
+    enabledWhenOffline: entry.enabled_when_offline,
+    enabledWhenOnline: entry.enabled_when_online,
+    protected: entry.protected,
+    configurable: entry.configurable,
+  };
+}
+
+function commandEntryToPayload(entry: Omit<CommandEntry, "id">) {
+  return {
+    name: entry.name,
+    kind: entry.kind,
+    default_enabled: entry.defaultEnabled,
+    platform: entry.platform,
+    aliases: entry.aliases,
+    group: entry.group,
+    state: entry.state,
+    description: entry.description,
+    example: entry.example,
+    response_preview: entry.responsePreview,
+    response_type: entry.responseType,
+    enabled: entry.enabled,
+    enabled_when_offline: entry.enabledWhenOffline,
+    enabled_when_online: entry.enabledWhenOnline,
+    protected: entry.protected,
+    configurable: entry.configurable,
+  };
 }
 
 export async function fetchAlertSettings(

@@ -16,6 +16,7 @@ import (
 	"github.com/mr-cheeezz/dankbot/pkg/modules"
 	alertsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/alerts"
 	blockedtermsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/blockedterms"
+	customcommandsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/customcommands"
 	defaultcommandsmodule "github.com/mr-cheeezz/dankbot/pkg/modules/defaultcommands"
 	discordbotmodule "github.com/mr-cheeezz/dankbot/pkg/modules/discordbot"
 	followersonlymodule "github.com/mr-cheeezz/dankbot/pkg/modules/followersonly"
@@ -112,6 +113,7 @@ func newRuntime(cfg *config.Config) *runtime {
 	publicHomeSettingsStore := postgres.NewPublicHomeSettingsStore(postgresClient)
 	alertSettingsStore := postgres.NewAlertSettingsStore(postgresClient)
 	defaultCommandStore := postgres.NewDefaultCommandSettingStore(postgresClient)
+	customCommandStore := postgres.NewCustomCommandStore(postgresClient)
 	defaultKeywordStore := postgres.NewDefaultKeywordSettingStore(postgresClient)
 	gameModuleSettingsStore := postgres.NewGameModuleSettingsStore(postgresClient)
 	modeModule := modesmodule.New(modeStore, stateStore, socialStore, auditStore, cfg.Main.AdminID, cfg.Main.StreamerID)
@@ -145,6 +147,14 @@ func newRuntime(cfg *config.Config) *runtime {
 	spamFiltersModule.SetStreamLiveChecker(streamChecker.IsLive)
 	spamFiltersModule.SetHypeSettingsStore(postgres.NewSpamFilterHypeSettingsStore(postgresClient))
 	spamFiltersModule.SetRedisEventSource(redisClient, cfg.Main.StreamerID)
+	customCommandsModule := customcommandsmodule.New(customCommandStore)
+	customCommandsModule.SetStreamLiveChecker(func() bool {
+		live, err := streamChecker.IsLive(context.Background())
+		if err != nil {
+			return true
+		}
+		return live
+	})
 	followersOnlyModule := followersonlymodule.New(
 		postgres.NewFollowersOnlyModuleSettingsStore(postgresClient),
 		twitchAccountStore,
@@ -182,6 +192,7 @@ func newRuntime(cfg *config.Config) *runtime {
 		keywordsModule.SetSemanticValidator(openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, cfg.OpenAI.Timeout))
 	}
 	moduleRunner := modules.NewRunner(dispatcher)
+	moduleRunner.Register(customCommandsModule)
 	moduleRunner.Register(defaultcommandsmodule.New(time.Now().UTC(), botVersion, defaultCommandStore))
 	moduleRunner.Register(alertsModule)
 	moduleRunner.Register(discordModule)

@@ -52,7 +52,7 @@ function normalizeCommandToken(value: string): string {
 
 export function CommandsPage() {
   const { commands, toggleCommand, updateCommand, createCommand, deleteCommand } = useModerator();
-  const [tab, setTab] = useState<CommandTab>("default");
+  const [tab, setTab] = useState<CommandTab>("custom");
   const [search, setSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingCommandId, setEditingCommandId] = useState<string | null>(null);
