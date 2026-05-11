@@ -342,36 +342,60 @@ function PredictionOverlay({
 }) {
   const winnerMode =
     !prediction.active && isRecentlyEnded(prediction.endedAt, nowTick);
-  const totalPoints = Math.max(1, prediction.totalPoints);
-  const outcomes = prediction.outcomes.slice(0, 2);
-  const leftOutcome = outcomes[0] ?? {
-    title: "Option 1",
-    users: 0,
-    channelPoints: 0,
-    color: "blue",
-  };
-  const rightOutcome = outcomes[1] ?? {
-    title: "Option 2",
-    users: 0,
-    channelPoints: 0,
-    color: "pink",
-  };
-  const winner =
-    leftOutcome.channelPoints === rightOutcome.channelPoints
-      ? null
-      : leftOutcome.channelPoints > rightOutcome.channelPoints
-        ? leftOutcome
-        : rightOutcome;
-  const leftRaw = (leftOutcome.channelPoints / totalPoints) * 100;
-  const clampedLeft =
-    outcomes.length < 2 ? 100 : Math.min(84, Math.max(16, leftRaw));
-  const clampedRight = 100 - clampedLeft;
-  const leftWidth = (predictionWidth * clampedLeft) / 100;
-  const rightWidth = (predictionWidth * clampedRight) / 100;
-  const rightX = predictionWidth - rightWidth;
+  const baseOutcomes = prediction.outcomes.length > 0
+    ? prediction.outcomes
+    : [
+        {
+          title: "Option 1",
+          users: 0,
+          channelPoints: 0,
+          color: "blue",
+        },
+        {
+          title: "Option 2",
+          users: 0,
+          channelPoints: 0,
+          color: "pink",
+        },
+      ];
+  const totalPoints = Math.max(
+    1,
+    prediction.totalPoints,
+    baseOutcomes.reduce((sum, outcome) => sum + outcome.channelPoints, 0),
+  );
+  const outcomes = baseOutcomes.map((outcome, index) => ({
+    ...outcome,
+    fill: predictionOutcomeFill(prediction, outcome.color, index),
+  }));
+  const leftOutcome = outcomes[0];
+  const rightOutcome = outcomes[outcomes.length - 1];
+  const winner = outcomes.reduce<
+    | {
+        title: string;
+        users: number;
+        channelPoints: number;
+        color: string;
+        fill: string;
+      }
+    | null
+  >((current, outcome) => {
+    if (current == null || outcome.channelPoints > current.channelPoints) {
+      return outcome;
+    }
+    return current;
+  }, null);
+  const trackY = 34;
+  const trackHeight = 46;
+  const trackRadius = 23;
+  const rowHeight = 24;
+  const rowGap = 6;
+  const rowsStartY = 94;
+  const metaY =
+    rowsStartY + outcomes.length * (rowHeight + rowGap) + 6;
+  const svgHeight = metaY + 30;
   const centerX = predictionWidth / 2;
-  const centerNotchSize = 22;
-  const metaY = 92;
+  const centerNotchSize = 18;
+  const segments = buildPredictionSegments(outcomes, predictionWidth, totalPoints);
   const statusLabel = winnerMode
     ? winner == null
       ? "Prediction ended in a tie"
@@ -379,6 +403,7 @@ function PredictionOverlay({
     : prediction.lockedAt.trim() !== ""
       ? formatTimeLeft(prediction.lockedAt, nowTick)
       : "Prediction live";
+  const showInlineLabels = outcomes.length <= 2;
 
   return (
     <Box
@@ -400,7 +425,7 @@ function PredictionOverlay({
       }}
     >
       <svg
-        viewBox={`0 0 ${predictionWidth} 126`}
+        viewBox={`0 0 ${predictionWidth} ${svgHeight}`}
         width="100%"
         height="auto"
         preserveAspectRatio="xMidYMin meet"
@@ -430,6 +455,18 @@ function PredictionOverlay({
           </linearGradient>
         </defs>
 
+        <PredictionSideBadge
+          x={22}
+          y={18}
+          color={prediction.leftColor}
+        />
+        <PredictionSideBadge
+          x={predictionWidth - 22}
+          y={18}
+          color={prediction.rightColor}
+          mirrored
+        />
+
         <text
           x={predictionWidth / 2}
           y="24"
@@ -445,86 +482,134 @@ function PredictionOverlay({
 
         <rect
           x="0"
-          y="34"
+          y={trackY}
           width={predictionWidth}
-          height="44"
-          rx="22"
-          ry="22"
+          height={trackHeight}
+          rx={trackRadius}
+          ry={trackRadius}
           fill={alpha(prediction.trackColor, 0.92)}
         />
-        <rect
-          x="0"
-          y="34"
-          width={leftWidth}
-          height="44"
-          rx="22"
-          ry="22"
-          fill="url(#prediction-left)"
-          filter={winnerMode && winner === leftOutcome ? "url(#prediction-shadow)" : undefined}
-          opacity={winnerMode && winner != null && winner !== leftOutcome ? 0.55 : 1}
-        />
-        <rect
-          x={rightX}
-          y="34"
-          width={rightWidth}
-          height="44"
-          rx="22"
-          ry="22"
-          fill="url(#prediction-right)"
-          filter={winnerMode && winner === rightOutcome ? "url(#prediction-shadow)" : undefined}
-          opacity={winnerMode && winner != null && winner !== rightOutcome ? 0.55 : 1}
-        />
+        {segments.map((segment, index) => (
+          <path
+            key={`${segment.title}-${index}`}
+            d={segmentPath(
+              segment.x,
+              trackY,
+              segment.width,
+              trackHeight,
+              trackRadius,
+              segment.roundLeft,
+              segment.roundRight,
+            )}
+            fill={segment.fill}
+            filter={winnerMode && winner != null && winner.title === segment.title ? "url(#prediction-shadow)" : undefined}
+            opacity={winnerMode && winner != null && winner.title !== segment.title ? 0.52 : 1}
+          />
+        ))}
         <polygon
-          points={`${centerX - centerNotchSize},34 ${centerX + centerNotchSize},34 ${centerX},78`}
+          points={`${centerX - centerNotchSize},${trackY} ${centerX + centerNotchSize},${trackY} ${centerX},${trackY + trackHeight}`}
           fill={alpha("#ffffff", 0.2)}
         />
         <line
           x1={centerX}
-          y1="34"
+          y1={trackY}
           x2={centerX}
-          y2="78"
+          y2={trackY + trackHeight}
           stroke="rgba(255,255,255,0.5)"
           strokeWidth="2"
         />
 
-        <text
-          x="18"
-          y="61"
-          fill={prediction.textColor}
-          fontSize="16"
-          fontWeight="900"
-        >
-          {leftOutcome.title}
-        </text>
-        <text
-          x={predictionWidth - 18}
-          y="61"
-          fill={prediction.textColor}
-          fontSize="16"
-          fontWeight="900"
-          textAnchor="end"
-        >
-          {rightOutcome.title}
-        </text>
-        <text
-          x="18"
-          y="78"
-          fill={alpha(prediction.textColor, 0.92)}
-          fontSize="12"
-          fontWeight="700"
-        >
-          {formatPercent(leftOutcome.channelPoints, totalPoints)} · {formatCompactNumber(leftOutcome.channelPoints)} pts
-        </text>
-        <text
-          x={predictionWidth - 18}
-          y="78"
-          fill={alpha(prediction.textColor, 0.92)}
-          fontSize="12"
-          fontWeight="700"
-          textAnchor="end"
-        >
-          {formatCompactNumber(rightOutcome.channelPoints)} pts · {formatPercent(rightOutcome.channelPoints, totalPoints)}
-        </text>
+        {showInlineLabels ? (
+          <>
+            <text
+              x="18"
+              y="61"
+              fill={prediction.textColor}
+              fontSize="16"
+              fontWeight="900"
+            >
+              {leftOutcome.title}
+            </text>
+            <text
+              x={predictionWidth - 18}
+              y="61"
+              fill={prediction.textColor}
+              fontSize="16"
+              fontWeight="900"
+              textAnchor="end"
+            >
+              {rightOutcome.title}
+            </text>
+            <text
+              x="18"
+              y="78"
+              fill={alpha(prediction.textColor, 0.92)}
+              fontSize="12"
+              fontWeight="700"
+            >
+              {formatPercent(leftOutcome.channelPoints, totalPoints)} · {formatCompactNumber(leftOutcome.channelPoints)} pts
+            </text>
+            <text
+              x={predictionWidth - 18}
+              y="78"
+              fill={alpha(prediction.textColor, 0.92)}
+              fontSize="12"
+              fontWeight="700"
+              textAnchor="end"
+            >
+              {formatCompactNumber(rightOutcome.channelPoints)} pts · {formatPercent(rightOutcome.channelPoints, totalPoints)}
+            </text>
+          </>
+        ) : null}
+
+        {outcomes.map((outcome, index) => {
+          const rowY = rowsStartY + index * (rowHeight + rowGap);
+          const isWinner =
+            winner != null &&
+            winner.title.trim().toLowerCase() === outcome.title.trim().toLowerCase();
+          return (
+            <g key={`${outcome.title}-row-${index}`} transform={`translate(0, ${rowY})`}>
+              <rect
+                x="0"
+                y="0"
+                width={predictionWidth}
+                height={rowHeight}
+                rx="12"
+                ry="12"
+                fill={winnerMode && isWinner ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)"}
+                stroke={winnerMode && isWinner ? alpha(outcome.fill, 0.8) : "rgba(255,255,255,0.08)"}
+              />
+              <rect
+                x="10"
+                y="6"
+                width="12"
+                height="12"
+                rx="3"
+                ry="3"
+                fill={outcome.fill}
+              />
+              <text
+                x="30"
+                y="16"
+                fill={prediction.textColor}
+                fontSize="12.5"
+                fontWeight={winnerMode && isWinner ? "900" : "700"}
+              >
+                {winnerMode && isWinner ? `Winner: ${outcome.title}` : outcome.title}
+              </text>
+              <text
+                x={predictionWidth - 12}
+                y="16"
+                fill={alpha(prediction.textColor, 0.9)}
+                fontSize="11.5"
+                fontWeight="700"
+                textAnchor="end"
+              >
+                {formatPredictionMultiplier(outcome.channelPoints, totalPoints)} · {formatPercent(outcome.channelPoints, totalPoints)} · {formatCompactNumber(outcome.channelPoints)} pts
+              </text>
+            </g>
+          );
+        })}
 
         {[
           statusLabel,
@@ -564,6 +649,145 @@ function PredictionOverlay({
       </svg>
     </Box>
   );
+}
+
+function PredictionSideBadge({
+  x,
+  y,
+  color,
+  mirrored,
+}: {
+  x: number;
+  y: number;
+  color: string;
+  mirrored?: boolean;
+}) {
+  return (
+    <g transform={`translate(${x}, ${y}) ${mirrored ? "scale(-1,1)" : ""}`}>
+      <circle
+        cx="0"
+        cy="0"
+        r="14"
+        fill={alpha(color, 0.86)}
+        stroke="rgba(255,255,255,0.28)"
+      />
+      <path
+        d="M-5 -6 L0 -1 L5 -6 L5 3 L0 8 L-5 3 Z"
+        fill="#ffffff"
+        opacity="0.95"
+      />
+      <path
+        d="M-1 -1 L3 3 L0 6 L-3 3 Z"
+        fill={alpha(color, 0.92)}
+      />
+    </g>
+  );
+}
+
+function buildPredictionSegments(
+  outcomes: Array<{
+    title: string;
+    users: number;
+    channelPoints: number;
+    color: string;
+    fill: string;
+  }>,
+  totalWidth: number,
+  totalPoints: number,
+) {
+  let cursor = 0;
+  return outcomes.map((outcome, index) => {
+    const isLast = index === outcomes.length - 1;
+    const rawWidth =
+      totalPoints <= 0 ? 0 : (outcome.channelPoints / totalPoints) * totalWidth;
+    const width = isLast ? totalWidth - cursor : Math.max(0, rawWidth);
+    const segment = {
+      title: outcome.title,
+      fill: outcome.fill,
+      x: cursor,
+      width: Math.max(0, width),
+      roundLeft: index === 0,
+      roundRight: isLast,
+    };
+    cursor += Math.max(0, width);
+    return segment;
+  });
+}
+
+function segmentPath(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  roundLeft: boolean,
+  roundRight: boolean,
+) {
+  if (width <= 0) {
+    return "";
+  }
+  const r = Math.max(
+    0,
+    Math.min(radius, height / 2, roundLeft && roundRight ? width / 2 : width),
+  );
+  const left = x;
+  const right = x + width;
+  const top = y;
+  const bottom = y + height;
+
+  return [
+    `M ${left + (roundLeft ? r : 0)} ${top}`,
+    `H ${right - (roundRight ? r : 0)}`,
+    roundRight
+      ? `Q ${right} ${top} ${right} ${top + r}`
+      : `L ${right} ${top}`,
+    `V ${bottom - (roundRight ? r : 0)}`,
+    roundRight
+      ? `Q ${right} ${bottom} ${right - r} ${bottom}`
+      : `L ${right} ${bottom}`,
+    `H ${left + (roundLeft ? r : 0)}`,
+    roundLeft
+      ? `Q ${left} ${bottom} ${left} ${bottom - r}`
+      : `L ${left} ${bottom}`,
+    `V ${top + (roundLeft ? r : 0)}`,
+    roundLeft
+      ? `Q ${left} ${top} ${left + r} ${top}`
+      : `L ${left} ${top}`,
+    "Z",
+  ].join(" ");
+}
+
+function predictionOutcomeFill(
+  prediction: PublicPredictionOverlay,
+  outcomeColor: string,
+  index: number,
+) {
+  const normalized = outcomeColor.trim().toLowerCase();
+  if (normalized === "blue") {
+    return prediction.leftColor;
+  }
+  if (normalized === "pink") {
+    return prediction.rightColor;
+  }
+
+  const palette = [
+    prediction.leftColor,
+    prediction.rightColor,
+    "#a78bfa",
+    "#f59e0b",
+    "#34d399",
+    "#fb7185",
+    "#38bdf8",
+    "#f97316",
+  ];
+  return palette[index % palette.length];
+}
+
+function formatPredictionMultiplier(points: number, totalPoints: number) {
+  if (points <= 0 || totalPoints <= 0) {
+    return "x0.0";
+  }
+  return `x${(totalPoints / points).toFixed(1)}`;
 }
 
 function shouldShowOverlay(active: boolean, endedAt: string, nowTick: number) {

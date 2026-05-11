@@ -62,7 +62,7 @@ func (h handler) commands(w http.ResponseWriter, r *http.Request) {
 
 func (h handler) buildCommandGroups(ctx context.Context, audience string) []commandGroupResponse {
 	definitions := publicCommandDefinitions()
-	if len(definitions) == 0 {
+	if len(definitions) == 0 && (h.appState == nil || h.appState.CustomCommands == nil) {
 		return nil
 	}
 
@@ -102,6 +102,19 @@ func (h handler) buildCommandGroups(ctx context.Context, audience string) []comm
 			Example:     strings.TrimSpace(doc.Example),
 		})
 	}
+	for _, doc := range h.publicCustomCommandDocs(ctx, commandPrefix) {
+		if doc.Audience != audience {
+			continue
+		}
+
+		moduleName := publicCommandGroupLabel(doc.Module)
+		grouped[moduleName] = append(grouped[moduleName], publicCommandResponse{
+			Name:        strings.TrimSpace(doc.Name),
+			Description: strings.TrimSpace(doc.Description),
+			Usage:       strings.TrimSpace(doc.Usage),
+			Example:     strings.TrimSpace(doc.Example),
+		})
+	}
 
 	groupNames := make([]string, 0, len(grouped))
 	for groupName := range grouped {
@@ -122,6 +135,81 @@ func (h handler) buildCommandGroups(ctx context.Context, audience string) []comm
 	}
 
 	return items
+}
+
+func (h handler) publicCustomCommandDocs(ctx context.Context, commandPrefix string) []publicCommandDoc {
+	if h.appState == nil || h.appState.CustomCommands == nil {
+		return nil
+	}
+
+	entries, err := h.appState.CustomCommands.List(ctx)
+	if err != nil {
+		return nil
+	}
+
+	items := make([]publicCommandDoc, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.Enabled || !strings.EqualFold(strings.TrimSpace(entry.Platform), "twitch") {
+			continue
+		}
+
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			continue
+		}
+
+		description := strings.TrimSpace(entry.Description)
+		if description == "" {
+			description = "Custom chat command."
+		}
+		if aliasText := publicCustomCommandAliasText(entry.Aliases, commandPrefix); aliasText != "" {
+			description = description + " " + aliasText
+		}
+
+		example := strings.TrimSpace(entry.Example)
+		if example == "" {
+			example = applyPublicCommandPrefix(name, commandPrefix)
+		} else {
+			example = applyPublicCommandPrefix(example, commandPrefix)
+		}
+
+		items = append(items, publicCommandDoc{
+			Audience:    "regular",
+			Module:      "custom-commands",
+			Name:        applyPublicCommandPrefix(name, commandPrefix),
+			Description: description,
+			Usage:       applyPublicCommandPrefix(name, commandPrefix),
+			Example:     example,
+		})
+	}
+
+	return items
+}
+
+func publicCustomCommandAliasText(aliases []string, commandPrefix string) string {
+	if len(aliases) == 0 {
+		return ""
+	}
+
+	normalized := make([]string, 0, len(aliases))
+	seen := make(map[string]struct{}, len(aliases))
+	for _, alias := range aliases {
+		value := strings.TrimSpace(alias)
+		if value == "" {
+			continue
+		}
+		value = applyPublicCommandPrefix(value, commandPrefix)
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+
+	return "Aliases: " + strings.Join(normalized, ", ")
 }
 
 func publicCommandDocs(
@@ -282,6 +370,8 @@ func publicCommandGroupLabel(moduleName string) string {
 		return "Quote Commands"
 	case "modes":
 		return "Mode Commands"
+	case "custom-commands":
+		return "Custom Commands"
 	default:
 		trimmed := strings.TrimSpace(moduleName)
 		if trimmed == "" {
