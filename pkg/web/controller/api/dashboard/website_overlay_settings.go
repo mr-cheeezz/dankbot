@@ -11,14 +11,23 @@ import (
 )
 
 type websiteOverlaySettingsResponse struct {
-	PollsEnabled       bool   `json:"polls_enabled"`
-	PredictionsEnabled bool   `json:"predictions_enabled"`
-	PollPosition       string `json:"poll_position"`
-	PredictionPosition string `json:"prediction_position"`
-	PollOffsetX        int    `json:"poll_offset_x"`
-	PollOffsetY        int    `json:"poll_offset_y"`
-	PredictionOffsetX  int    `json:"prediction_offset_x"`
-	PredictionOffsetY  int    `json:"prediction_offset_y"`
+	PollsEnabled         bool    `json:"polls_enabled"`
+	PredictionsEnabled   bool    `json:"predictions_enabled"`
+	PollPosition         string  `json:"poll_position"`
+	PredictionPosition   string  `json:"prediction_position"`
+	PollOffsetX          int     `json:"poll_offset_x"`
+	PollOffsetY          int     `json:"poll_offset_y"`
+	PredictionOffsetX    int     `json:"prediction_offset_x"`
+	PredictionOffsetY    int     `json:"prediction_offset_y"`
+	PollScale            float64 `json:"poll_scale"`
+	PollBarColor         string  `json:"poll_bar_color"`
+	PollTitleColor       string  `json:"poll_title_color"`
+	PollTextColor        string  `json:"poll_text_color"`
+	PredictionScale      float64 `json:"prediction_scale"`
+	PredictionLeftColor  string  `json:"prediction_left_color"`
+	PredictionRightColor string  `json:"prediction_right_color"`
+	PredictionTextColor  string  `json:"prediction_text_color"`
+	PredictionTrackColor string  `json:"prediction_track_color"`
 }
 
 func (h handler) websiteOverlaySettings(w http.ResponseWriter, r *http.Request) {
@@ -94,15 +103,24 @@ func (h handler) updateWebsiteOverlaySettings(w http.ResponseWriter, r *http.Req
 	}
 
 	updated, err := h.appState.WebsiteOverlaySettings.Update(r.Context(), postgres.WebsiteOverlaySettings{
-		PollsEnabled:       request.PollsEnabled,
-		PredictionsEnabled: request.PredictionsEnabled,
-		PollPosition:       request.PollPosition,
-		PredictionPosition: request.PredictionPosition,
-		PollOffsetX:        request.PollOffsetX,
-		PollOffsetY:        request.PollOffsetY,
-		PredictionOffsetX:  request.PredictionOffsetX,
-		PredictionOffsetY:  request.PredictionOffsetY,
-		UpdatedBy:          strings.TrimSpace(userSession.Login),
+		PollsEnabled:         request.PollsEnabled,
+		PredictionsEnabled:   request.PredictionsEnabled,
+		PollPosition:         request.PollPosition,
+		PredictionPosition:   request.PredictionPosition,
+		PollOffsetX:          request.PollOffsetX,
+		PollOffsetY:          request.PollOffsetY,
+		PredictionOffsetX:    request.PredictionOffsetX,
+		PredictionOffsetY:    request.PredictionOffsetY,
+		PollScale:            request.PollScale,
+		PollBarColor:         request.PollBarColor,
+		PollTitleColor:       request.PollTitleColor,
+		PollTextColor:        request.PollTextColor,
+		PredictionScale:      request.PredictionScale,
+		PredictionLeftColor:  request.PredictionLeftColor,
+		PredictionRightColor: request.PredictionRightColor,
+		PredictionTextColor:  request.PredictionTextColor,
+		PredictionTrackColor: request.PredictionTrackColor,
+		UpdatedBy:            strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -119,13 +137,22 @@ func (h handler) updateWebsiteOverlaySettings(w http.ResponseWriter, r *http.Req
 
 func websiteOverlaySettingsToResponse(settings postgres.WebsiteOverlaySettings) websiteOverlaySettingsResponse {
 	return websiteOverlaySettingsResponse{
-		PollsEnabled:       settings.PollsEnabled,
-		PredictionsEnabled: settings.PredictionsEnabled,
-		PollPosition:       settings.PollPosition,
-		PredictionPosition: settings.PredictionPosition,
-		PollOffsetX:        settings.PollOffsetX,
-		PollOffsetY:        settings.PollOffsetY,
-		PredictionOffsetX:  settings.PredictionOffsetX,
-		PredictionOffsetY:  settings.PredictionOffsetY,
+		PollsEnabled:         settings.PollsEnabled,
+		PredictionsEnabled:   settings.PredictionsEnabled,
+		PollPosition:         settings.PollPosition,
+		PredictionPosition:   settings.PredictionPosition,
+		PollOffsetX:          settings.PollOffsetX,
+		PollOffsetY:          settings.PollOffsetY,
+		PredictionOffsetX:    settings.PredictionOffsetX,
+		PredictionOffsetY:    settings.PredictionOffsetY,
+		PollScale:            settings.PollScale,
+		PollBarColor:         settings.PollBarColor,
+		PollTitleColor:       settings.PollTitleColor,
+		PollTextColor:        settings.PollTextColor,
+		PredictionScale:      settings.PredictionScale,
+		PredictionLeftColor:  settings.PredictionLeftColor,
+		PredictionRightColor: settings.PredictionRightColor,
+		PredictionTextColor:  settings.PredictionTextColor,
+		PredictionTrackColor: settings.PredictionTrackColor,
 	}
 }

@@ -241,7 +241,7 @@ func buildOpenAPISpec(appState *state.State) map[string]any {
 		"openapi": "3.1.0",
 		"info": map[string]any{
 			"title":       "DankBot API",
-			"version":     "0.9.1-beta4",
+			"version":     "0.9.1-beta5",
 			"description": "Public site, dashboard, and OAuth entry endpoints for DankBot.",
 		},
 		"servers": []map[string]any{

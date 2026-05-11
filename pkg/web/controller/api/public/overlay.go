@@ -11,18 +11,22 @@ import (
 const publicOverlayUpdatesChannel = "public:overlay:updates"
 
 type pollOverlayResponse struct {
-	Enabled       bool   `json:"enabled"`
-	Active        bool   `json:"active"`
-	Title         string `json:"title"`
-	Status        string `json:"status"`
-	StartedAt     string `json:"started_at"`
-	EndsAt        string `json:"ends_at"`
-	EndedAt       string `json:"ended_at"`
-	Position      string `json:"position"`
-	OffsetX       int    `json:"offset_x"`
-	OffsetY       int    `json:"offset_y"`
-	AmountPerVote int    `json:"amount_per_vote"`
-	TotalVotes    int    `json:"total_votes"`
+	Enabled       bool    `json:"enabled"`
+	Active        bool    `json:"active"`
+	Title         string  `json:"title"`
+	Status        string  `json:"status"`
+	StartedAt     string  `json:"started_at"`
+	EndsAt        string  `json:"ends_at"`
+	EndedAt       string  `json:"ended_at"`
+	Position      string  `json:"position"`
+	OffsetX       int     `json:"offset_x"`
+	OffsetY       int     `json:"offset_y"`
+	Scale         float64 `json:"scale"`
+	BarColor      string  `json:"bar_color"`
+	TitleColor    string  `json:"title_color"`
+	TextColor     string  `json:"text_color"`
+	AmountPerVote int     `json:"amount_per_vote"`
+	TotalVotes    int     `json:"total_votes"`
 	Choices       []struct {
 		Title              string `json:"title"`
 		Votes              int    `json:"votes"`
@@ -32,18 +36,23 @@ type pollOverlayResponse struct {
 }
 
 type predictionOverlayResponse struct {
-	Enabled     bool   `json:"enabled"`
-	Active      bool   `json:"active"`
-	Title       string `json:"title"`
-	Status      string `json:"status"`
-	StartedAt   string `json:"started_at"`
-	EndedAt     string `json:"ended_at"`
-	LockedAt    string `json:"locked_at"`
-	Position    string `json:"position"`
-	OffsetX     int    `json:"offset_x"`
-	OffsetY     int    `json:"offset_y"`
-	TotalUsers  int    `json:"total_users"`
-	TotalPoints int64  `json:"total_points"`
+	Enabled     bool    `json:"enabled"`
+	Active      bool    `json:"active"`
+	Title       string  `json:"title"`
+	Status      string  `json:"status"`
+	StartedAt   string  `json:"started_at"`
+	EndedAt     string  `json:"ended_at"`
+	LockedAt    string  `json:"locked_at"`
+	Position    string  `json:"position"`
+	OffsetX     int     `json:"offset_x"`
+	OffsetY     int     `json:"offset_y"`
+	Scale       float64 `json:"scale"`
+	LeftColor   string  `json:"left_color"`
+	RightColor  string  `json:"right_color"`
+	TextColor   string  `json:"text_color"`
+	TrackColor  string  `json:"track_color"`
+	TotalUsers  int     `json:"total_users"`
+	TotalPoints int64   `json:"total_points"`
 	Outcomes    []struct {
 		Title         string `json:"title"`
 		Users         int    `json:"users"`
@@ -90,10 +99,14 @@ func (h handler) buildOverlaySnapshot(ctx context.Context) overlaySnapshotRespon
 
 func (h handler) buildPollOverlayResponse(ctx context.Context) pollOverlayResponse {
 	response := pollOverlayResponse{
-		Enabled:  true,
-		Position: "top-right",
-		OffsetX:  24,
-		OffsetY:  24,
+		Enabled:    true,
+		Position:   "top-right",
+		OffsetX:    24,
+		OffsetY:    24,
+		Scale:      1,
+		BarColor:   "#7dd3fc",
+		TitleColor: "#ffffff",
+		TextColor:  "#f8fafc",
 	}
 	if h.appState == nil || h.appState.Config == nil || h.appState.EventSubActivity == nil {
 		return response
@@ -106,6 +119,10 @@ func (h handler) buildPollOverlayResponse(ctx context.Context) pollOverlayRespon
 				response.Position = settings.PollPosition
 				response.OffsetX = settings.PollOffsetX
 				response.OffsetY = settings.PollOffsetY
+				response.Scale = settings.PollScale
+				response.BarColor = settings.PollBarColor
+				response.TitleColor = settings.PollTitleColor
+				response.TextColor = settings.PollTextColor
 			}
 		}
 	}
@@ -151,10 +168,15 @@ func (h handler) buildPollOverlayResponse(ctx context.Context) pollOverlayRespon
 
 func (h handler) buildPredictionOverlayResponse(ctx context.Context) predictionOverlayResponse {
 	response := predictionOverlayResponse{
-		Enabled:  true,
-		Position: "bottom-right",
-		OffsetX:  24,
-		OffsetY:  24,
+		Enabled:    true,
+		Position:   "top-center",
+		OffsetX:    0,
+		OffsetY:    24,
+		Scale:      1,
+		LeftColor:  "#60a5fa",
+		RightColor: "#f472b6",
+		TextColor:  "#ffffff",
+		TrackColor: "rgba(15, 23, 42, 0.28)",
 	}
 	if h.appState == nil || h.appState.Config == nil || h.appState.EventSubActivity == nil {
 		return response
@@ -164,9 +186,14 @@ func (h handler) buildPredictionOverlayResponse(ctx context.Context) predictionO
 		if err := h.appState.WebsiteOverlaySettings.EnsureDefault(ctx); err == nil {
 			if settings, err := h.appState.WebsiteOverlaySettings.Get(ctx); err == nil && settings != nil {
 				response.Enabled = settings.PredictionsEnabled
-				response.Position = settings.PredictionPosition
+				response.Position = "top-center"
 				response.OffsetX = settings.PredictionOffsetX
 				response.OffsetY = settings.PredictionOffsetY
+				response.Scale = settings.PredictionScale
+				response.LeftColor = settings.PredictionLeftColor
+				response.RightColor = settings.PredictionRightColor
+				response.TextColor = settings.PredictionTextColor
+				response.TrackColor = settings.PredictionTrackColor
 			}
 		}
 	}

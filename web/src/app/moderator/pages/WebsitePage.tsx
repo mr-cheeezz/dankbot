@@ -6,6 +6,7 @@ import {
   CardContent,
   Chip,
   Divider,
+  InputAdornment,
   MenuItem,
   Stack,
   Switch,
@@ -25,17 +26,27 @@ import type { WebsiteOverlaySettings } from "../types";
 const defaultSettings: WebsiteOverlaySettings = {
   pollsEnabled: true,
   predictionsEnabled: true,
-  pollPosition: "bottom-left",
-  predictionPosition: "bottom-right",
+  pollPosition: "top-right",
+  predictionPosition: "top-center",
   pollOffsetX: 24,
   pollOffsetY: 24,
   predictionOffsetX: 24,
   predictionOffsetY: 24,
+  pollScale: 1,
+  pollBarColor: "#7dd3fc",
+  pollTitleColor: "#ffffff",
+  pollTextColor: "#f8fafc",
+  predictionScale: 1,
+  predictionLeftColor: "#60a5fa",
+  predictionRightColor: "#f472b6",
+  predictionTextColor: "#ffffff",
+  predictionTrackColor: "#0f172a",
 };
 
 const positions: WebsiteOverlaySettings["pollPosition"][] = [
   "top-left",
   "top-right",
+  "top-center",
   "bottom-left",
   "bottom-right",
 ];
@@ -175,9 +186,9 @@ export function WebsitePage() {
       <Card>
         <CardContent sx={{ display: "grid", gap: 2.25 }}>
           <Box>
-            <Typography variant="h6">Poll Card</Typography>
+            <Typography variant="h6">Poll Overlay</Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-              Controls where the poll widget appears when a Twitch poll is active.
+              Keep polls lightweight: title first, then clean labeled bars with no outer card.
             </Typography>
           </Box>
           <Divider />
@@ -223,15 +234,57 @@ export function WebsitePage() {
               disabled={loading || saving}
             />
           </Stack>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+            <TextField
+              type="number"
+              label="Scale"
+              value={settings.pollScale}
+              onChange={(event) =>
+                update("pollScale", Number(event.target.value) || 1)
+              }
+              fullWidth
+              disabled={loading || saving}
+              inputProps={{ min: 0.5, max: 2, step: 0.05 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">x</InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              type="color"
+              label="Bar color"
+              value={hexColor(settings.pollBarColor, "#7dd3fc")}
+              onChange={(event) => update("pollBarColor", event.target.value)}
+              fullWidth
+              disabled={loading || saving}
+            />
+            <TextField
+              type="color"
+              label="Title color"
+              value={hexColor(settings.pollTitleColor, "#ffffff")}
+              onChange={(event) => update("pollTitleColor", event.target.value)}
+              fullWidth
+              disabled={loading || saving}
+            />
+            <TextField
+              type="color"
+              label="Text color"
+              value={hexColor(settings.pollTextColor, "#f8fafc")}
+              onChange={(event) => update("pollTextColor", event.target.value)}
+              fullWidth
+              disabled={loading || saving}
+            />
+          </Stack>
         </CardContent>
       </Card>
 
       <Card>
         <CardContent sx={{ display: "grid", gap: 2.25 }}>
           <Box>
-            <Typography variant="h6">Prediction Card</Typography>
+            <Typography variant="h6">Prediction Overlay</Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-              Controls where the prediction widget appears when a Twitch prediction is active.
+              Predictions stay pinned top-middle as one shared bar with customizable colors and scale.
             </Typography>
           </Box>
           <Divider />
@@ -245,37 +298,70 @@ export function WebsitePage() {
           </Stack>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
             <TextField
-              select
-              label="Position"
-              value={settings.predictionPosition}
-              onChange={(event) =>
-                update(
-                  "predictionPosition",
-                  event.target.value as WebsiteOverlaySettings["predictionPosition"],
-                )
-              }
-              fullWidth
-              disabled={loading || saving}
-            >
-              {positions.map((position) => (
-                <MenuItem key={position} value={position}>
-                  {position}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
               type="number"
-              label="Offset X"
-              value={settings.predictionOffsetX}
-              onChange={(event) => update("predictionOffsetX", Number(event.target.value) || 0)}
+              label="Top offset"
+              value={settings.predictionOffsetY}
+              onChange={(event) =>
+                update("predictionOffsetY", Number(event.target.value) || 0)
+              }
               fullWidth
               disabled={loading || saving}
             />
             <TextField
               type="number"
-              label="Offset Y"
-              value={settings.predictionOffsetY}
-              onChange={(event) => update("predictionOffsetY", Number(event.target.value) || 0)}
+              label="Scale"
+              value={settings.predictionScale}
+              onChange={(event) =>
+                update("predictionScale", Number(event.target.value) || 1)
+              }
+              fullWidth
+              disabled={loading || saving}
+              inputProps={{ min: 0.5, max: 2, step: 0.05 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">x</InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              type="color"
+              label="Left side color"
+              value={hexColor(settings.predictionLeftColor, "#60a5fa")}
+              onChange={(event) =>
+                update("predictionLeftColor", event.target.value)
+              }
+              fullWidth
+              disabled={loading || saving}
+            />
+            <TextField
+              type="color"
+              label="Right side color"
+              value={hexColor(settings.predictionRightColor, "#f472b6")}
+              onChange={(event) =>
+                update("predictionRightColor", event.target.value)
+              }
+              fullWidth
+              disabled={loading || saving}
+            />
+          </Stack>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+            <TextField
+              type="color"
+              label="Text color"
+              value={hexColor(settings.predictionTextColor, "#ffffff")}
+              onChange={(event) =>
+                update("predictionTextColor", event.target.value)
+              }
+              fullWidth
+              disabled={loading || saving}
+            />
+            <TextField
+              type="color"
+              label="Track color"
+              value={hexColor(settings.predictionTrackColor, "#0f172a")}
+              onChange={(event) =>
+                update("predictionTrackColor", event.target.value)
+              }
               fullWidth
               disabled={loading || saving}
             />
@@ -284,4 +370,8 @@ export function WebsitePage() {
       </Card>
     </Stack>
   );
+}
+
+function hexColor(value: string, fallback: string) {
+  return value.startsWith("#") ? value : fallback;
 }

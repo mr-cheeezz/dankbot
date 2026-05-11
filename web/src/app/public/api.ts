@@ -137,9 +137,13 @@ export type PublicPollOverlay = {
   startedAt: string;
   endsAt: string;
   endedAt: string;
-  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  position: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
   offsetX: number;
   offsetY: number;
+  scale: number;
+  barColor: string;
+  titleColor: string;
+  textColor: string;
   amountPerVote: number;
   totalVotes: number;
   choices: Array<{
@@ -158,9 +162,14 @@ export type PublicPredictionOverlay = {
   startedAt: string;
   endedAt: string;
   lockedAt: string;
-  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  position: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
   offsetX: number;
   offsetY: number;
+  scale: number;
+  leftColor: string;
+  rightColor: string;
+  textColor: string;
+  trackColor: string;
   totalUsers: number;
   totalPoints: number;
   outcomes: Array<{
@@ -327,9 +336,13 @@ type PublicPollOverlayResponse = {
   started_at: string;
   ends_at: string;
   ended_at: string;
-  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  position: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
   offset_x: number;
   offset_y: number;
+  scale: number;
+  bar_color: string;
+  title_color: string;
+  text_color: string;
   amount_per_vote: number;
   total_votes: number;
   choices: Array<{
@@ -348,9 +361,14 @@ type PublicPredictionOverlayResponse = {
   started_at: string;
   ended_at: string;
   locked_at: string;
-  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  position: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
   offset_x: number;
   offset_y: number;
+  scale: number;
+  left_color: string;
+  right_color: string;
+  text_color: string;
+  track_color: string;
   total_users: number;
   total_points: number;
   outcomes: Array<{
@@ -707,9 +725,13 @@ export async function fetchPublicPollOverlay(
     startedAt: payload.started_at ?? "",
     endsAt: payload.ends_at ?? "",
     endedAt: payload.ended_at ?? "",
-    position: payload.position ?? "bottom-left",
+    position: payload.position ?? "top-right",
     offsetX: payload.offset_x ?? 24,
     offsetY: payload.offset_y ?? 24,
+    scale: payload.scale ?? 1,
+    barColor: payload.bar_color ?? "#7dd3fc",
+    titleColor: payload.title_color ?? "#ffffff",
+    textColor: payload.text_color ?? "#f8fafc",
     amountPerVote: payload.amount_per_vote ?? 0,
     totalVotes: payload.total_votes ?? 0,
     choices: (payload.choices ?? []).map((choice) => ({
@@ -741,9 +763,14 @@ export async function fetchPublicPredictionOverlay(
     startedAt: payload.started_at ?? "",
     endedAt: payload.ended_at ?? "",
     lockedAt: payload.locked_at ?? "",
-    position: payload.position ?? "bottom-right",
+    position: payload.position ?? "top-center",
     offsetX: payload.offset_x ?? 24,
     offsetY: payload.offset_y ?? 24,
+    scale: payload.scale ?? 1,
+    leftColor: payload.left_color ?? "#60a5fa",
+    rightColor: payload.right_color ?? "#f472b6",
+    textColor: payload.text_color ?? "#ffffff",
+    trackColor: payload.track_color ?? "rgba(15, 23, 42, 0.28)",
     totalUsers: payload.total_users ?? 0,
     totalPoints: payload.total_points ?? 0,
     outcomes: (payload.outcomes ?? []).map((outcome) => ({

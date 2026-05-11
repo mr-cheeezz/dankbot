@@ -517,6 +517,19 @@ export const initialSpamFilterHypeSettings: SpamFilterHypeSettings = {
 
 export const initialAlertEntries: AlertEntry[] = [
   {
+    id: "follower-alerts",
+    provider: "twitch",
+    section: "Follower Alerts",
+    label: "New Followers",
+    source: "follower alerts",
+    behavior: "announces new Twitch followers in chat",
+    status: "stable",
+    enabled: true,
+    template: "Thank you {user} for following!",
+    scope: "followers",
+    note: "Uses the Twitch channel.follow EventSub event and needs moderator:read:followers on the linked streamer account.",
+  },
+  {
     id: "sub-tier-1",
     provider: "twitch",
     section: "Subscription Alerts",

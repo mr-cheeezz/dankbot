@@ -11,6 +11,7 @@ func DesiredSubscriptions(streamerID string) []DesiredSubscription {
 	return []DesiredSubscription{
 		{Type: "stream.online", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}},
 		{Type: "stream.offline", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}},
+		{Type: "channel.follow", Version: "2", Condition: map[string]string{"broadcaster_user_id": streamerID, "moderator_user_id": streamerID}, RequiredScopes: []string{"moderator:read:followers"}},
 		{Type: "channel.ad_break.begin", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:ads"}},
 		{Type: "channel.subscribe", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:subscriptions"}},
 		{Type: "channel.subscription.gift", Version: "1", Condition: map[string]string{"broadcaster_user_id": streamerID}, RequiredScopes: []string{"channel:read:subscriptions"}},

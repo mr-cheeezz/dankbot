@@ -595,12 +595,21 @@ export type PublicHomeSettings = {
 export type WebsiteOverlaySettings = {
   pollsEnabled: boolean;
   predictionsEnabled: boolean;
-  pollPosition: "top-left" | "top-right" | "bottom-left" | "bottom-right";
-  predictionPosition: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  pollPosition: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
+  predictionPosition: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
   pollOffsetX: number;
   pollOffsetY: number;
   predictionOffsetX: number;
   predictionOffsetY: number;
+  pollScale: number;
+  pollBarColor: string;
+  pollTitleColor: string;
+  pollTextColor: string;
+  predictionScale: number;
+  predictionLeftColor: string;
+  predictionRightColor: string;
+  predictionTextColor: string;
+  predictionTrackColor: string;
 };
 
 export type PlaceholderItem = {

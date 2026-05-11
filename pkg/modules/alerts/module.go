@@ -114,9 +114,6 @@ func (m *Module) handlePublishedEvent(ctx context.Context, payload string) error
 	if err := json.Unmarshal([]byte(payload), &event); err != nil {
 		return fmt.Errorf("decode published alert event: %w", err)
 	}
-	if event.Source != eventsub.SourceTwitchEventSub {
-		return nil
-	}
 	if !m.matchesStreamer(event) {
 		return nil
 	}
@@ -187,6 +184,20 @@ func alertEventDedupeKey(event eventsub.PublishedEvent) string {
 
 func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (string, error) {
 	switch eventType {
+	case "channel.follow":
+		var event eventsub.FollowEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			return "", fmt.Errorf("decode follow event: %w", err)
+		}
+		userName := displayName(event.UserName, event.UserLogin)
+		return m.renderFromAlertEntry(
+			"follower-alerts",
+			map[string]string{
+				"user": userName,
+			},
+			fmt.Sprintf("Thank you %s for following!", userName),
+			nil,
+		)
 	case "stream.online":
 		var event eventsub.StreamStatusEvent
 		if err := json.Unmarshal(raw, &event); err != nil {

@@ -46,7 +46,12 @@ type HypeSpamConfig = {
   singleLine?: string;
   tierLines?: HypeSpamTierLine[];
 };
-type HypeSpamKey = "bits" | "giftedSubs" | "subscriptions" | "resubscriptions";
+type HypeSpamKey =
+  | "bits"
+  | "giftedSubs"
+  | "subscriptions"
+  | "resubscriptions"
+  | "donations";
 
 type ProviderOption = {
   key: AlertProvider;
@@ -163,6 +168,33 @@ const initialHypeSpamConfigs: Record<HypeSpamKey, HypeSpamConfig> = {
       },
     ],
   },
+  donations: {
+    enabled: false,
+    enabledWhenOffline: false,
+    enabledWhenOnline: true,
+    minimumAmount: 5,
+    rateLimitSeconds: 45,
+    rules: [
+      {
+        id: "donations-1",
+        minimumAmount: 5,
+        lineCount: 1,
+        emoteLine: "PogU PogU PogU",
+      },
+      {
+        id: "donations-2",
+        minimumAmount: 20,
+        lineCount: 2,
+        emoteLine: "POGGIES DonoHype POGGIES",
+      },
+      {
+        id: "donations-3",
+        minimumAmount: 50,
+        lineCount: 3,
+        emoteLine: "DonoHype PogChamp DonoHype",
+      },
+    ],
+  },
 };
 
 function providerIsAvailable(
@@ -182,6 +214,8 @@ function sectionSupportsHypeSpam(sectionTitle: string): HypeSpamKey | null {
       return "subscriptions";
     case "Resubscription Alerts":
       return "resubscriptions";
+    case "Donation Alerts":
+      return "donations";
     default:
       return null;
   }
@@ -534,10 +568,17 @@ export function AlertsPage() {
                       const amountLabel =
                         hypeSpamKey === "bits"
                           ? "Minimum bits amount"
-                          : "Minimum gifted subs";
+                          : hypeSpamKey === "donations"
+                            ? "Minimum donation amount"
+                            : "Minimum gifted subs";
                       const amountUnit =
-                        hypeSpamKey === "bits" ? "bits" : "gifts";
-                      const usesRuleTable = hypeSpamKey === "bits";
+                        hypeSpamKey === "bits"
+                          ? "bits"
+                          : hypeSpamKey === "donations"
+                            ? "USD"
+                            : "gifts";
+                      const usesRuleTable =
+                        hypeSpamKey === "bits" || hypeSpamKey === "donations";
                       const usesSingleLine = hypeSpamKey === "giftedSubs";
                       const usesTierLines =
                         hypeSpamKey === "subscriptions" ||

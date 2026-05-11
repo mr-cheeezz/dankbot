@@ -1,17 +1,6 @@
-import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
-import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
-import TollRoundedIcon from "@mui/icons-material/TollRounded";
-import {
-  Box,
-  Chip,
-  LinearProgress,
-  Paper,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Box } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useEffect, useState } from "react";
-import type { ReactElement, ReactNode } from "react";
 
 import {
   fetchPublicPollOverlay,
@@ -21,10 +10,14 @@ import {
 } from "./api";
 
 const refreshMS = 3000;
+const pollWidth = 430;
+const predictionWidth = 760;
 
 export function PublicOverlayPage() {
   const [poll, setPoll] = useState<PublicPollOverlay | null>(null);
-  const [prediction, setPrediction] = useState<PublicPredictionOverlay | null>(null);
+  const [prediction, setPrediction] = useState<PublicPredictionOverlay | null>(
+    null,
+  );
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -81,7 +74,9 @@ export function PublicOverlayPage() {
       }
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      socket = new WebSocket(`${protocol}//${window.location.host}/api/public/overlay/ws`);
+      socket = new WebSocket(
+        `${protocol}//${window.location.host}/api/public/overlay/ws`,
+      );
 
       socket.onmessage = (event) => {
         if (cancelled) {
@@ -152,248 +147,334 @@ export function PublicOverlayPage() {
         backgroundColor: "transparent",
       }}
     >
-      <Stack
-        spacing={1.5}
-        sx={{
-          position: "fixed",
-          top: 20,
-          right: 20,
-          width: { xs: "min(92vw, 420px)", sm: 430 },
-          zIndex: 9999,
-          pointerEvents: "none",
-        }}
-      >
-        {visiblePoll ? <PollOverlayCard poll={poll} nowTick={nowTick} /> : null}
-        {visiblePrediction ? (
-          <PredictionOverlayCard prediction={prediction} nowTick={nowTick} />
-        ) : null}
-      </Stack>
+      {visiblePoll ? <PollOverlay poll={poll} nowTick={nowTick} /> : null}
+      {visiblePrediction ? (
+        <PredictionOverlay prediction={prediction} nowTick={nowTick} />
+      ) : null}
     </Box>
   );
 }
 
-function PollOverlayCard({
+function PollOverlay({
   poll,
   nowTick,
 }: {
   poll: PublicPollOverlay;
   nowTick: number;
 }) {
+  const placement = fixedPosition(poll.position, poll.offsetX, poll.offsetY);
+  const placementTransform =
+    placement.transform == null
+      ? `scale(${poll.scale})`
+      : `${placement.transform} scale(${poll.scale})`;
   const maxVotes = Math.max(1, ...poll.choices.map((choice) => choice.votes));
-  const timeLeft = formatTimeLeft(poll.endsAt, nowTick);
+  const svgHeight = 92 + Math.max(1, poll.choices.length) * 54;
+  const metaLabels = [
+    formatTimeLeft(poll.endsAt, nowTick),
+    `${poll.totalVotes.toLocaleString()} votes`,
+    poll.amountPerVote > 0
+      ? `${poll.amountPerVote.toLocaleString()} extra vote`
+      : "",
+  ].filter((value) => value !== "");
 
   return (
-    <OverlayCard
-      eyebrow="Live Poll"
-      title={poll.title || "Poll active"}
+    <Box
+      sx={{
+        position: "fixed",
+        zIndex: 9999,
+        pointerEvents: "none",
+        width: { xs: "min(92vw, 430px)", sm: `${pollWidth}px` },
+        transform: placementTransform,
+        transformOrigin: "top right",
+        ...placement,
+      }}
     >
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <MetaPill icon={<AccessTimeRoundedIcon sx={{ fontSize: 15 }} />} label={timeLeft} />
-        <MetaPill label={`${poll.totalVotes.toLocaleString()} votes`} />
-        {poll.amountPerVote > 0 ? (
-          <MetaPill
-            icon={<TollRoundedIcon sx={{ fontSize: 15 }} />}
-            label={`${poll.amountPerVote.toLocaleString()} extra vote`}
-          />
-        ) : null}
-      </Stack>
+      <svg
+        viewBox={`0 0 ${pollWidth} ${svgHeight}`}
+        width="100%"
+        height="auto"
+        preserveAspectRatio="xMidYMin meet"
+      >
+        <defs>
+          <filter id="poll-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow
+              dx="0"
+              dy="6"
+              stdDeviation="10"
+              floodColor="rgba(0,0,0,0.45)"
+            />
+          </filter>
+          <linearGradient id="poll-fill" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={alpha(poll.barColor, 0.72)} />
+            <stop offset="100%" stopColor={poll.barColor} />
+          </linearGradient>
+        </defs>
 
-      <Stack spacing={1} sx={{ mt: 1.4 }}>
-        {poll.choices.map((choice) => {
-          const ratio = (choice.votes / maxVotes) * 100;
+        <text
+          x="0"
+          y="28"
+          fill={poll.titleColor}
+          fontSize="28"
+          fontWeight="900"
+          letterSpacing="-1.2"
+          filter="url(#poll-shadow)"
+        >
+          {poll.title || "Poll active"}
+        </text>
+
+        {metaLabels.map((label, index) => {
+          const pillX = index * 132;
           return (
-            <Box key={choice.title} sx={{ display: "grid", gap: 0.45 }}>
-              <Stack direction="row" justifyContent="space-between" spacing={1}>
-                <Typography sx={{ fontWeight: 700, fontSize: "0.96rem", color: "#1c2430" }}>
-                  {choice.title}
-                </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: "0.88rem", color: "#334155" }}>
-                  {choice.votes.toLocaleString()}
-                </Typography>
-              </Stack>
-              <LinearProgress
-                variant="determinate"
-                value={ratio}
-                sx={overlayProgressSx("#60a5fa")}
+            <g key={`${label}-${index}`} transform={`translate(${pillX}, 42)`}>
+              <rect
+                x="0"
+                y="0"
+                rx="12"
+                ry="12"
+                width="124"
+                height="24"
+                fill="rgba(255,255,255,0.18)"
+                stroke="rgba(255,255,255,0.24)"
               />
-              {(choice.channelPointsVotes > 0 || choice.bitsVotes > 0) ? (
-                <Typography sx={{ fontSize: "0.74rem", color: "#5b6778" }}>
-                  {choice.channelPointsVotes > 0
-                    ? `${choice.channelPointsVotes.toLocaleString()} extra votes`
-                    : ""}
-                  {choice.channelPointsVotes > 0 && choice.bitsVotes > 0 ? " • " : ""}
-                  {choice.bitsVotes > 0 ? `${choice.bitsVotes.toLocaleString()} bits votes` : ""}
-                </Typography>
-              ) : null}
-            </Box>
+              <text
+                x="62"
+                y="16"
+                fill="#f8fafc"
+                fontSize="11.5"
+                fontWeight="700"
+                textAnchor="middle"
+              >
+                {label}
+              </text>
+            </g>
           );
         })}
-      </Stack>
-    </OverlayCard>
+
+        {poll.choices.map((choice, index) => {
+          const y = 78 + index * 54;
+          const percent = Math.max(10, (choice.votes / maxVotes) * 100);
+          const width = (390 * percent) / 100;
+          return (
+            <g key={choice.title} transform={`translate(0, ${y})`}>
+              <rect
+                x="0"
+                y="0"
+                rx="18"
+                ry="18"
+                width="390"
+                height="38"
+                fill="rgba(255,255,255,0.08)"
+              />
+              <rect
+                x="0"
+                y="0"
+                rx="18"
+                ry="18"
+                width={width}
+                height="38"
+                fill="url(#poll-fill)"
+                filter="url(#poll-shadow)"
+              />
+              <text
+                x="16"
+                y="24"
+                fill={poll.textColor}
+                fontSize="15"
+                fontWeight="800"
+              >
+                {choice.title}
+              </text>
+              <text
+                x="374"
+                y="24"
+                fill={poll.textColor}
+                fontSize="14"
+                fontWeight="900"
+                textAnchor="end"
+              >
+                {choice.votes.toLocaleString()}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </Box>
   );
 }
 
-function PredictionOverlayCard({
+function PredictionOverlay({
   prediction,
   nowTick,
 }: {
   prediction: PublicPredictionOverlay;
   nowTick: number;
 }) {
-  const totalPoints = Math.max(
-    1,
-    prediction.totalPoints,
-    ...prediction.outcomes.map((outcome) => outcome.channelPoints),
-  );
-  const timeLeft = formatTimeLeft(prediction.lockedAt || prediction.endedAt, nowTick);
+  const totalPoints = Math.max(1, prediction.totalPoints);
+  const outcomes = prediction.outcomes.slice(0, 2);
+  const leftOutcome = outcomes[0] ?? {
+    title: "Option 1",
+    users: 0,
+    channelPoints: 0,
+    color: "blue",
+  };
+  const rightOutcome = outcomes[1] ?? {
+    title: "Option 2",
+    users: 0,
+    channelPoints: 0,
+    color: "pink",
+  };
+  const leftPercent = Math.max(16, (leftOutcome.channelPoints / totalPoints) * 100);
+  const rightPercent = Math.max(16, 100 - leftPercent);
+  const leftWidth = (predictionWidth * leftPercent) / 100;
+  const rightX = leftWidth;
+  const rightWidth = predictionWidth - leftWidth;
+  const metaY = 88;
 
   return (
-    <OverlayCard
-      eyebrow="Live Prediction"
-      title={prediction.title || "Prediction active"}
+    <Box
+      sx={{
+        position: "fixed",
+        top: prediction.offsetY,
+        left: "50%",
+        transform: `translateX(-50%) scale(${prediction.scale})`,
+        transformOrigin: "top center",
+        width: { xs: "min(94vw, 760px)", md: `${predictionWidth}px` },
+        zIndex: 9999,
+        pointerEvents: "none",
+      }}
     >
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <MetaPill icon={<AccessTimeRoundedIcon sx={{ fontSize: 15 }} />} label={timeLeft} />
-        <MetaPill
-          icon={<InsightsRoundedIcon sx={{ fontSize: 15 }} />}
-          label={`${prediction.totalUsers.toLocaleString()} predictors`}
-        />
-        <MetaPill label={`${prediction.totalPoints.toLocaleString()} points`} />
-      </Stack>
+      <svg
+        viewBox={`0 0 ${predictionWidth} 118`}
+        width="100%"
+        height="auto"
+        preserveAspectRatio="xMidYMin meet"
+      >
+        <defs>
+          <filter
+            id="prediction-shadow"
+            x="-20%"
+            y="-20%"
+            width="140%"
+            height="160%"
+          >
+            <feDropShadow
+              dx="0"
+              dy="8"
+              stdDeviation="12"
+              floodColor="rgba(0,0,0,0.42)"
+            />
+          </filter>
+          <linearGradient id="prediction-left" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={alpha(prediction.leftColor, 0.82)} />
+            <stop offset="100%" stopColor={prediction.leftColor} />
+          </linearGradient>
+          <linearGradient id="prediction-right" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={alpha(prediction.rightColor, 0.82)} />
+            <stop offset="100%" stopColor={prediction.rightColor} />
+          </linearGradient>
+        </defs>
 
-      <Stack spacing={1} sx={{ mt: 1.4 }}>
-        {prediction.outcomes.map((outcome) => {
-          const ratio = (outcome.channelPoints / totalPoints) * 100;
+        <text
+          x={predictionWidth / 2}
+          y="24"
+          fill={prediction.textColor}
+          fontSize="25"
+          fontWeight="900"
+          textAnchor="middle"
+          letterSpacing="-1"
+          filter="url(#prediction-shadow)"
+        >
+          {prediction.title || "Prediction active"}
+        </text>
+
+        <rect
+          x="0"
+          y="34"
+          width={predictionWidth}
+          height="40"
+          rx="20"
+          ry="20"
+          fill={prediction.trackColor}
+        />
+        <rect
+          x="0"
+          y="34"
+          width={leftWidth}
+          height="40"
+          rx="20"
+          ry="20"
+          fill="url(#prediction-left)"
+          filter="url(#prediction-shadow)"
+        />
+        <rect
+          x={rightX}
+          y="34"
+          width={rightWidth}
+          height="40"
+          rx="20"
+          ry="20"
+          fill="url(#prediction-right)"
+          filter="url(#prediction-shadow)"
+        />
+
+        <text
+          x="18"
+          y="59"
+          fill={prediction.textColor}
+          fontSize="16"
+          fontWeight="900"
+        >
+          {leftOutcome.title} {formatPercent(leftOutcome.channelPoints, totalPoints)}
+        </text>
+        <text
+          x={predictionWidth - 18}
+          y="59"
+          fill={prediction.textColor}
+          fontSize="16"
+          fontWeight="900"
+          textAnchor="end"
+        >
+          {rightOutcome.title} {formatPercent(rightOutcome.channelPoints, totalPoints)}
+        </text>
+
+        {[
+          formatTimeLeft(prediction.lockedAt || prediction.endedAt, nowTick),
+          `${prediction.totalUsers.toLocaleString()} predictors`,
+          `${prediction.totalPoints.toLocaleString()} points`,
+        ].map((label, index) => {
+          const pillWidth = 168;
+          const gap = 16;
+          const totalWidth = pillWidth * 3 + gap * 2;
+          const startX = (predictionWidth - totalWidth) / 2;
+          const x = startX + index * (pillWidth + gap);
           return (
-            <Box key={outcome.title} sx={{ display: "grid", gap: 0.45 }}>
-              <Stack direction="row" justifyContent="space-between" spacing={1}>
-                <Typography sx={{ fontWeight: 700, fontSize: "0.96rem", color: "#1c2430" }}>
-                  {outcome.title}
-                </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: "0.88rem", color: "#334155" }}>
-                  {outcome.channelPoints.toLocaleString()} pts
-                </Typography>
-              </Stack>
-              <LinearProgress
-                variant="determinate"
-                value={ratio}
-                sx={overlayProgressSx(outcomeColor(outcome.color))}
+            <g key={`${label}-${index}`} transform={`translate(${x}, ${metaY})`}>
+              <rect
+                x="0"
+                y="0"
+                rx="12"
+                ry="12"
+                width={pillWidth}
+                height="24"
+                fill="rgba(255,255,255,0.18)"
+                stroke="rgba(255,255,255,0.24)"
               />
-              <Typography sx={{ fontSize: "0.74rem", color: "#5b6778" }}>
-                {outcome.users.toLocaleString()} users
-              </Typography>
-            </Box>
+              <text
+                x={pillWidth / 2}
+                y="16"
+                fill="#f8fafc"
+                fontSize="11.5"
+                fontWeight="700"
+                textAnchor="middle"
+              >
+                {label}
+              </text>
+            </g>
           );
         })}
-      </Stack>
-    </OverlayCard>
+      </svg>
+    </Box>
   );
-}
-
-function OverlayCard({
-  eyebrow,
-  title,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 1.5,
-        borderRadius: 3,
-        border: "1px solid rgba(255,255,255,0.55)",
-        backgroundColor: "rgba(255, 255, 255, 0.72)",
-        backdropFilter: "blur(12px)",
-        boxShadow: "0 18px 40px rgba(15, 23, 42, 0.14)",
-      }}
-    >
-      <Box>
-        <Typography
-          sx={{
-            fontSize: "0.68rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            color: "#64748b",
-            fontWeight: 700,
-          }}
-        >
-          {eyebrow}
-        </Typography>
-        <Typography
-          sx={{
-            mt: 0.35,
-            fontSize: "1.08rem",
-            lineHeight: 1.2,
-            fontWeight: 800,
-            letterSpacing: "-0.03em",
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </Typography>
-        <Box sx={{ mt: 1 }}>{children}</Box>
-      </Box>
-    </Paper>
-  );
-}
-
-function MetaPill({
-  icon,
-  label,
-}: {
-  icon?: ReactNode;
-  label: string;
-}) {
-  return (
-    <Chip
-      {...(icon != null ? { icon: icon as ReactElement } : {})}
-      label={label}
-      size="small"
-      sx={{
-        borderRadius: 999,
-        bgcolor: "rgba(255,255,255,0.62)",
-        color: "#334155",
-        border: "1px solid rgba(255,255,255,0.7)",
-        "& .MuiChip-label": {
-          px: 1,
-          fontWeight: 700,
-          fontSize: "0.74rem",
-        },
-        "& .MuiChip-icon": {
-          color: "#64748b",
-          fontSize: 16,
-          ml: 0.75,
-        },
-      }}
-    />
-  );
-}
-
-function overlayProgressSx(fill: string) {
-  return {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.55)",
-    "& .MuiLinearProgress-bar": {
-      borderRadius: 999,
-      background: `linear-gradient(90deg, ${alpha(fill, 0.72)}, ${fill})`,
-    },
-  };
-}
-
-function outcomeColor(color: string) {
-  switch (color.trim().toLowerCase()) {
-    case "blue":
-      return "#60a5fa";
-    case "pink":
-      return "#f472b6";
-    default:
-      return "#a78bfa";
-  }
 }
 
 function formatTimeLeft(iso: string, nowTick: number) {
@@ -416,4 +497,31 @@ function formatTimeLeft(iso: string, nowTick: number) {
     return `${seconds}s left`;
   }
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s left`;
+}
+
+function fixedPosition(
+  position: PublicPollOverlay["position"],
+  offsetX: number,
+  offsetY: number,
+): Record<string, string | number> {
+  switch (position) {
+    case "top-left":
+      return { top: offsetY, left: offsetX };
+    case "top-center":
+      return { top: offsetY, left: "50%", transform: "translateX(-50%)" };
+    case "bottom-left":
+      return { bottom: offsetY, left: offsetX };
+    case "bottom-right":
+      return { bottom: offsetY, right: offsetX };
+    case "top-right":
+    default:
+      return { top: offsetY, right: offsetX };
+  }
+}
+
+function formatPercent(value: number, total: number) {
+  if (total <= 0) {
+    return "0%";
+  }
+  return `${Math.round((value / total) * 100)}%`;
 }

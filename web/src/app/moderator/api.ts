@@ -128,12 +128,21 @@ type PublicHomeSettingsResponse = {
 type WebsiteOverlaySettingsResponse = {
   polls_enabled: boolean;
   predictions_enabled: boolean;
-  poll_position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
-  prediction_position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  poll_position: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
+  prediction_position: "top-left" | "top-right" | "top-center" | "bottom-left" | "bottom-right";
   poll_offset_x: number;
   poll_offset_y: number;
   prediction_offset_x: number;
   prediction_offset_y: number;
+  poll_scale: number;
+  poll_bar_color: string;
+  poll_title_color: string;
+  poll_text_color: string;
+  prediction_scale: number;
+  prediction_left_color: string;
+  prediction_right_color: string;
+  prediction_text_color: string;
+  prediction_track_color: string;
 };
 
 type ModesResponse = {
@@ -2256,12 +2265,22 @@ export async function fetchWebsiteOverlaySettings(
   return {
     pollsEnabled: payload.polls_enabled,
     predictionsEnabled: payload.predictions_enabled,
-    pollPosition: payload.poll_position ?? "bottom-left",
-    predictionPosition: payload.prediction_position ?? "bottom-right",
+    pollPosition: payload.poll_position ?? "top-right",
+    predictionPosition: payload.prediction_position ?? "top-center",
     pollOffsetX: payload.poll_offset_x ?? 24,
     pollOffsetY: payload.poll_offset_y ?? 24,
     predictionOffsetX: payload.prediction_offset_x ?? 24,
     predictionOffsetY: payload.prediction_offset_y ?? 24,
+    pollScale: payload.poll_scale ?? 1,
+    pollBarColor: payload.poll_bar_color ?? "#7dd3fc",
+    pollTitleColor: payload.poll_title_color ?? "#ffffff",
+    pollTextColor: payload.poll_text_color ?? "#f8fafc",
+    predictionScale: payload.prediction_scale ?? 1,
+    predictionLeftColor: payload.prediction_left_color ?? "#60a5fa",
+    predictionRightColor: payload.prediction_right_color ?? "#f472b6",
+    predictionTextColor: payload.prediction_text_color ?? "#ffffff",
+    predictionTrackColor:
+      payload.prediction_track_color ?? "rgba(15, 23, 42, 0.28)",
   };
 }
 
@@ -2284,6 +2303,15 @@ export async function saveWebsiteOverlaySettings(
       poll_offset_y: settings.pollOffsetY,
       prediction_offset_x: settings.predictionOffsetX,
       prediction_offset_y: settings.predictionOffsetY,
+      poll_scale: settings.pollScale,
+      poll_bar_color: settings.pollBarColor,
+      poll_title_color: settings.pollTitleColor,
+      poll_text_color: settings.pollTextColor,
+      prediction_scale: settings.predictionScale,
+      prediction_left_color: settings.predictionLeftColor,
+      prediction_right_color: settings.predictionRightColor,
+      prediction_text_color: settings.predictionTextColor,
+      prediction_track_color: settings.predictionTrackColor,
     }),
   });
 
@@ -2295,12 +2323,22 @@ export async function saveWebsiteOverlaySettings(
   return {
     pollsEnabled: payload.polls_enabled,
     predictionsEnabled: payload.predictions_enabled,
-    pollPosition: payload.poll_position ?? "bottom-left",
-    predictionPosition: payload.prediction_position ?? "bottom-right",
+    pollPosition: payload.poll_position ?? "top-right",
+    predictionPosition: payload.prediction_position ?? "top-center",
     pollOffsetX: payload.poll_offset_x ?? 24,
     pollOffsetY: payload.poll_offset_y ?? 24,
     predictionOffsetX: payload.prediction_offset_x ?? 24,
     predictionOffsetY: payload.prediction_offset_y ?? 24,
+    pollScale: payload.poll_scale ?? 1,
+    pollBarColor: payload.poll_bar_color ?? "#7dd3fc",
+    pollTitleColor: payload.poll_title_color ?? "#ffffff",
+    pollTextColor: payload.poll_text_color ?? "#f8fafc",
+    predictionScale: payload.prediction_scale ?? 1,
+    predictionLeftColor: payload.prediction_left_color ?? "#60a5fa",
+    predictionRightColor: payload.prediction_right_color ?? "#f472b6",
+    predictionTextColor: payload.prediction_text_color ?? "#ffffff",
+    predictionTrackColor:
+      payload.prediction_track_color ?? "rgba(15, 23, 42, 0.28)",
   };
 }
 
