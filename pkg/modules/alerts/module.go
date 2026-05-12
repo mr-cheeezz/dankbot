@@ -310,10 +310,15 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 			return "", fmt.Errorf("decode poll begin event: %w", err)
 		}
 		defaultMessage := renderPollStart(event)
+		creator := pollActorName(event)
+		if creator == "" {
+			creator = "A moderator"
+		}
 		return m.renderFromAlertEntry(
 			"poll-created",
 			map[string]string{
-				"creator": displayName(event.BroadcasterUserName, event.BroadcasterUserLogin),
+				"creator": creator,
+				"user":    creator,
 				"title":   strings.TrimSpace(event.Title),
 				"options": formatPollOptions(event.Choices),
 			},
@@ -364,10 +369,15 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 			return "", fmt.Errorf("decode prediction begin event: %w", err)
 		}
 		defaultMessage := renderPredictionStart(event)
+		creator := predictionActorName(event)
+		if creator == "" {
+			creator = "A moderator"
+		}
 		return m.renderFromAlertEntry(
 			"prediction-created",
 			map[string]string{
-				"creator": displayName(event.BroadcasterUserName, event.BroadcasterUserLogin),
+				"creator": creator,
+				"user":    creator,
 				"title":   strings.TrimSpace(event.Title),
 			},
 			defaultMessage,
@@ -440,12 +450,20 @@ func (m *Module) renderTwitchAlert(eventType string, raw json.RawMessage) (strin
 			return "", fmt.Errorf("decode prediction end event: %w", err)
 		}
 		if strings.EqualFold(strings.TrimSpace(event.Status), "canceled") {
+			actor := predictionActorName(event)
+			actorLabel := actor
+			if actorLabel == "" {
+				actorLabel = "a moderator"
+			}
+			defaultMessage := "The prediction was just canceled."
+			defaultMessage = fmt.Sprintf("The prediction was just canceled by %s.", actorLabel)
 			return m.renderFromAlertEntry(
 				"prediction-cancelled",
 				map[string]string{
-					"user": displayName(event.BroadcasterUserName, event.BroadcasterUserLogin),
+					"user":    actorLabel,
+					"creator": actorLabel,
 				},
-				fmt.Sprintf("The prediction was just canceled by %s.", displayName(event.BroadcasterUserName, event.BroadcasterUserLogin)),
+				defaultMessage,
 				nil,
 			)
 		}
@@ -891,10 +909,13 @@ func max(value, fallback int) int {
 }
 
 func renderPollStart(event eventsub.PollEvent) string {
-	pollMaker := displayName(event.BroadcasterUserName, event.BroadcasterUserLogin)
+	pollMaker := pollActorName(event)
 	title := strings.TrimSpace(event.Title)
 	options := formatPollOptions(event.Choices)
 
+	if pollMaker == "" {
+		pollMaker = "A moderator"
+	}
 	if event.ChannelPointsVoting.IsEnabled && event.ChannelPointsVoting.AmountPerVote > 0 {
 		return fmt.Sprintf("%s has created a poll with extra votes for %d channel points. %s | %s", pollMaker, event.ChannelPointsVoting.AmountPerVote, title, options)
 	}
@@ -920,7 +941,10 @@ func renderPollEnd(event eventsub.PollEvent) string {
 }
 
 func renderPredictionStart(event eventsub.PredictionEvent) string {
-	creator := displayName(event.BroadcasterUserName, event.BroadcasterUserLogin)
+	creator := predictionActorName(event)
+	if creator == "" {
+		creator = "A moderator"
+	}
 	title := strings.TrimSpace(event.Title)
 	if title == "" {
 		title = "a prediction"
@@ -941,6 +965,26 @@ func renderPredictionStart(event eventsub.PredictionEvent) string {
 	}
 
 	return fmt.Sprintf("%s has started a prediction! %s Click on the prediction to see all options PogU%s", creator, title, voteWindow)
+}
+
+func pollActorName(event eventsub.PollEvent) string {
+	if value := displayName(event.RequesterUserName, event.RequesterUserLogin); value != "" {
+		return value
+	}
+	if value := displayName(event.ModeratorUserName, event.ModeratorUserLogin); value != "" {
+		return value
+	}
+	return ""
+}
+
+func predictionActorName(event eventsub.PredictionEvent) string {
+	if value := displayName(event.RequesterUserName, event.RequesterUserLogin); value != "" {
+		return value
+	}
+	if value := displayName(event.ModeratorUserName, event.ModeratorUserLogin); value != "" {
+		return value
+	}
+	return ""
 }
 
 func formatPredictionVoteWindow(event eventsub.PredictionEvent) string {

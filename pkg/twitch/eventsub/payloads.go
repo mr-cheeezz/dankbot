@@ -32,6 +32,12 @@ type PollEvent struct {
 	BroadcasterUserID    string              `json:"broadcaster_user_id"`
 	BroadcasterUserLogin string              `json:"broadcaster_user_login"`
 	BroadcasterUserName  string              `json:"broadcaster_user_name"`
+	RequesterUserID      string              `json:"requester_user_id"`
+	RequesterUserLogin   string              `json:"requester_user_login"`
+	RequesterUserName    string              `json:"requester_user_name"`
+	ModeratorUserID      string              `json:"moderator_user_id"`
+	ModeratorUserLogin   string              `json:"moderator_user_login"`
+	ModeratorUserName    string              `json:"moderator_user_name"`
 	Title                string              `json:"title"`
 	Choices              []PollChoice        `json:"choices"`
 	ChannelPointsVoting  ChannelPointsVoting `json:"channel_points_voting"`
@@ -139,6 +145,12 @@ type PredictionEvent struct {
 	BroadcasterUserID    string              `json:"broadcaster_user_id"`
 	BroadcasterUserLogin string              `json:"broadcaster_user_login"`
 	BroadcasterUserName  string              `json:"broadcaster_user_name"`
+	RequesterUserID      string              `json:"requester_user_id"`
+	RequesterUserLogin   string              `json:"requester_user_login"`
+	RequesterUserName    string              `json:"requester_user_name"`
+	ModeratorUserID      string              `json:"moderator_user_id"`
+	ModeratorUserLogin   string              `json:"moderator_user_login"`
+	ModeratorUserName    string              `json:"moderator_user_name"`
 	Title                string              `json:"title"`
 	Outcomes             []PredictionOutcome `json:"outcomes"`
 	StartedAt            time.Time           `json:"started_at"`
