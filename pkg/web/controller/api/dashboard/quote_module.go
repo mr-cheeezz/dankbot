@@ -1,14 +1,9 @@
 package dashboard
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -43,22 +38,6 @@ type quoteEntryRequest struct {
 	Message string `json:"message"`
 }
 
-type quoteImportRequest struct {
-	Source   string `json:"source"`
-	Payload  string `json:"payload"`
-	Channel  string `json:"channel"`
-	APIURL   string `json:"api_url"`
-	APIToken string `json:"api_token"`
-}
-
-type quoteImportResponse struct {
-	Imported int                  `json:"imported"`
-	Skipped  int                  `json:"skipped"`
-	Items    []quoteEntryResponse `json:"items"`
-}
-
-var quoteLinePrefixPattern = regexp.MustCompile(`^(?:[#\[]?\d+[\]\)]?\s*[:.)\-]?\s*)(.+)$`)
-
 func (h handler) quoteModule(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -83,104 +62,6 @@ func (h handler) quoteModuleEntries(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeMethodNotAllowed(w, http.MethodGet+", "+http.MethodPost+", "+http.MethodPut+", "+http.MethodDelete)
 	}
-}
-
-func (h handler) quoteModuleImport(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeMethodNotAllowed(w, http.MethodPost)
-		return
-	}
-
-	userSession, err := h.requireEditorFeatureAccess(r)
-	if err != nil {
-		if errors.Is(err, session.ErrSessionNotFound) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-
-	if h.appState == nil || h.appState.Postgres == nil {
-		http.Error(w, "quote storage is not configured", http.StatusInternalServerError)
-		return
-	}
-
-	var request quoteImportRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "invalid quote import payload", http.StatusBadRequest)
-		return
-	}
-
-	source := strings.ToLower(strings.TrimSpace(request.Source))
-	if source == "" {
-		source = "fossabot"
-	}
-	if source != "fossabot" {
-		http.Error(w, "unsupported quote import source", http.StatusBadRequest)
-		return
-	}
-
-	parsedMessages := parseFossabotQuotes(request.Payload)
-	if len(parsedMessages) == 0 {
-		var fetchErr error
-		parsedMessages, fetchErr = fetchFossabotQuotesFromAPI(r.Context(), request)
-		if fetchErr != nil {
-			http.Error(w, fetchErr.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-	if len(parsedMessages) == 0 {
-		http.Error(w, "no quotes found to import", http.StatusBadRequest)
-		return
-	}
-
-	store := postgres.NewQuoteStore(h.appState.Postgres)
-	existing, err := store.List(r.Context(), 0)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	seen := make(map[string]struct{}, len(existing)+len(parsedMessages))
-	for _, item := range existing {
-		key := normalizeQuoteImportMessage(item.Message)
-		if key == "" {
-			continue
-		}
-		seen[key] = struct{}{}
-	}
-
-	created := make([]quoteEntryResponse, 0, len(parsedMessages))
-	skipped := 0
-	actor := strings.TrimSpace(userSession.Login)
-
-	for _, message := range parsedMessages {
-		key := normalizeQuoteImportMessage(message)
-		if key == "" {
-			skipped++
-			continue
-		}
-		if _, exists := seen[key]; exists {
-			skipped++
-			continue
-		}
-
-		item, createErr := store.Create(r.Context(), message, actor)
-		if createErr != nil {
-			http.Error(w, createErr.Error(), http.StatusBadRequest)
-			return
-		}
-		seen[key] = struct{}{}
-		created = append(created, quoteToResponse(*item))
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(quoteImportResponse{
-		Imported: len(created),
-		Skipped:  skipped,
-		Items:    created,
-	})
 }
 
 func (h handler) getQuoteModule(w http.ResponseWriter, r *http.Request) {
@@ -331,11 +212,24 @@ func (h handler) createQuoteEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := postgres.NewQuoteStore(h.appState.Postgres).Create(
-		r.Context(),
-		strings.TrimSpace(request.Message),
-		strings.TrimSpace(userSession.Login),
-	)
+	store := postgres.NewQuoteStore(h.appState.Postgres)
+	actor := strings.TrimSpace(userSession.Login)
+
+	var created *postgres.Quote
+	if request.ID > 0 {
+		created, err = store.CreateWithID(
+			r.Context(),
+			request.ID,
+			strings.TrimSpace(request.Message),
+			actor,
+		)
+	} else {
+		created, err = store.Create(
+			r.Context(),
+			strings.TrimSpace(request.Message),
+			actor,
+		)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -441,190 +335,4 @@ func quoteToResponse(quote postgres.Quote) quoteEntryResponse {
 		CreatedAt: quote.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: quote.UpdatedAt.Format(time.RFC3339),
 	}
-}
-
-func parseFossabotQuotes(raw string) []string {
-	raw = strings.ReplaceAll(raw, "\r\n", "\n")
-	raw = strings.ReplaceAll(raw, "\r", "\n")
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-
-	type jsonQuote struct {
-		Quote   string `json:"quote"`
-		Message string `json:"message"`
-		Text    string `json:"text"`
-	}
-	var jsonItems []jsonQuote
-	if err := json.Unmarshal([]byte(raw), &jsonItems); err == nil && len(jsonItems) > 0 {
-		out := make([]string, 0, len(jsonItems))
-		for _, item := range jsonItems {
-			message := strings.TrimSpace(item.Quote)
-			if message == "" {
-				message = strings.TrimSpace(item.Message)
-			}
-			if message == "" {
-				message = strings.TrimSpace(item.Text)
-			}
-			if message != "" {
-				out = append(out, message)
-			}
-		}
-		return out
-	}
-
-	lines := strings.Split(raw, "\n")
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		value := strings.TrimSpace(line)
-		if value == "" {
-			continue
-		}
-		value = strings.TrimPrefix(value, "-")
-		value = strings.TrimPrefix(value, "*")
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-
-		if match := quoteLinePrefixPattern.FindStringSubmatch(value); len(match) >= 2 {
-			value = strings.TrimSpace(match[1])
-		}
-
-		if index := strings.Index(value, "\t"); index > 0 {
-			left := strings.TrimSpace(value[:index])
-			right := strings.TrimSpace(value[index+1:])
-			if left != "" && right != "" {
-				if _, err := strconv.Atoi(strings.TrimLeft(left, "#")); err == nil {
-					value = right
-				}
-			}
-		}
-
-		if value != "" {
-			out = append(out, value)
-		}
-	}
-
-	return out
-}
-
-func normalizeQuoteImportMessage(message string) string {
-	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(message)), " "))
-}
-
-func fetchFossabotQuotesFromAPI(ctx context.Context, request quoteImportRequest) ([]string, error) {
-	channel := strings.TrimSpace(strings.ToLower(request.Channel))
-	apiURL := strings.TrimSpace(request.APIURL)
-	apiToken := strings.TrimSpace(request.APIToken)
-
-	candidates := make([]string, 0, 4)
-	if apiURL != "" {
-		candidates = append(candidates, apiURL)
-	}
-	if channel != "" {
-		escaped := url.PathEscape(channel)
-		candidates = append(candidates,
-			"https://api.fossabot.com/v2/channels/"+escaped+"/quotes",
-			"https://api.fossabot.com/v1/channels/"+escaped+"/quotes",
-			"https://fossabot.com/v2/channels/"+escaped+"/quotes",
-		)
-	}
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("provide Fossabot channel or API URL")
-	}
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	lastErr := ""
-	for _, endpoint := range candidates {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			lastErr = err.Error()
-			continue
-		}
-		req.Header.Set("Accept", "application/json, text/plain;q=0.8, */*;q=0.5")
-		if apiToken != "" {
-			req.Header.Set("Authorization", "Bearer "+apiToken)
-			req.Header.Set("X-API-Key", apiToken)
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = err.Error()
-			continue
-		}
-		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-		_ = resp.Body.Close()
-		if readErr != nil {
-			lastErr = readErr.Error()
-			continue
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			lastErr = strings.TrimSpace(fmt.Sprintf("%d %s", resp.StatusCode, string(body)))
-			continue
-		}
-
-		quotes := parseFossabotQuotes(string(body))
-		if len(quotes) == 0 {
-			quotes = parseFossabotQuotesJSON(body)
-		}
-		if len(quotes) > 0 {
-			return quotes, nil
-		}
-		lastErr = "response did not contain quote entries"
-	}
-
-	if lastErr == "" {
-		lastErr = "unknown error"
-	}
-	return nil, fmt.Errorf("could not fetch Fossabot quotes via API: %s", lastErr)
-}
-
-func parseFossabotQuotesJSON(raw []byte) []string {
-	var data map[string]any
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return nil
-	}
-
-	collections := []any{
-		data["quotes"],
-		data["items"],
-		data["data"],
-	}
-	for _, collection := range collections {
-		items, ok := collection.([]any)
-		if !ok || len(items) == 0 {
-			continue
-		}
-		out := make([]string, 0, len(items))
-		for _, item := range items {
-			object, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			candidates := []string{
-				stringValue(object["quote"]),
-				stringValue(object["message"]),
-				stringValue(object["text"]),
-				stringValue(object["content"]),
-			}
-			for _, candidate := range candidates {
-				if strings.TrimSpace(candidate) != "" {
-					out = append(out, strings.TrimSpace(candidate))
-					break
-				}
-			}
-		}
-		if len(out) > 0 {
-			return out
-		}
-	}
-
-	return nil
-}
-
-func stringValue(value any) string {
-	text, _ := value.(string)
-	return strings.TrimSpace(text)
 }

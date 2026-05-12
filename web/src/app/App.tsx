@@ -12,7 +12,6 @@ import { BlockedTermsPage } from "./moderator/pages/BlockedTermsPage";
 import { ChannelPointsPage } from "./moderator/pages/ChannelPointsPage";
 import { CommandsPage } from "./moderator/pages/CommandsPage";
 import { DashboardOverviewPage } from "./moderator/pages/DashboardOverviewPage";
-import { DashboardV2Page } from "./moderator/pages/DashboardV2Page";
 import { DashboardNotFoundPage } from "./moderator/pages/DashboardNotFoundPage";
 import {
   DiscordCommandsPage,
@@ -86,10 +85,10 @@ export function App() {
               </RequireModerator>
             }
           >
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardV2Page />} />
+            <Route index element={<DashboardOverviewPage />} />
+            <Route path="dashboard" element={<DashboardOverviewPage />} />
             <Route path="dashboard-v2" element={<Navigate to="../dashboard" replace />} />
-            <Route path="dashboard-v1" element={<DashboardOverviewPage />} />
+            <Route path="dashboard-v1" element={<Navigate to="../dashboard" replace />} />
             <Route path="commands" element={<CommandsPage />} />
             <Route path="keywords" element={<KeywordsPage />} />
             <Route

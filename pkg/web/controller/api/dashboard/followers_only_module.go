@@ -11,9 +11,24 @@ import (
 )
 
 type followersOnlyModuleResponse struct {
-	Enabled                 bool `json:"enabled"`
-	EnabledWhenOffline      bool `json:"enabled_when_offline"`
-	AutoDisableAfterMinutes int  `json:"auto_disable_after_minutes"`
+	Enabled                 bool   `json:"enabled"`
+	EnabledWhenOffline      bool   `json:"enabled_when_offline"`
+	AutoDisableEnabled      bool   `json:"auto_disable_enabled"`
+	AutoDisableAfterMinutes int    `json:"auto_disable_after_minutes"`
+	OnlineSlowModeAction    string `json:"online_slow_mode_action"`
+	OnlineSlowModeSeconds   int    `json:"online_slow_mode_seconds"`
+	OnlineEmoteModeAction   string `json:"online_emote_mode_action"`
+	OnlineUniqueChatAction  string `json:"online_unique_chat_mode_action"`
+	OnlineSubscriberAction  string `json:"online_subscriber_mode_action"`
+	OnlineFollowerAction    string `json:"online_follower_mode_action"`
+	OnlineFollowerMinutes   int    `json:"online_follower_mode_minutes"`
+	OfflineSlowModeAction   string `json:"offline_slow_mode_action"`
+	OfflineSlowModeSeconds  int    `json:"offline_slow_mode_seconds"`
+	OfflineEmoteModeAction  string `json:"offline_emote_mode_action"`
+	OfflineUniqueChatAction string `json:"offline_unique_chat_mode_action"`
+	OfflineSubscriberAction string `json:"offline_subscriber_mode_action"`
+	OfflineFollowerAction   string `json:"offline_follower_mode_action"`
+	OfflineFollowerMinutes  int    `json:"offline_follower_mode_minutes"`
 }
 
 func (h handler) followersOnlyModule(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +106,22 @@ func (h handler) updateFollowersOnlyModule(w http.ResponseWriter, r *http.Reques
 	updated, err := h.appState.FollowersOnlyModule.Update(r.Context(), postgres.FollowersOnlyModuleSettings{
 		Enabled:                 request.Enabled,
 		EnabledWhenOffline:      request.EnabledWhenOffline,
+		AutoDisableEnabled:      request.AutoDisableEnabled,
 		AutoDisableAfterMinutes: request.AutoDisableAfterMinutes,
+		OnlineSlowModeAction:    request.OnlineSlowModeAction,
+		OnlineSlowModeSeconds:   request.OnlineSlowModeSeconds,
+		OnlineEmoteModeAction:   request.OnlineEmoteModeAction,
+		OnlineUniqueChatAction:  request.OnlineUniqueChatAction,
+		OnlineSubscriberAction:  request.OnlineSubscriberAction,
+		OnlineFollowerAction:    request.OnlineFollowerAction,
+		OnlineFollowerMinutes:   request.OnlineFollowerMinutes,
+		OfflineSlowModeAction:   request.OfflineSlowModeAction,
+		OfflineSlowModeSeconds:  request.OfflineSlowModeSeconds,
+		OfflineEmoteModeAction:  request.OfflineEmoteModeAction,
+		OfflineUniqueChatAction: request.OfflineUniqueChatAction,
+		OfflineSubscriberAction: request.OfflineSubscriberAction,
+		OfflineFollowerAction:   request.OfflineFollowerAction,
+		OfflineFollowerMinutes:  request.OfflineFollowerMinutes,
 		UpdatedBy:               strings.TrimSpace(userSession.Login),
 	})
 	if err != nil {
@@ -111,6 +141,21 @@ func followersOnlyModuleToResponse(settings postgres.FollowersOnlyModuleSettings
 	return followersOnlyModuleResponse{
 		Enabled:                 settings.Enabled,
 		EnabledWhenOffline:      settings.EnabledWhenOffline,
+		AutoDisableEnabled:      settings.AutoDisableEnabled,
 		AutoDisableAfterMinutes: settings.AutoDisableAfterMinutes,
+		OnlineSlowModeAction:    settings.OnlineSlowModeAction,
+		OnlineSlowModeSeconds:   settings.OnlineSlowModeSeconds,
+		OnlineEmoteModeAction:   settings.OnlineEmoteModeAction,
+		OnlineUniqueChatAction:  settings.OnlineUniqueChatAction,
+		OnlineSubscriberAction:  settings.OnlineSubscriberAction,
+		OnlineFollowerAction:    settings.OnlineFollowerAction,
+		OnlineFollowerMinutes:   settings.OnlineFollowerMinutes,
+		OfflineSlowModeAction:   settings.OfflineSlowModeAction,
+		OfflineSlowModeSeconds:  settings.OfflineSlowModeSeconds,
+		OfflineEmoteModeAction:  settings.OfflineEmoteModeAction,
+		OfflineUniqueChatAction: settings.OfflineUniqueChatAction,
+		OfflineSubscriberAction: settings.OfflineSubscriberAction,
+		OfflineFollowerAction:   settings.OfflineFollowerAction,
+		OfflineFollowerMinutes:  settings.OfflineFollowerMinutes,
 	}
 }

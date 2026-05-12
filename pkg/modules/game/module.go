@@ -111,6 +111,14 @@ func (m *Module) Start(ctx context.Context) error {
 func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 	_ = ctx
 
+	settings, err := m.getSettings(context.Background())
+	if err != nil {
+		return "", err
+	}
+	if !settings.Enabled || !settings.PlaytimeCommandEnabled {
+		return "", nil
+	}
+
 	if live, err := m.streamIsLive(context.Background()); err == nil && !live {
 		return fmt.Sprintf("%s is offline.", m.streamerName(context.Background())), nil
 	}
@@ -144,14 +152,7 @@ func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 		gameName = "current stream game"
 	}
 
-	template := postgres.DefaultGameModuleSettings().PlaytimeTemplate
-	if m.settingsStore != nil {
-		if settings, err := m.settingsStore.Get(context.Background()); err != nil {
-			return "", err
-		} else if settings != nil && strings.TrimSpace(settings.PlaytimeTemplate) != "" {
-			template = settings.PlaytimeTemplate
-		}
-	}
+	template := settings.PlaytimeTemplate
 
 	replacer := strings.NewReplacer(
 		"{streamer}", m.streamerName(context.Background()),
@@ -163,6 +164,14 @@ func (m *Module) playtime(ctx modules.CommandContext) (string, error) {
 
 func (m *Module) game(ctx modules.CommandContext) (string, error) {
 	_ = ctx
+
+	settings, err := m.getSettings(context.Background())
+	if err != nil {
+		return "", err
+	}
+	if !settings.Enabled || !settings.GameCommandEnabled {
+		return "", nil
+	}
 
 	gameName, err := m.CurrentGameName(context.Background())
 	if err != nil {
@@ -204,18 +213,17 @@ func (m *Module) CurrentGameName(ctx context.Context) (string, error) {
 }
 
 func (m *Module) gamesPlayed(ctx modules.CommandContext) (string, error) {
+	settings, err := m.getSettings(context.Background())
+	if err != nil {
+		return "", err
+	}
+	if !settings.Enabled || !settings.GamesPlayedCommandEnabled {
+		return "", nil
+	}
+
 	scope := "stream"
 	if len(ctx.Args) > 0 {
 		scope = strings.ToLower(strings.TrimSpace(ctx.Args[0]))
-	}
-
-	settings := postgres.DefaultGameModuleSettings()
-	if m.settingsStore != nil {
-		if stored, err := m.settingsStore.Get(context.Background()); err != nil {
-			return "", err
-		} else if stored != nil {
-			settings = *stored
-		}
 	}
 
 	limit := settings.GamesPlayedLimit
@@ -268,6 +276,17 @@ func (m *Module) runTracker(ctx context.Context) {
 }
 
 func (m *Module) trackOnce(ctx context.Context) error {
+	settings, err := m.getSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if !settings.Enabled {
+		if err := m.flushCurrent(ctx, time.Now().UTC()); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	channel, err := m.currentChannel(ctx)
 	if err != nil {
 		return err
@@ -350,6 +369,23 @@ func (m *Module) trackOnce(ctx context.Context) error {
 	}
 	m.advanceTracker(ctx, next, now)
 	return nil
+}
+
+func (m *Module) getSettings(ctx context.Context) (postgres.GameModuleSettings, error) {
+	settings := postgres.DefaultGameModuleSettings()
+	if m.settingsStore == nil {
+		return settings, nil
+	}
+
+	stored, err := m.settingsStore.Get(ctx)
+	if err != nil {
+		return settings, err
+	}
+	if stored != nil {
+		settings = *stored
+	}
+
+	return settings, nil
 }
 
 func (m *Module) advanceTracker(ctx context.Context, next trackerState, now time.Time) {

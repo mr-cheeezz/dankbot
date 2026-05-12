@@ -341,9 +341,6 @@ export function DashboardOverviewPage() {
   return (
     <Stack spacing={2}>
       <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Button component={RouterLink} to="/d/dashboard" variant="outlined" color="inherit">
-          Switch to Dashboard V2
-        </Button>
         {hiddenPanels.length > 0 ? (
           <Button variant="outlined" onClick={restorePanels}>
             Restore hidden widgets

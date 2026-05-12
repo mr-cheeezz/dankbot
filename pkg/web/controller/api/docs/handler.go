@@ -389,8 +389,8 @@ func buildOpenAPISpec(appState *state.State) map[string]any {
 				"put": authedOp("Dashboard", "Save now playing module settings", "Saves settings for the now playing module."),
 			},
 			"/api/dashboard/modules/followers-only": map[string]any{
-				"get": authedOp("Dashboard", "Followers-only module settings", "Returns auto followers-only settings."),
-				"put": authedOp("Dashboard", "Save followers-only module settings", "Saves auto followers-only settings."),
+				"get": authedOp("Dashboard", "Auto chat states module settings", "Returns auto chat states settings."),
+				"put": authedOp("Dashboard", "Save auto chat states module settings", "Saves auto chat states settings."),
 			},
 			"/api/dashboard/modules/new-chatter-greeting": map[string]any{
 				"get": authedOp("Dashboard", "New chatter greeting module settings", "Returns first-message greeting settings."),

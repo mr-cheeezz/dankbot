@@ -67,6 +67,80 @@ RETURNING id, message, created_by, updated_by, created_at, updated_at
 	return &quote, nil
 }
 
+func (s *QuoteStore) CreateWithID(ctx context.Context, id int64, message, createdBy string) (*Quote, error) {
+	db, err := s.client.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	message = strings.TrimSpace(message)
+	if id <= 0 {
+		return nil, fmt.Errorf("quote id must be greater than 0")
+	}
+	if message == "" {
+		return nil, fmt.Errorf("quote message is required")
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin create quote with id %d: %w", id, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var quote Quote
+	err = tx.QueryRowContext(
+		ctx,
+		`
+INSERT INTO quotes (
+	id,
+	message,
+	created_by,
+	updated_by,
+	created_at,
+	updated_at
+)
+VALUES ($1, $2, $3, $3, NOW(), NOW())
+RETURNING id, message, created_by, updated_by, created_at, updated_at
+`,
+		id,
+		message,
+		strings.TrimSpace(createdBy),
+	).Scan(
+		&quote.ID,
+		&quote.Message,
+		&quote.CreatedBy,
+		&quote.UpdatedBy,
+		&quote.CreatedAt,
+		&quote.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create quote %d: %w", id, err)
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`
+SELECT setval(
+	pg_get_serial_sequence('quotes', 'id'),
+	GREATEST((SELECT COALESCE(MAX(id), 1) FROM quotes), $1),
+	true
+)
+`,
+		id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("sync quote sequence after create %d: %w", id, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit create quote with id %d: %w", id, err)
+	}
+
+	return &quote, nil
+}
+
 func (s *QuoteStore) Get(ctx context.Context, id int64) (*Quote, error) {
 	db, err := s.client.DB(ctx)
 	if err != nil {

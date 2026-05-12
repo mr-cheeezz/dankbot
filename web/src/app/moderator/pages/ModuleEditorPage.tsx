@@ -33,7 +33,6 @@ import {
   createQuoteModuleEntry,
   deleteQuoteModuleEntry,
   fetchQuoteModuleEntries,
-  importFossabotQuotes,
   updateQuoteModuleEntry,
 } from "../api";
 import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
@@ -46,8 +45,15 @@ import type {
 } from "../types";
 
 type ModuleDraft = ModuleEntry;
-type ModuleEditorSection = "general" | "settings" | "library";
-type GameSettingsTab = "viewer" | "playtime" | "gamesplayed";
+type ModuleEditorSection = "settings" | "library";
+type GameSettingsTab = "viewer" | "commands" | "playtime" | "gamesplayed";
+type AutoChatStatesTab = "online" | "offline" | "followerAutoOff";
+
+function sortQuoteEntriesDescending(
+  entries: QuoteModuleEntry[],
+): QuoteModuleEntry[] {
+  return [...entries].sort((left, right) => right.id - left.id);
+}
 
 export function ModuleEditorPage() {
   const navigate = useNavigate();
@@ -64,21 +70,19 @@ export function ModuleEditorPage() {
   const [quotesNotice, setQuotesNotice] = useState("");
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState("");
-  const [quoteImportDialogOpen, setQuoteImportDialogOpen] = useState(false);
-  const [quoteImportDraft, setQuoteImportDraft] = useState("");
-  const [quoteImportChannel, setQuoteImportChannel] = useState("");
-  const [quoteImportAPIURL, setQuoteImportAPIURL] = useState("");
-  const [quoteImportAPIToken, setQuoteImportAPIToken] = useState("");
-  const [quoteImportSaving, setQuoteImportSaving] = useState(false);
+  const [quoteNumberDraft, setQuoteNumberDraft] = useState("");
   const [editingQuote, setEditingQuote] = useState<QuoteModuleEntry | null>(
     null,
   );
   const [pendingDeleteQuote, setPendingDeleteQuote] =
     useState<QuoteModuleEntry | null>(null);
-  const [section, setSection] = useState<ModuleEditorSection>("general");
+  const [section, setSection] = useState<ModuleEditorSection>("settings");
   const [gameSettingsTab, setGameSettingsTab] =
     useState<GameSettingsTab>("viewer");
+  const [autoChatStatesTab, setAutoChatStatesTab] =
+    useState<AutoChatStatesTab>("online");
   const isQuotesModule = moduleEntry?.id === "quotes";
+  const isFollowersOnlyModule = moduleEntry?.id === "auto-followers-only";
   const isGameModule = moduleEntry?.id === "game";
   const isTabsModule = moduleEntry?.id === "tabs";
   const sections = useMemo<Array<{ key: ModuleEditorSection; label: string }>>(
@@ -88,10 +92,7 @@ export function ModuleEditorPage() {
             { key: "settings", label: "Settings" },
             { key: "library", label: "Library" },
           ]
-        : [
-            { key: "general", label: "General" },
-            { key: "settings", label: "Settings" },
-          ],
+        : [{ key: "settings", label: "Settings" }],
     [isQuotesModule],
   );
 
@@ -100,11 +101,15 @@ export function ModuleEditorPage() {
   }, [moduleEntry]);
 
   useEffect(() => {
-    setSection(isQuotesModule ? "settings" : "general");
+    setSection("settings");
   }, [moduleId, isQuotesModule]);
 
   useEffect(() => {
     setGameSettingsTab("viewer");
+  }, [moduleId]);
+
+  useEffect(() => {
+    setAutoChatStatesTab("online");
   }, [moduleId]);
 
   useEffect(() => {
@@ -124,7 +129,7 @@ export function ModuleEditorPage() {
     fetchQuoteModuleEntries(controller.signal)
       .then((items) => {
         if (!controller.signal.aborted) {
-          setQuoteEntries(items);
+          setQuoteEntries(sortQuoteEntriesDescending(items));
         }
       })
       .catch((error: unknown) => {
@@ -177,18 +182,21 @@ export function ModuleEditorPage() {
     setQuotesNotice("");
     setEditingQuote(null);
     setQuoteDraft("");
+    setQuoteNumberDraft("");
     setQuoteDialogOpen(true);
   };
 
   const openEditQuoteDialog = (entry: QuoteModuleEntry) => {
     setEditingQuote(entry);
     setQuoteDraft(entry.message);
+    setQuoteNumberDraft(String(entry.id));
     setQuoteDialogOpen(true);
   };
 
   const closeQuoteDialog = () => {
     setEditingQuote(null);
     setQuoteDraft("");
+    setQuoteNumberDraft("");
     setQuoteDialogOpen(false);
   };
 
@@ -202,10 +210,22 @@ export function ModuleEditorPage() {
     setQuotesError("");
     setQuotesNotice("");
     if (editingQuote == null) {
-      void createQuoteModuleEntry(message)
+      const quoteNumberText = quoteNumberDraft.trim();
+      let quoteNumber: number | undefined;
+      if (quoteNumberText !== "") {
+        quoteNumber = Number(quoteNumberText);
+        if (!Number.isInteger(quoteNumber) || quoteNumber <= 0) {
+          setQuotesError("Quote number must be a whole number greater than 0.");
+          return;
+        }
+      }
+
+      void createQuoteModuleEntry(message, quoteNumber)
         .then((created) => {
-          setQuoteEntries((current) => [created, ...current]);
-          setQuotesNotice("Quote added.");
+          setQuoteEntries((current) =>
+            sortQuoteEntriesDescending([...current, created]),
+          );
+          setQuotesNotice(`Quote #${created.id} added.`);
           closeQuoteDialog();
         })
         .catch((error: unknown) => {
@@ -221,7 +241,9 @@ export function ModuleEditorPage() {
     void updateQuoteModuleEntry(editingQuote.id, message)
       .then((updated) => {
         setQuoteEntries((current) =>
-          current.map((entry) => (entry.id === updated.id ? updated : entry)),
+          sortQuoteEntriesDescending(
+            current.map((entry) => (entry.id === updated.id ? updated : entry)),
+          ),
         );
         setQuotesNotice(`Quote #${updated.id} updated.`);
         closeQuoteDialog();
@@ -232,72 +254,6 @@ export function ModuleEditorPage() {
             ? error.message
             : "Could not update quote right now.",
         );
-      });
-  };
-
-  const openQuoteImportDialog = () => {
-    setQuotesNotice("");
-    setQuoteImportDraft("");
-    setQuoteImportChannel("");
-    setQuoteImportAPIURL("");
-    setQuoteImportAPIToken("");
-    setQuoteImportDialogOpen(true);
-  };
-
-  const closeQuoteImportDialog = () => {
-    if (quoteImportSaving) {
-      return;
-    }
-    setQuoteImportDialogOpen(false);
-    setQuoteImportDraft("");
-    setQuoteImportChannel("");
-    setQuoteImportAPIURL("");
-    setQuoteImportAPIToken("");
-  };
-
-  const saveQuoteImport = () => {
-    const payload = quoteImportDraft.trim();
-    const channel = quoteImportChannel.trim().replace(/^@+/, "");
-    const apiURL = quoteImportAPIURL.trim();
-    const apiToken = quoteImportAPIToken.trim();
-
-    if (payload === "" && channel === "" && apiURL === "") {
-      setQuotesError("Add a Fossabot channel, an API URL, or pasted export text.");
-      return;
-    }
-
-    setQuoteImportSaving(true);
-    setQuotesError("");
-    setQuotesNotice("");
-
-    void importFossabotQuotes({
-      payload,
-      channel,
-      apiURL,
-      apiToken,
-    })
-      .then((result) => {
-        if (result.items.length > 0) {
-          setQuoteEntries((current) => [...result.items, ...current]);
-        }
-        setQuotesNotice(
-          `Imported ${result.imported} quote${result.imported === 1 ? "" : "s"} from Fossabot. Skipped ${result.skipped}.`,
-        );
-        setQuoteImportDialogOpen(false);
-        setQuoteImportDraft("");
-        setQuoteImportChannel("");
-        setQuoteImportAPIURL("");
-        setQuoteImportAPIToken("");
-      })
-      .catch((error: unknown) => {
-        setQuotesError(
-          error instanceof Error
-            ? error.message
-            : "Could not import Fossabot quotes right now.",
-        );
-      })
-      .finally(() => {
-        setQuoteImportSaving(false);
       });
   };
 
@@ -412,34 +368,6 @@ export function ModuleEditorPage() {
             </Box>
 
             <Stack spacing={2.5} sx={{ p: 3 }}>
-              {section === "general" && !isQuotesModule ? (
-                <>
-                  <Alert severity="info">
-                    Module metadata is system-managed. Edit the persisted
-                    module settings from the Settings tab.
-                  </Alert>
-
-                  <Paper sx={{ p: 2 }}>
-                    <Typography
-                      sx={{
-                        fontSize: "0.86rem",
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        color: "text.secondary",
-                        mb: 1.25,
-                      }}
-                    >
-                      Chat commands
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {draft.commands.length > 0
-                        ? draft.commands.join(", ")
-                        : "This module does not expose chat commands."}
-                    </Typography>
-                  </Paper>
-                </>
-              ) : null}
-
               {section === "settings" ? (
                 <Stack spacing={2}>
                   {isQuotesModule ? (
@@ -466,6 +394,7 @@ export function ModuleEditorPage() {
                             sx={{ mb: 0.5 }}
                           >
                             <Tab value="viewer" label="Viewer Question" />
+                            <Tab value="commands" label="Commands" />
                             <Tab value="playtime" label="Playtime" />
                             <Tab value="gamesplayed" label="Games Played" />
                           </Tabs>
@@ -479,6 +408,15 @@ export function ModuleEditorPage() {
                                   setting.id === "viewer-question-response"
                                 );
                               }
+                              if (gameSettingsTab === "commands") {
+                                return (
+                                  setting.id === "game-command-enabled" ||
+                                  setting.id ===
+                                    "playtime-command-enabled" ||
+                                  setting.id ===
+                                    "gamesplayed-command-enabled"
+                                );
+                              }
                               if (gameSettingsTab === "playtime") {
                                 return setting.id === "playtime-template";
                               }
@@ -486,6 +424,49 @@ export function ModuleEditorPage() {
                                 setting.id === "gamesplayed-template" ||
                                 setting.id === "gamesplayed-item-template" ||
                                 setting.id === "gamesplayed-limit"
+                              );
+                            })
+                            .map((setting) => (
+                              <ModuleSettingField
+                                key={setting.id}
+                                setting={setting}
+                                onChange={(value) =>
+                                  updateSetting(setting.id, value)
+                                }
+                              />
+                            ))}
+                        </>
+                      ) : isFollowersOnlyModule ? (
+                        <>
+                          <Tabs
+                            value={autoChatStatesTab}
+                            onChange={(_, value: AutoChatStatesTab) =>
+                              setAutoChatStatesTab(value)
+                            }
+                            sx={{ mb: 0.5 }}
+                          >
+                            <Tab value="online" label="Stream Online" />
+                            <Tab value="offline" label="Stream Offline" />
+                            <Tab
+                              value="followerAutoOff"
+                              label="Follower Auto-Off"
+                            />
+                          </Tabs>
+
+                          {draft.settings
+                            .filter((setting) => {
+                              if (autoChatStatesTab === "online") {
+                                return (
+                                  setting.id.startsWith("online-") ||
+                                  setting.id === "enabled-when-offline"
+                                );
+                              }
+                              if (autoChatStatesTab === "offline") {
+                                return setting.id.startsWith("offline-");
+                              }
+                              return (
+                                setting.id === "auto-disable-enabled" ||
+                                setting.id === "auto-disable-minutes"
                               );
                             })
                             .map((setting) => (
@@ -566,15 +547,11 @@ export function ModuleEditorPage() {
                           sx={{ mt: 0.45 }}
                         >
                           Add, edit, and delete the actual quotes used by the
-                          quotes module.
+                          quotes module. Chat still adds to the next quote
+                          number automatically, but from here you can also
+                          restore a deleted quote number when needed.
                         </Typography>
                       </Box>
-                      <Button
-                        variant="outlined"
-                        onClick={openQuoteImportDialog}
-                      >
-                        Import Fossabot
-                      </Button>
                       <Button
                         variant="contained"
                         startIcon={<AddRoundedIcon />}
@@ -703,61 +680,6 @@ export function ModuleEditorPage() {
       </Dialog>
 
       <Dialog
-        open={quoteImportDialogOpen}
-        onClose={closeQuoteImportDialog}
-        fullWidth
-        maxWidth="md"
-      >
-        <DialogTitle>Import Fossabot quotes</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.25} sx={{ mt: 1 }}>
-            <Alert severity="info">
-              Import from Fossabot API by channel (or custom API URL). Pasted export text is also supported as a fallback.
-            </Alert>
-            <TextField
-              autoFocus
-              fullWidth
-              label="Fossabot channel"
-              placeholder="@channelname"
-              value={quoteImportChannel}
-              onChange={(event) => setQuoteImportChannel(event.target.value)}
-            />
-            <TextField
-              fullWidth
-              label="Fossabot API URL (optional override)"
-              placeholder="https://api.fossabot.com/v2/channels/channelname/quotes"
-              value={quoteImportAPIURL}
-              onChange={(event) => setQuoteImportAPIURL(event.target.value)}
-            />
-            <TextField
-              fullWidth
-              type="password"
-              label="Fossabot API token (optional)"
-              value={quoteImportAPIToken}
-              onChange={(event) => setQuoteImportAPIToken(event.target.value)}
-            />
-            <TextField
-              fullWidth
-              multiline
-              minRows={6}
-              label="Fallback pasted export text (optional)"
-              placeholder={"1) First quote\n2) Another quote"}
-              value={quoteImportDraft}
-              onChange={(event) => setQuoteImportDraft(event.target.value)}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="outlined" onClick={closeQuoteImportDialog} disabled={quoteImportSaving}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={saveQuoteImport} disabled={quoteImportSaving}>
-            {quoteImportSaving ? "Importing..." : "Import"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
         open={quoteDialogOpen}
         onClose={closeQuoteDialog}
         fullWidth
@@ -769,16 +691,29 @@ export function ModuleEditorPage() {
             : `Edit quote #${editingQuote.id}`}
         </DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            fullWidth
-            multiline
-            minRows={4}
-            label="Quote message"
-            value={quoteDraft}
-            onChange={(event) => setQuoteDraft(event.target.value)}
-            sx={{ mt: 1 }}
-          />
+          <Stack spacing={1.5} sx={{ mt: 1 }}>
+            {editingQuote == null ? (
+              <TextField
+                autoFocus
+                fullWidth
+                type="number"
+                label="Quote number (optional)"
+                value={quoteNumberDraft}
+                onChange={(event) => setQuoteNumberDraft(event.target.value)}
+                inputProps={{ min: 1, step: 1 }}
+                helperText="Leave blank to use the next quote number. Fill this in to restore a deleted quote number like #2."
+              />
+            ) : null}
+            <TextField
+              autoFocus={editingQuote != null}
+              fullWidth
+              multiline
+              minRows={4}
+              label="Quote message"
+              value={quoteDraft}
+              onChange={(event) => setQuoteDraft(event.target.value)}
+            />
+          </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button variant="outlined" onClick={closeQuoteDialog}>
@@ -841,6 +776,12 @@ function ModuleSettingField({
           ? { step: 1, min: 1, max: 30 }
           : setting.id === "grace-period-days"
             ? { step: 1, min: 1, max: 30 }
+            : setting.id.endsWith("slow-mode-seconds")
+              ? { step: 1, min: 3, max: 120 }
+              : setting.id.endsWith("follower-mode-minutes")
+                ? { step: 1, min: 0, max: 129600 }
+                : setting.id === "auto-disable-minutes"
+                  ? { step: 1, min: 1, max: 1440 }
           : undefined;
 
   if (setting.type === "boolean") {

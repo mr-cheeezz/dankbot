@@ -456,7 +456,22 @@ function mergeFollowersOnlyModuleSettings(
     settings.enabled,
     {
       "enabled-when-offline": settings.enabledWhenOffline ? "true" : "false",
+      "auto-disable-enabled": settings.autoDisableEnabled ? "true" : "false",
       "auto-disable-minutes": String(settings.autoDisableAfterMinutes),
+      "online-slow-mode-action": settings.onlineSlowModeAction,
+      "online-slow-mode-seconds": String(settings.onlineSlowModeSeconds),
+      "online-emote-mode-action": settings.onlineEmoteModeAction,
+      "online-unique-chat-mode-action": settings.onlineUniqueChatAction,
+      "online-subscriber-mode-action": settings.onlineSubscriberAction,
+      "online-follower-mode-action": settings.onlineFollowerAction,
+      "online-follower-mode-minutes": String(settings.onlineFollowerMinutes),
+      "offline-slow-mode-action": settings.offlineSlowModeAction,
+      "offline-slow-mode-seconds": String(settings.offlineSlowModeSeconds),
+      "offline-emote-mode-action": settings.offlineEmoteModeAction,
+      "offline-unique-chat-mode-action": settings.offlineUniqueChatAction,
+      "offline-subscriber-mode-action": settings.offlineSubscriberAction,
+      "offline-follower-mode-action": settings.offlineFollowerAction,
+      "offline-follower-mode-minutes": String(settings.offlineFollowerMinutes),
     },
   );
 }
@@ -464,21 +479,51 @@ function mergeFollowersOnlyModuleSettings(
 function followersOnlySettingsFromModule(
   entry: ModuleEntry,
 ): FollowersOnlyModuleSettings {
-  const enabledWhenOfflineSetting = entry.settings.find(
-    (setting) => setting.id === "enabled-when-offline",
-  );
-  const autoDisableSetting = entry.settings.find(
-    (setting) => setting.id === "auto-disable-minutes",
-  );
-  const rawValue = Number.parseInt(autoDisableSetting?.value ?? "0", 10);
-  const enabledWhenOffline =
-    (enabledWhenOfflineSetting?.value ?? "false") === "true";
+  const getBool = (settingID: string, fallback = false) =>
+    (entry.settings.find((setting) => setting.id === settingID)?.value ??
+      String(fallback)) === "true";
+  const getText = (settingID: string, fallback = "") =>
+    entry.settings.find((setting) => setting.id === settingID)?.value ??
+    fallback;
+  const getNumber = (settingID: string, fallback = 0) => {
+    const raw = Number.parseInt(getText(settingID, String(fallback)), 10);
+    return Number.isFinite(raw) ? raw : fallback;
+  };
 
   return {
     enabled: entry.enabled,
-    enabledWhenOffline,
-    autoDisableAfterMinutes:
-      Number.isFinite(rawValue) && rawValue > 0 ? rawValue : 0,
+    enabledWhenOffline: getBool("enabled-when-offline"),
+    autoDisableEnabled: getBool("auto-disable-enabled", true),
+    autoDisableAfterMinutes: getNumber("auto-disable-minutes"),
+    onlineSlowModeAction: getText("online-slow-mode-action", "no-change"),
+    onlineSlowModeSeconds: getNumber("online-slow-mode-seconds", 30),
+    onlineEmoteModeAction: getText("online-emote-mode-action", "no-change"),
+    onlineUniqueChatAction: getText(
+      "online-unique-chat-mode-action",
+      "no-change",
+    ),
+    onlineSubscriberAction: getText(
+      "online-subscriber-mode-action",
+      "no-change",
+    ),
+    onlineFollowerAction: getText("online-follower-mode-action", "no-change"),
+    onlineFollowerMinutes: getNumber("online-follower-mode-minutes"),
+    offlineSlowModeAction: getText("offline-slow-mode-action", "no-change"),
+    offlineSlowModeSeconds: getNumber("offline-slow-mode-seconds", 30),
+    offlineEmoteModeAction: getText("offline-emote-mode-action", "no-change"),
+    offlineUniqueChatAction: getText(
+      "offline-unique-chat-mode-action",
+      "no-change",
+    ),
+    offlineSubscriberAction: getText(
+      "offline-subscriber-mode-action",
+      "no-change",
+    ),
+    offlineFollowerAction: getText(
+      "offline-follower-mode-action",
+      "no-change",
+    ),
+    offlineFollowerMinutes: getNumber("offline-follower-mode-minutes"),
   };
 }
 
@@ -521,12 +566,19 @@ function mergeGameModuleSettings(
   settings: GameModuleSettings,
   catalogByID: ModuleCatalogByID,
 ): ModuleEntry[] {
-  return upsertModuleFromCatalog(current, catalogByID, gameModuleID, true, {
-    "viewer-question-enabled": settings.enabled ? "true" : "false",
+  return upsertModuleFromCatalog(current, catalogByID, gameModuleID, settings.enabled, {
+    "viewer-question-enabled": settings.viewerQuestionEnabled ? "true" : "false",
     "viewer-question-ai-detection": settings.aiDetectionEnabled
       ? "true"
       : "false",
     "viewer-question-response": settings.keywordResponse,
+    "game-command-enabled": settings.gameCommandEnabled ? "true" : "false",
+    "playtime-command-enabled": settings.playtimeCommandEnabled
+      ? "true"
+      : "false",
+    "gamesplayed-command-enabled": settings.gamesPlayedCommandEnabled
+      ? "true"
+      : "false",
     "playtime-template": settings.playtimeTemplate,
     "gamesplayed-template": settings.gamesPlayedTemplate,
     "gamesplayed-item-template": settings.gamesPlayedItemTemplate,
@@ -563,9 +615,19 @@ function gameModuleSettingsFromModule(entry: ModuleEntry): GameModuleSettings {
     Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 5;
 
   return {
-    enabled,
+    enabled: entry.enabled,
+    viewerQuestionEnabled: enabled,
     aiDetectionEnabled,
     keywordResponse,
+    gameCommandEnabled:
+      entry.settings.find((setting) => setting.id === "game-command-enabled")
+        ?.value !== "false",
+    playtimeCommandEnabled:
+      entry.settings.find((setting) => setting.id === "playtime-command-enabled")
+        ?.value !== "false",
+    gamesPlayedCommandEnabled:
+      entry.settings.find((setting) => setting.id === "gamesplayed-command-enabled")
+        ?.value !== "false",
     playtimeTemplate,
     gamesPlayedTemplate,
     gamesPlayedItemTemplate,
@@ -1008,9 +1070,7 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
           })
           .catch(() => {
             if (!controller.signal.aborted) {
-              setNotice(
-                "Could not load the auto followers-only module right now.",
-              );
+              setNotice("Could not load the auto chat states module right now.");
             }
           });
 
@@ -1767,7 +1827,7 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
             entry.id === moduleId ? currentEntry : entry,
           ),
         );
-        setNotice("Could not save the auto followers-only module right now.");
+        setNotice("Could not save the auto chat states module right now.");
       });
       return;
     }
@@ -1948,7 +2008,7 @@ export function ModeratorProvider({ children }: PropsWithChildren) {
           setModules((current) =>
             current.map((entry) => (entry.id === moduleId ? existing : entry)),
           );
-          setNotice("Could not save the auto followers-only module right now.");
+          setNotice("Could not save the auto chat states module right now.");
         });
       return;
     }

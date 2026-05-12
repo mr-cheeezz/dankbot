@@ -150,7 +150,7 @@ export function ModulesPage() {
 function moduleIcon(moduleID: ModuleEntry["id"]): SvgIconComponent {
   switch (moduleID) {
     case "auto-followers-only":
-      return PeopleAltRoundedIcon;
+      return ForumRoundedIcon;
     case "new-chatter-greeting":
       return PeopleAltRoundedIcon;
     case "default-commands":

@@ -1,6 +1,5 @@
 import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import AlbumRoundedIcon from "@mui/icons-material/AlbumRounded";
-import ChatRoundedIcon from "@mui/icons-material/ChatRounded";
 import FacebookIcon from "@mui/icons-material/Facebook";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import GraphicEqRoundedIcon from "@mui/icons-material/GraphicEqRounded";
@@ -32,6 +31,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { SvgIcon } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { SystemStyleObject } from "@mui/system";
@@ -843,7 +843,7 @@ function getPromoLinkMetadata(href: string): {
     }
     if (root === "discord.com" || root === "discord.gg") {
       return {
-        icon: <ChatRoundedIcon fontSize="small" />,
+        icon: <DiscordGlyph fontSize="small" />,
         hostLabel: "Discord",
         accentColor: "#9da8ff",
         surfaceColor: "rgba(125,134,255,0.14)",
@@ -978,6 +978,17 @@ function getPromoLinkMetadata(href: string): {
   } catch {
     return fallback;
   }
+}
+
+function DiscordGlyph(props: React.ComponentProps<typeof SvgIcon>) {
+  return (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+      <path
+        fill="currentColor"
+        d="M20.32 4.37a16.9 16.9 0 0 0-4.22-1.31a11.7 11.7 0 0 0-.54 1.1a15.7 15.7 0 0 0-4.72 0a11.8 11.8 0 0 0-.54-1.1A16.8 16.8 0 0 0 6.08 4.37C3.41 8.41 2.69 12.34 3.05 16.2a17 17 0 0 0 5.18 2.64c.42-.58.8-1.19 1.12-1.84c-.61-.23-1.19-.51-1.75-.84c.15-.11.29-.23.43-.35c3.37 1.58 7.03 1.58 10.36 0c.14.12.28.24.43.35c-.56.33-1.15.61-1.76.84c.32.65.7 1.26 1.13 1.84a17 17 0 0 0 5.18-2.64c.42-4.48-.72-8.37-3.05-11.83M9.68 13.84c-1.01 0-1.84-.93-1.84-2.07c0-1.14.81-2.07 1.84-2.07c1.03 0 1.85.93 1.84 2.07c0 1.14-.81 2.07-1.84 2.07m4.64 0c-1.01 0-1.84-.93-1.84-2.07c0-1.14.81-2.07 1.84-2.07c1.03 0 1.85.93 1.84 2.07c0 1.14-.81 2.07-1.84 2.07"
+      />
+    </SvgIcon>
+  );
 }
 
 function formatDuration(value: string, nowMS: number): string {

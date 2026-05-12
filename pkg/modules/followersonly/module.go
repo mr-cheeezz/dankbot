@@ -29,6 +29,8 @@ type Module struct {
 	activeSince   time.Time
 	lastWarning   string
 	lastWarningAt time.Time
+	lastLive      *bool
+	lastProfile   string
 }
 
 func New(
@@ -50,7 +52,7 @@ func New(
 }
 
 func (m *Module) Name() string {
-	return "followers-only"
+	return "auto-chat-states"
 }
 
 func (m *Module) RegisterCommands() map[string]modules.CommandDefinition {
@@ -99,18 +101,13 @@ func (m *Module) tick(ctx context.Context) error {
 		return err
 	}
 	if settings == nil || !settings.Enabled {
-		m.clearActiveSince()
+		m.clearRuntimeState()
 		return nil
 	}
-	if !settings.EnabledWhenOffline {
-		live, err := m.isStreamLive(ctx)
-		if err != nil {
-			return err
-		}
-		if !live {
-			m.clearActiveSince()
-			return nil
-		}
+
+	live, err := m.isStreamLive(ctx)
+	if err != nil {
+		return err
 	}
 
 	account, err := m.botAccount(ctx)
@@ -142,7 +139,22 @@ func (m *Module) tick(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get twitch chat settings: %w", err)
 	}
-	if chatSettings == nil || !chatSettings.FollowerMode {
+
+	if chatSettings == nil {
+		m.clearRuntimeState()
+		return nil
+	}
+
+	if err := m.applyProfileOnTransition(ctx, client, moderatorID, live, settings, chatSettings); err != nil {
+		return err
+	}
+
+	if !chatSettings.FollowerMode {
+		m.clearActiveSince()
+		return nil
+	}
+
+	if !settings.AutoDisableEnabled {
 		m.clearActiveSince()
 		return nil
 	}
@@ -162,6 +174,53 @@ func (m *Module) tick(ctx context.Context) error {
 
 	m.clearActiveSince()
 	fmt.Printf("auto followers-only module disabled followers-only mode after %d minute(s)\n", settings.AutoDisableAfterMinutes)
+	return nil
+}
+
+func (m *Module) applyProfileOnTransition(
+	ctx context.Context,
+	client *helix.Client,
+	moderatorID string,
+	live bool,
+	settings *postgres.FollowersOnlyModuleSettings,
+	chatSettings *helix.ChatSettings,
+) error {
+	if settings == nil || client == nil || chatSettings == nil {
+		return nil
+	}
+
+	profileName := "offline"
+	if live {
+		profileName = "online"
+	}
+
+	shouldApply := false
+	m.mu.Lock()
+	if m.lastLive == nil || *m.lastLive != live || m.lastProfile != profileName {
+		shouldApply = true
+		liveCopy := live
+		m.lastLive = &liveCopy
+		m.lastProfile = profileName
+	}
+	m.mu.Unlock()
+
+	if !shouldApply {
+		return nil
+	}
+
+	request, needsUpdate := buildChatStateUpdateRequest(live, *settings, *chatSettings)
+	if !needsUpdate {
+		return nil
+	}
+
+	updated, err := client.UpdateChatSettings(ctx, m.streamerID, moderatorID, request)
+	if err != nil {
+		return fmt.Errorf("apply %s chat state profile: %w", profileName, err)
+	}
+	if updated != nil && !updated.FollowerMode {
+		m.clearActiveSince()
+	}
+
 	return nil
 }
 
@@ -251,6 +310,15 @@ func (m *Module) clearActiveSince() {
 	m.activeSince = time.Time{}
 }
 
+func (m *Module) clearRuntimeState() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.activeSince = time.Time{}
+	m.lastLive = nil
+	m.lastProfile = ""
+}
+
 func (m *Module) warnOnceEveryMinute(message string) {
 	message = strings.TrimSpace(message)
 	if message == "" {
@@ -299,4 +367,90 @@ func followersOnlyMissingScopes(actual []string, required ...string) []string {
 	}
 
 	return missing
+}
+
+func buildChatStateUpdateRequest(
+	live bool,
+	settings postgres.FollowersOnlyModuleSettings,
+	current helix.ChatSettings,
+) (helix.UpdateChatSettingsRequest, bool) {
+	var (
+		request     helix.UpdateChatSettingsRequest
+		needsUpdate bool
+	)
+
+	var (
+		slowAction       string
+		slowSeconds      int
+		emoteAction      string
+		uniqueAction     string
+		subscriberAction string
+		followerAction   string
+		followerMinutes  int
+	)
+
+	if live {
+		slowAction = settings.OnlineSlowModeAction
+		slowSeconds = settings.OnlineSlowModeSeconds
+		emoteAction = settings.OnlineEmoteModeAction
+		uniqueAction = settings.OnlineUniqueChatAction
+		subscriberAction = settings.OnlineSubscriberAction
+		followerAction = settings.OnlineFollowerAction
+		followerMinutes = settings.OnlineFollowerMinutes
+	} else {
+		slowAction = settings.OfflineSlowModeAction
+		slowSeconds = settings.OfflineSlowModeSeconds
+		emoteAction = settings.OfflineEmoteModeAction
+		uniqueAction = settings.OfflineUniqueChatAction
+		subscriberAction = settings.OfflineSubscriberAction
+		followerAction = settings.OfflineFollowerAction
+		followerMinutes = settings.OfflineFollowerMinutes
+	}
+
+	if applyToggleSetting(slowAction, current.SlowMode, &request.SlowMode, &needsUpdate) && strings.EqualFold(slowAction, "enable") {
+		seconds := slowSeconds
+		if seconds <= 0 {
+			seconds = 30
+		}
+		if current.SlowModeWaitTime != seconds {
+			request.SlowModeWaitTime = &seconds
+			needsUpdate = true
+		}
+	}
+	applyToggleSetting(emoteAction, current.EmoteMode, &request.EmoteMode, &needsUpdate)
+	applyToggleSetting(uniqueAction, current.UniqueChatMode, &request.UniqueChatMode, &needsUpdate)
+	applyToggleSetting(subscriberAction, current.SubscriberMode, &request.SubscriberMode, &needsUpdate)
+	if applyToggleSetting(followerAction, current.FollowerMode, &request.FollowerMode, &needsUpdate) && strings.EqualFold(followerAction, "enable") {
+		minutes := followerMinutes
+		if minutes < 0 {
+			minutes = 0
+		}
+		if current.FollowerModeDuration != minutes {
+			request.FollowerModeDuration = &minutes
+			needsUpdate = true
+		}
+	}
+
+	return request, needsUpdate
+}
+
+func applyToggleSetting(action string, current bool, target **bool, needsUpdate *bool) bool {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "enable":
+		value := true
+		*target = &value
+		if !current {
+			*needsUpdate = true
+		}
+		return true
+	case "disable":
+		value := false
+		*target = &value
+		if current {
+			*needsUpdate = true
+		}
+		return true
+	default:
+		return false
+	}
 }

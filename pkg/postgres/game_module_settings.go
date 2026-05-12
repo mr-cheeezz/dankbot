@@ -9,14 +9,18 @@ import (
 )
 
 type GameModuleSettings struct {
-	KeywordResponse         string
-	PlaytimeTemplate        string
-	GamesPlayedTemplate     string
-	GamesPlayedItemTemplate string
-	GamesPlayedLimit        int
-	UpdatedBy               string
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
+	Enabled                   bool
+	KeywordResponse           string
+	GameCommandEnabled        bool
+	PlaytimeCommandEnabled    bool
+	GamesPlayedCommandEnabled bool
+	PlaytimeTemplate          string
+	GamesPlayedTemplate       string
+	GamesPlayedItemTemplate   string
+	GamesPlayedLimit          int
+	UpdatedBy                 string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 }
 
 type GameModuleSettingsStore struct {
@@ -29,11 +33,15 @@ func NewGameModuleSettingsStore(client *Client) *GameModuleSettingsStore {
 
 func DefaultGameModuleSettings() GameModuleSettings {
 	return GameModuleSettings{
-		KeywordResponse:         "{streamer} is currently playing {game}.",
-		PlaytimeTemplate:        "{streamer} has been playing {game} for {duration}.",
-		GamesPlayedTemplate:     "{label}: {items}",
-		GamesPlayedItemTemplate: "{game} ({duration})",
-		GamesPlayedLimit:        5,
+		Enabled:                   true,
+		KeywordResponse:           "{streamer} is currently playing {game}.",
+		GameCommandEnabled:        true,
+		PlaytimeCommandEnabled:    true,
+		GamesPlayedCommandEnabled: true,
+		PlaytimeTemplate:          "{streamer} has been playing {game} for {duration}.",
+		GamesPlayedTemplate:       "{label}: {items}",
+		GamesPlayedItemTemplate:   "{game} ({duration})",
+		GamesPlayedLimit:          5,
 	}
 }
 
@@ -49,7 +57,11 @@ func (s *GameModuleSettingsStore) EnsureDefault(ctx context.Context) error {
 		`
 INSERT INTO game_module_settings (
 	id,
+	enabled,
 	keyword_response,
+	game_command_enabled,
+	playtime_command_enabled,
+	gamesplayed_command_enabled,
 	playtime_template,
 	gamesplayed_template,
 	gamesplayed_item_template,
@@ -58,10 +70,14 @@ INSERT INTO game_module_settings (
 	created_at,
 	updated_at
 )
-VALUES (1, $1, $2, $3, $4, $5, '', NOW(), NOW())
+VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, '', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 `,
+		defaults.Enabled,
 		normalizeGameKeywordResponse(defaults.KeywordResponse),
+		defaults.GameCommandEnabled,
+		defaults.PlaytimeCommandEnabled,
+		defaults.GamesPlayedCommandEnabled,
 		normalizeGamePlaytimeTemplate(defaults.PlaytimeTemplate),
 		normalizeGameGamesPlayedTemplate(defaults.GamesPlayedTemplate),
 		normalizeGameGamesPlayedItemTemplate(defaults.GamesPlayedItemTemplate),
@@ -85,7 +101,11 @@ func (s *GameModuleSettingsStore) Get(ctx context.Context) (*GameModuleSettings,
 		ctx,
 		`
 SELECT
+	enabled,
 	keyword_response,
+	game_command_enabled,
+	playtime_command_enabled,
+	gamesplayed_command_enabled,
 	playtime_template,
 	gamesplayed_template,
 	gamesplayed_item_template,
@@ -97,7 +117,11 @@ FROM game_module_settings
 WHERE id = 1
 `,
 	).Scan(
+		&settings.Enabled,
 		&settings.KeywordResponse,
+		&settings.GameCommandEnabled,
+		&settings.PlaytimeCommandEnabled,
+		&settings.GamesPlayedCommandEnabled,
 		&settings.PlaytimeTemplate,
 		&settings.GamesPlayedTemplate,
 		&settings.GamesPlayedItemTemplate,
@@ -114,6 +138,7 @@ WHERE id = 1
 	}
 
 	settings.KeywordResponse = normalizeGameKeywordResponse(settings.KeywordResponse)
+	settings.Enabled = normalizeGameEnabled(settings.Enabled)
 	settings.PlaytimeTemplate = normalizeGamePlaytimeTemplate(settings.PlaytimeTemplate)
 	settings.GamesPlayedTemplate = normalizeGameGamesPlayedTemplate(settings.GamesPlayedTemplate)
 	settings.GamesPlayedItemTemplate = normalizeGameGamesPlayedItemTemplate(settings.GamesPlayedItemTemplate)
@@ -133,16 +158,24 @@ func (s *GameModuleSettingsStore) Update(ctx context.Context, settings GameModul
 		`
 UPDATE game_module_settings
 SET
-	keyword_response = $1,
-	playtime_template = $2,
-	gamesplayed_template = $3,
-	gamesplayed_item_template = $4,
-	gamesplayed_limit = $5,
-	updated_by = $6,
+	enabled = $1,
+	keyword_response = $2,
+	game_command_enabled = $3,
+	playtime_command_enabled = $4,
+	gamesplayed_command_enabled = $5,
+	playtime_template = $6,
+	gamesplayed_template = $7,
+	gamesplayed_item_template = $8,
+	gamesplayed_limit = $9,
+	updated_by = $10,
 	updated_at = NOW()
 WHERE id = 1
 RETURNING
+	enabled,
 	keyword_response,
+	game_command_enabled,
+	playtime_command_enabled,
+	gamesplayed_command_enabled,
 	playtime_template,
 	gamesplayed_template,
 	gamesplayed_item_template,
@@ -151,14 +184,22 @@ RETURNING
 	created_at,
 	updated_at
 `,
+		normalizeGameEnabled(settings.Enabled),
 		normalizeGameKeywordResponse(settings.KeywordResponse),
+		settings.GameCommandEnabled,
+		settings.PlaytimeCommandEnabled,
+		settings.GamesPlayedCommandEnabled,
 		normalizeGamePlaytimeTemplate(settings.PlaytimeTemplate),
 		normalizeGameGamesPlayedTemplate(settings.GamesPlayedTemplate),
 		normalizeGameGamesPlayedItemTemplate(settings.GamesPlayedItemTemplate),
 		normalizeGameGamesPlayedLimit(settings.GamesPlayedLimit),
 		strings.TrimSpace(settings.UpdatedBy),
 	).Scan(
+		&updated.Enabled,
 		&updated.KeywordResponse,
+		&updated.GameCommandEnabled,
+		&updated.PlaytimeCommandEnabled,
+		&updated.GamesPlayedCommandEnabled,
 		&updated.PlaytimeTemplate,
 		&updated.GamesPlayedTemplate,
 		&updated.GamesPlayedItemTemplate,
@@ -175,11 +216,16 @@ RETURNING
 	}
 
 	updated.KeywordResponse = normalizeGameKeywordResponse(updated.KeywordResponse)
+	updated.Enabled = normalizeGameEnabled(updated.Enabled)
 	updated.PlaytimeTemplate = normalizeGamePlaytimeTemplate(updated.PlaytimeTemplate)
 	updated.GamesPlayedTemplate = normalizeGameGamesPlayedTemplate(updated.GamesPlayedTemplate)
 	updated.GamesPlayedItemTemplate = normalizeGameGamesPlayedItemTemplate(updated.GamesPlayedItemTemplate)
 	updated.GamesPlayedLimit = normalizeGameGamesPlayedLimit(updated.GamesPlayedLimit)
 	return &updated, nil
+}
+
+func normalizeGameEnabled(value bool) bool {
+	return value
 }
 
 func normalizeGameKeywordResponse(value string) string {

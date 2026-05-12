@@ -200,7 +200,22 @@ type TwitchCategorySearchResponse = {
 type FollowersOnlyModuleResponse = {
   enabled: boolean;
   enabled_when_offline: boolean;
+  auto_disable_enabled: boolean;
   auto_disable_after_minutes: number;
+  online_slow_mode_action: string;
+  online_slow_mode_seconds: number;
+  online_emote_mode_action: string;
+  online_unique_chat_mode_action: string;
+  online_subscriber_mode_action: string;
+  online_follower_mode_action: string;
+  online_follower_mode_minutes: number;
+  offline_slow_mode_action: string;
+  offline_slow_mode_seconds: number;
+  offline_emote_mode_action: string;
+  offline_unique_chat_mode_action: string;
+  offline_subscriber_mode_action: string;
+  offline_follower_mode_action: string;
+  offline_follower_mode_minutes: number;
 };
 
 type ModulesCatalogResponse = {
@@ -227,8 +242,12 @@ type NewChatterGreetingModuleResponse = {
 
 type GameModuleResponse = {
   enabled: boolean;
+  viewer_question_enabled: boolean;
   ai_detection_enabled: boolean;
   keyword_response: string;
+  game_command_enabled: boolean;
+  playtime_command_enabled: boolean;
+  gamesplayed_command_enabled: boolean;
   playtime_template: string;
   gamesplayed_template: string;
   gamesplayed_item_template: string;
@@ -281,19 +300,6 @@ type ModesModuleSettingsResponse = {
 };
 
 type QuoteEntriesResponse = {
-  items: Array<{
-    id: number;
-    message: string;
-    created_by: string;
-    updated_by: string;
-    created_at: string;
-    updated_at: string;
-  }>;
-};
-
-type QuoteImportResponse = {
-  imported: number;
-  skipped: number;
   items: Array<{
     id: number;
     message: string;
@@ -838,7 +844,22 @@ export async function fetchFollowersOnlyModuleSettings(
   return {
     enabled: payload.enabled,
     enabledWhenOffline: payload.enabled_when_offline,
+    autoDisableEnabled: payload.auto_disable_enabled,
     autoDisableAfterMinutes: payload.auto_disable_after_minutes,
+    onlineSlowModeAction: payload.online_slow_mode_action,
+    onlineSlowModeSeconds: payload.online_slow_mode_seconds,
+    onlineEmoteModeAction: payload.online_emote_mode_action,
+    onlineUniqueChatAction: payload.online_unique_chat_mode_action,
+    onlineSubscriberAction: payload.online_subscriber_mode_action,
+    onlineFollowerAction: payload.online_follower_mode_action,
+    onlineFollowerMinutes: payload.online_follower_mode_minutes,
+    offlineSlowModeAction: payload.offline_slow_mode_action,
+    offlineSlowModeSeconds: payload.offline_slow_mode_seconds,
+    offlineEmoteModeAction: payload.offline_emote_mode_action,
+    offlineUniqueChatAction: payload.offline_unique_chat_mode_action,
+    offlineSubscriberAction: payload.offline_subscriber_mode_action,
+    offlineFollowerAction: payload.offline_follower_mode_action,
+    offlineFollowerMinutes: payload.offline_follower_mode_minutes,
   };
 }
 
@@ -855,7 +876,22 @@ export async function saveFollowersOnlyModuleSettings(
     body: JSON.stringify({
       enabled: settings.enabled,
       enabled_when_offline: settings.enabledWhenOffline,
+      auto_disable_enabled: settings.autoDisableEnabled,
       auto_disable_after_minutes: settings.autoDisableAfterMinutes,
+      online_slow_mode_action: settings.onlineSlowModeAction,
+      online_slow_mode_seconds: settings.onlineSlowModeSeconds,
+      online_emote_mode_action: settings.onlineEmoteModeAction,
+      online_unique_chat_mode_action: settings.onlineUniqueChatAction,
+      online_subscriber_mode_action: settings.onlineSubscriberAction,
+      online_follower_mode_action: settings.onlineFollowerAction,
+      online_follower_mode_minutes: settings.onlineFollowerMinutes,
+      offline_slow_mode_action: settings.offlineSlowModeAction,
+      offline_slow_mode_seconds: settings.offlineSlowModeSeconds,
+      offline_emote_mode_action: settings.offlineEmoteModeAction,
+      offline_unique_chat_mode_action: settings.offlineUniqueChatAction,
+      offline_subscriber_mode_action: settings.offlineSubscriberAction,
+      offline_follower_mode_action: settings.offlineFollowerAction,
+      offline_follower_mode_minutes: settings.offlineFollowerMinutes,
     }),
   });
 
@@ -869,7 +905,22 @@ export async function saveFollowersOnlyModuleSettings(
   return {
     enabled: payload.enabled,
     enabledWhenOffline: payload.enabled_when_offline,
+    autoDisableEnabled: payload.auto_disable_enabled,
     autoDisableAfterMinutes: payload.auto_disable_after_minutes,
+    onlineSlowModeAction: payload.online_slow_mode_action,
+    onlineSlowModeSeconds: payload.online_slow_mode_seconds,
+    onlineEmoteModeAction: payload.online_emote_mode_action,
+    onlineUniqueChatAction: payload.online_unique_chat_mode_action,
+    onlineSubscriberAction: payload.online_subscriber_mode_action,
+    onlineFollowerAction: payload.online_follower_mode_action,
+    onlineFollowerMinutes: payload.online_follower_mode_minutes,
+    offlineSlowModeAction: payload.offline_slow_mode_action,
+    offlineSlowModeSeconds: payload.offline_slow_mode_seconds,
+    offlineEmoteModeAction: payload.offline_emote_mode_action,
+    offlineUniqueChatAction: payload.offline_unique_chat_mode_action,
+    offlineSubscriberAction: payload.offline_subscriber_mode_action,
+    offlineFollowerAction: payload.offline_follower_mode_action,
+    offlineFollowerMinutes: payload.offline_follower_mode_minutes,
   };
 }
 
@@ -944,8 +995,12 @@ export async function fetchGameModuleSettings(
   const payload = (await response.json()) as GameModuleResponse;
   return {
     enabled: payload.enabled,
+    viewerQuestionEnabled: payload.viewer_question_enabled,
     aiDetectionEnabled: payload.ai_detection_enabled,
     keywordResponse: payload.keyword_response,
+    gameCommandEnabled: payload.game_command_enabled,
+    playtimeCommandEnabled: payload.playtime_command_enabled,
+    gamesPlayedCommandEnabled: payload.gamesplayed_command_enabled,
     playtimeTemplate: payload.playtime_template ?? "",
     gamesPlayedTemplate: payload.gamesplayed_template ?? "",
     gamesPlayedItemTemplate: payload.gamesplayed_item_template ?? "",
@@ -1014,8 +1069,12 @@ export async function saveGameModuleSettings(
     },
     body: JSON.stringify({
       enabled: settings.enabled,
+      viewer_question_enabled: settings.viewerQuestionEnabled,
       ai_detection_enabled: settings.aiDetectionEnabled,
       keyword_response: settings.keywordResponse,
+      game_command_enabled: settings.gameCommandEnabled,
+      playtime_command_enabled: settings.playtimeCommandEnabled,
+      gamesplayed_command_enabled: settings.gamesPlayedCommandEnabled,
       playtime_template: settings.playtimeTemplate,
       gamesplayed_template: settings.gamesPlayedTemplate,
       gamesplayed_item_template: settings.gamesPlayedItemTemplate,
@@ -1030,8 +1089,12 @@ export async function saveGameModuleSettings(
   const payload = (await response.json()) as GameModuleResponse;
   return {
     enabled: payload.enabled,
+    viewerQuestionEnabled: payload.viewer_question_enabled,
     aiDetectionEnabled: payload.ai_detection_enabled,
     keywordResponse: payload.keyword_response,
+    gameCommandEnabled: payload.game_command_enabled,
+    playtimeCommandEnabled: payload.playtime_command_enabled,
+    gamesPlayedCommandEnabled: payload.gamesplayed_command_enabled,
     playtimeTemplate: payload.playtime_template ?? "",
     gamesPlayedTemplate: payload.gamesplayed_template ?? "",
     gamesPlayedItemTemplate: payload.gamesplayed_item_template ?? "",
@@ -1407,6 +1470,7 @@ export async function fetchQuoteModuleEntries(
 
 export async function createQuoteModuleEntry(
   message: string,
+  id?: number,
 ): Promise<QuoteModuleEntry> {
   const response = await fetch("/api/dashboard/modules/quotes/items", {
     method: "POST",
@@ -1416,12 +1480,14 @@ export async function createQuoteModuleEntry(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      id,
       message,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`failed to create quote: ${response.status}`);
+    const detail = (await response.text()).trim();
+    throw new Error(detail || `failed to create quote: ${response.status}`);
   }
 
   const payload =
@@ -1454,7 +1520,8 @@ export async function updateQuoteModuleEntry(
   });
 
   if (!response.ok) {
-    throw new Error(`failed to update quote: ${response.status}`);
+    const detail = (await response.text()).trim();
+    throw new Error(detail || `failed to update quote: ${response.status}`);
   }
 
   const payload =
@@ -1483,49 +1550,9 @@ export async function deleteQuoteModuleEntry(id: number): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error(`failed to delete quote: ${response.status}`);
+    const detail = (await response.text()).trim();
+    throw new Error(detail || `failed to delete quote: ${response.status}`);
   }
-}
-
-export async function importFossabotQuotes(payload: {
-  payload?: string;
-  channel?: string;
-  apiURL?: string;
-  apiToken?: string;
-}): Promise<{ imported: number; skipped: number; items: QuoteModuleEntry[] }> {
-  const response = await fetch("/api/dashboard/modules/quotes/import", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      source: "fossabot",
-      payload: payload.payload ?? "",
-      channel: payload.channel ?? "",
-      api_url: payload.apiURL ?? "",
-      api_token: payload.apiToken ?? "",
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`failed to import quotes: ${response.status}`);
-  }
-
-  const data = (await response.json()) as QuoteImportResponse;
-  return {
-    imported: data.imported ?? 0,
-    skipped: data.skipped ?? 0,
-    items: (data.items ?? []).map((entry) => ({
-      id: entry.id,
-      message: entry.message,
-      createdBy: entry.created_by,
-      updatedBy: entry.updated_by,
-      createdAt: entry.created_at,
-      updatedAt: entry.updated_at,
-    })),
-  };
 }
 
 export async function fetchDiscordBotSettings(

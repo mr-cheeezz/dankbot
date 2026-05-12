@@ -201,13 +201,32 @@ export type ModuleEntry = {
 export type FollowersOnlyModuleSettings = {
   enabled: boolean;
   enabledWhenOffline: boolean;
+  autoDisableEnabled: boolean;
   autoDisableAfterMinutes: number;
+  onlineSlowModeAction: string;
+  onlineSlowModeSeconds: number;
+  onlineEmoteModeAction: string;
+  onlineUniqueChatAction: string;
+  onlineSubscriberAction: string;
+  onlineFollowerAction: string;
+  onlineFollowerMinutes: number;
+  offlineSlowModeAction: string;
+  offlineSlowModeSeconds: number;
+  offlineEmoteModeAction: string;
+  offlineUniqueChatAction: string;
+  offlineSubscriberAction: string;
+  offlineFollowerAction: string;
+  offlineFollowerMinutes: number;
 };
 
 export type GameModuleSettings = {
   enabled: boolean;
+  viewerQuestionEnabled: boolean;
   aiDetectionEnabled: boolean;
   keywordResponse: string;
+  gameCommandEnabled: boolean;
+  playtimeCommandEnabled: boolean;
+  gamesPlayedCommandEnabled: boolean;
   playtimeTemplate: string;
   gamesPlayedTemplate: string;
   gamesPlayedItemTemplate: string;

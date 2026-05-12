@@ -328,19 +328,21 @@ export function ModeratorLayout() {
                 </Stack>
                 <Collapse in={!collapsed} timeout="auto" unmountOnExit>
                   <List disablePadding>
-                    {visibleItems.map((item) => (
+                    {visibleItems.map((item) => {
+                      const selected = currentView === item.key;
+                      return (
                       <Box key={item.key}>
                         <NavLink
                           to={pathForView(item.key)}
                           end={item.key === "dashboard"}
                           style={{ textDecoration: "none", color: "inherit" }}
                         >
-                        {({ isActive }) => (
-                          <ListItemButton
-                            selected={isActive}
-                            sx={{
-                              borderRadius: 1,
-                              mb: item.key === "discord" ? 0.1 : 0.25,
+                          {() => (
+                            <ListItemButton
+                              selected={selected}
+                              sx={{
+                                borderRadius: 1,
+                                mb: item.key === "discord" ? 0.1 : 0.25,
                                 mx: 0.5,
                                 minHeight: 42,
                                 "&.Mui-selected": {
@@ -350,12 +352,12 @@ export function ModeratorLayout() {
                                 "&.Mui-selected:hover": {
                                   bgcolor: "rgba(74,137,255,0.18)",
                                 },
-                            }}
-                          >
-                            <ListItemIcon
-                              sx={{
-                                minWidth: 34,
-                                  color: isActive
+                              }}
+                            >
+                              <ListItemIcon
+                                sx={{
+                                  minWidth: 34,
+                                  color: selected
                                     ? "primary.main"
                                     : "text.secondary",
                                 }}
@@ -366,7 +368,7 @@ export function ModeratorLayout() {
                                 primary={item.label}
                                 primaryTypographyProps={{
                                   fontSize: "0.96rem",
-                                  fontWeight: isActive ? 700 : 500,
+                                  fontWeight: selected ? 700 : 500,
                                 }}
                               />
                               {item.key === "discord" ? (
@@ -387,7 +389,9 @@ export function ModeratorLayout() {
                                     ml: 0.5,
                                     width: 26,
                                     height: 26,
-                                    color: isActive ? "primary.main" : "text.secondary",
+                                    color: selected
+                                      ? "primary.main"
+                                      : "text.secondary",
                                     bgcolor: "rgba(255,255,255,0.04)",
                                     "&:hover": {
                                       bgcolor: "rgba(255,255,255,0.08)",
@@ -401,9 +405,9 @@ export function ModeratorLayout() {
                                   )}
                                 </IconButton>
                               ) : null}
-                          </ListItemButton>
-                        )}
-                      </NavLink>
+                            </ListItemButton>
+                          )}
+                        </NavLink>
 
                         {item.key === "discord" && !discordSubnavCollapsed ? (
                           <Stack spacing={0.35} sx={{ mx: 1, mb: 0.65, mt: 0.35 }}>
@@ -445,7 +449,8 @@ export function ModeratorLayout() {
                           </Stack>
                         ) : null}
                       </Box>
-                    ))}
+                      );
+                    })}
                   </List>
                 </Collapse>
               </Box>

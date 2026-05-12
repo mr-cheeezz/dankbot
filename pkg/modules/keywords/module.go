@@ -498,8 +498,13 @@ func (m *Module) builtInGameReply(ctx modules.CommandContext) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if settings != nil && strings.TrimSpace(settings.KeywordResponse) != "" {
-			responseTemplate = settings.KeywordResponse
+		if settings != nil {
+			if !settings.Enabled {
+				return "", nil
+			}
+			if strings.TrimSpace(settings.KeywordResponse) != "" {
+				responseTemplate = settings.KeywordResponse
+			}
 		}
 	}
 
