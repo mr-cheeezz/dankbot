@@ -541,16 +541,6 @@ export function ModuleEditorPage() {
                     >
                       <Box>
                         <Typography variant="h6">Saved quotes</Typography>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mt: 0.45 }}
-                        >
-                          Add, edit, and delete the actual quotes used by the
-                          quotes module. Chat still adds to the next quote
-                          number automatically, but from here you can also
-                          restore a deleted quote number when needed.
-                        </Typography>
                       </Box>
                       <Button
                         variant="contained"
